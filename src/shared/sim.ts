@@ -130,9 +130,12 @@ export function launchFor(tank: { x: number; y: number }, angleDeg: number, powe
   };
 }
 
-/** Damaged tanks can't fire as hard, as in the original. */
+/**
+ * Damaged tanks can't fire as hard, as in the original — but a nearly dead
+ * tank can still lob a shell a few hundred pixels instead of at its own feet.
+ */
 export function maxPowerFor(health: number): number {
-  return Math.max(150, Math.min(MAX_POWER, Math.round(health * 10)));
+  return Math.min(MAX_POWER, Math.round(400 + 6 * Math.max(0, health)));
 }
 
 export class World {

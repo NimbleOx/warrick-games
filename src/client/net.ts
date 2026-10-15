@@ -24,8 +24,11 @@ export class Connection {
     this.open();
   }
 
-  send(msg: ClientMsg): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+  /** Returns false if the socket isn't open (the message is dropped). */
+  send(msg: ClientMsg): boolean {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify(msg));
+    return true;
   }
 
   close(): void {

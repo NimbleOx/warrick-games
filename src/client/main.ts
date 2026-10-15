@@ -267,6 +267,7 @@ function onMessage(msg: ServerMsg): void {
   switch (msg.t) {
     case "welcome":
       app.me = msg.you;
+      app.firing = false;
       app.log = msg.log;
       app.anim = null;
       app.pending = null;
@@ -560,11 +561,18 @@ function renderHud(): void {
   const aim = turn ? (turn.id === app.me && isMyTurn(s) ? app.aim : turn.aim) : null;
   const tank = turn?.tank;
   $("hud-angle").textContent = aim ? `${aim.angle}°` : "—";
-  $("hud-power").textContent = aim ? String(aim.power) : "—";
-  $("hud-power").title = tank ? `Max ${maxPowerFor(tank.health)} at ${tank.health} health` : "";
+  const cap = tank ? maxPowerFor(tank.health) : 1000;
+  $("hud-power").textContent = aim ? (cap < 1000 ? `${aim.power}/${cap}` : String(aim.power)) : "—";
+  $("hud-power").title = cap < 1000 ? `Damaged: max power ${cap} at ${tank!.health} health` : "";
   $("hud-weapon").textContent = aim ? WEAPONS[aim.weapon].name : "—";
+  const canPick = isMyTurn(s) && !app.firing;
+  const weaponBtn = $("hud-weapon-btn");
+  weaponBtn.classList.toggle("can-pick", canPick);
+  weaponBtn.setAttribute("aria-disabled", String(!canPick));
+  weaponBtn.title = canPick ? "Choose a weapon (or press Tab)" : "";
+  if (!canPick) closeWeaponMenu();
   $("hud-wind").textContent = s.wind === 0 ? "Calm" : `${s.wind > 0 ? "→" : "←"} ${Math.abs(s.wind)}`;
-  $("hud-round").textContent = `${s.round}/${s.settings.rounds}`;
+  $("hud-round").textContent = s.round ? `${s.round}/${s.settings.rounds}` : "—";
 }
 
 function renderPlayers(s: GameState): void {
@@ -627,6 +635,7 @@ function renderControls(): void {
   angle.value = String(180 - (mine ? app.aim.angle : p.aim.angle));
   power.max = String(maxPower);
   power.value = String(mine ? app.aim.power : p.aim.power);
+  $("ctl-power-label").textContent = maxPower < 1000 ? `Power · max ${maxPower}` : "Power";
 
   const select = $<HTMLSelectElement>("ctl-weapon");
   const owned = WEAPON_ORDER.filter((w) => weaponCount(p.inventory, w) > 0);
@@ -711,7 +720,10 @@ function renderShop(s: GameState): void {
     card.querySelector<HTMLButtonElement>("[data-sell]")!.disabled = owned < d.bundle;
   }
   $("shop-cash").textContent = money(p.money);
-  $("shop-sub").innerHTML = `Round ${s.round} done. Round ${s.round + 1} starts in <span data-countdown></span>s or when everyone is ready.`;
+  $("shop-sub").innerHTML =
+    s.round === 0
+      ? `Spend your starting cash before round 1. It starts in <span data-countdown></span>s or when everyone is ready.`
+      : `Round ${s.round} done. Round ${s.round + 1} starts in <span data-countdown></span>s or when everyone is ready.`;
   const ready = $<HTMLButtonElement>("shop-ready");
   ready.textContent = p.ready ? "Not ready yet" : "Ready";
   ready.classList.toggle("btn-primary", !p.ready);
@@ -788,23 +800,67 @@ function setAim(patch: Partial<Aim>): void {
   else aimSendTimer = window.setTimeout(sendNow, wait);
 }
 
+let fireWatchdog = 0;
+
 function fire(): void {
   if (!isMyTurn() || app.firing) return;
   unlockAudio();
   clearTimeout(aimSendTimer);
+  if (!app.conn?.send({ t: "fire", aim: app.aim })) {
+    toast("Not connected — reconnecting, try again in a moment");
+    return;
+  }
   app.firing = true;
   app.dragging = false;
   app.aimGuide = null;
-  app.conn?.send({ t: "fire", aim: app.aim });
   renderControls();
+  // If the server never answers (dropped connection), give the controls back.
+  clearTimeout(fireWatchdog);
+  fireWatchdog = window.setTimeout(() => {
+    if (!app.firing) return;
+    app.firing = false;
+    renderControls();
+    toast("The server didn't answer — try firing again");
+  }, 6000);
+}
+
+function ownedWeapons(p: PlayerState): WeaponId[] {
+  return WEAPON_ORDER.filter((w) => weaponCount(p.inventory, w) > 0);
 }
 
 function cycleWeapon(dir: 1 | -1): void {
   const p = me();
   if (!p) return;
-  const owned = WEAPON_ORDER.filter((w) => weaponCount(p.inventory, w) > 0);
+  const owned = ownedWeapons(p);
   const i = owned.indexOf(app.aim.weapon);
   setAim({ weapon: owned[(i + dir + owned.length) % owned.length] });
+}
+
+function openWeaponMenu(): void {
+  const p = me();
+  if (!p || !isMyTurn() || app.firing) return;
+  const menu = $("weapon-menu");
+  const btn = $("hud-weapon-btn");
+  menu.innerHTML =
+    ownedWeapons(p)
+      .map(
+        (w) => `<button type="button" role="menuitemradio" data-weapon="${w}" aria-checked="${w === app.aim.weapon}">
+          <span>${WEAPONS[w].name}</span><span class="count">${w === "baby_missile" ? "∞" : `×${p.inventory[w]}`}</span></button>`,
+      )
+      .join("") + `<div class="hint">Tab cycles weapons. Buy more in the shop between rounds.</div>`;
+  const r = btn.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 248))}px`;
+  menu.style.top = `${r.bottom + 4}px`;
+  menu.hidden = false;
+  btn.setAttribute("aria-expanded", "true");
+  menu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+}
+
+function closeWeaponMenu(): void {
+  const menu = $("weapon-menu");
+  if (menu.hidden) return;
+  menu.hidden = true;
+  $("hud-weapon-btn").setAttribute("aria-expanded", "false");
 }
 
 function aimFromPointer(e: PointerEvent): void {
@@ -953,10 +1009,40 @@ function wire(): void {
     });
   }
 
+  // Weapon picker in the HUD.
+  const weaponMenu = $("weapon-menu");
+  $("hud-weapon-btn").addEventListener("click", () => (weaponMenu.hidden ? openWeaponMenu() : closeWeaponMenu()));
+  weaponMenu.addEventListener("click", (e) => {
+    const weapon = (e.target as HTMLElement).closest<HTMLElement>("[data-weapon]")?.dataset.weapon;
+    if (!weapon) return;
+    setAim({ weapon: weapon as WeaponId });
+    closeWeaponMenu();
+    // Hand the keyboard back to the game so Space fires.
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  weaponMenu.addEventListener("keydown", (e) => {
+    const items = Array.from(weaponMenu.querySelectorAll<HTMLElement>("button"));
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    items[(i + step + items.length) % items.length]?.focus();
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!(e.target as HTMLElement).closest("#weapon-menu, #hud-weapon-btn")) closeWeaponMenu();
+  });
+  window.addEventListener("resize", closeWeaponMenu);
+
+  // Mouse clicks on the steppers shouldn't keep focus, or Space would step instead of fire.
+  for (const btn of $$("[data-step]")) btn.addEventListener("mousedown", (e) => e.preventDefault());
+
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeWeaponMenu();
     if (app.screen !== "game" || !isMyTurn()) return;
-    const tag = (e.target as HTMLElement).tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    const target = e.target as HTMLElement;
+    if (target.closest("input, select, textarea, #weapon-menu")) return;
+    // A focused button handles its own Space/Enter (Fire fires, the steppers step).
+    if ((e.key === " " || e.key === "Enter") && target.closest("button")) return;
     const big = e.shiftKey;
     const actions: Record<string, () => void> = {
       ArrowLeft: () => setAim({ angle: app.aim.angle + (big ? 5 : 1) }),

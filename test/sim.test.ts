@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WORLD_W } from "../src/shared/constants";
 import { mulberry32 } from "../src/shared/rng";
-import { World, launchFor } from "../src/shared/sim";
+import { World, launchFor, maxPowerFor } from "../src/shared/sim";
 import { carveCrater, generateTerrain, TERRAIN_STYLES } from "../src/shared/terrain";
 import type { WeaponId } from "../src/shared/weapons";
 
@@ -79,6 +79,17 @@ describe("shots", () => {
         expect(w.timedOut, `${weapon}/${walls}`).toBe(false);
       }
     }
+  });
+
+  it("caps power for damaged tanks without making them useless", () => {
+    expect(maxPowerFor(100)).toBe(1000);
+    expect(maxPowerFor(50)).toBe(700);
+    expect(maxPowerFor(0)).toBe(400);
+    // At 1 HP a 45° shot on flat ground still lands well away from the shooter.
+    const w = flatWorld();
+    w.tanks.splice(1, 1);
+    const impact = w.traceImpact(launchFor(w.tanks[0], 45, maxPowerFor(1)));
+    expect(impact.x - w.tanks[0].x).toBeGreaterThan(250);
   });
 
   it("drops a tank whose ground is blown away, with fall damage", () => {

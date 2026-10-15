@@ -1,0 +1,227 @@
+/* Colors and fonts match Crater Club (games/crater-club/src/client/style.css). */
+:root {
+  --bg: #0b0d17;
+  --panel: #131729;
+  --panel-2: #1a1f36;
+  --line: #2a3152;
+  --line-2: #3a4370;
+  --text: #e9ecf8;
+  --muted: #8d94b8;
+  --accent: #ff8a3d;
+  --accent-2: #ffd23f;
+  --pixel: "Press Start 2P", ui-monospace, monospace;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 4px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  /* A faint arcade grid that fades out toward the bottom. */
+  background:
+    linear-gradient(to bottom, transparent, var(--bg) 85%),
+    repeating-linear-gradient(to right, rgb(58 67 112 / 0.18) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(to bottom, rgb(58 67 112 / 0.18) 0 1px, transparent 1px 32px),
+    var(--bg);
+}
+
+a {
+  color: inherit;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 3px;
+}
+
+.hub {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 16px 28px;
+}
+
+.hub-head {
+  margin-bottom: 36px;
+}
+
+.logo {
+  margin: 0 0 18px;
+  font-family: var(--pixel);
+  font-size: clamp(28px, 9vw, 48px);
+  line-height: 1.15;
+  text-align: center;
+  color: var(--accent-2);
+  text-shadow:
+    3px 3px 0 #e2401c,
+    6px 6px 0 #6b1208;
+}
+
+.tagline {
+  text-align: center;
+  color: var(--muted);
+  margin: 0;
+  font-size: 14px;
+}
+
+/* ------------------------------------------------------------ game cards */
+
+.games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: min(940px, 100%);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 16px;
+}
+
+.game {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 12px 14px;
+  padding: 16px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.game img {
+  display: block;
+  border-radius: var(--radius);
+}
+
+.game h2 {
+  margin: 4px 0 8px;
+  font-family: var(--pixel);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.game p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tag {
+  grid-column: 2;
+  justify-self: start;
+  padding: 6px 10px;
+  border: 2px dashed var(--line-2);
+  border-radius: var(--radius);
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.live {
+  border-color: var(--line-2);
+  transition:
+    border-color 0.12s,
+    transform 0.08s,
+    box-shadow 0.08s;
+}
+
+.live h2 {
+  color: var(--accent-2);
+}
+
+.live:hover,
+.live:focus-visible {
+  border-color: var(--accent);
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 #6b1208;
+}
+
+.live:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.tag-play {
+  border-style: solid;
+  border-color: #ffb07a;
+  background: var(--accent);
+  color: #1a0d03;
+}
+
+.soon img {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+.soon h2 {
+  color: var(--text);
+}
+
+.hub-foot {
+  margin-top: auto;
+  padding-top: 40px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ 404 */
+
+.hub-404 {
+  justify-content: center;
+  padding-top: 28px;
+}
+
+.hub-404 .tagline {
+  max-width: 340px;
+}
+
+.btn {
+  display: inline-flex;
+  padding: 9px 14px;
+  border: 2px solid var(--line-2);
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: #ffb07a;
+  color: #1a0d03;
+}
+
+.btn-primary:hover {
+  background: #ff9d5c;
+  border-color: #ffd0ad;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live,
+  .live:hover,
+  .live:focus-visible {
+    transition: none;
+    transform: none;
+  }
+}

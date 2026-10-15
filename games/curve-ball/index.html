@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Curve Ball</title>
+    <meta name="description" content="Steer your line, slip through the gaps, outlast everyone. No accounts — create a game and share the code." />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Home: create or join -->
+    <section id="screen-home" class="screen screen-home">
+      <canvas id="attract" class="attract" aria-hidden="true"></canvas>
+      <div class="home-card">
+        <h1 class="logo">CURVE<br />BALL</h1>
+        <p class="tagline">Steer, slip through the gaps, outlast everyone.<br />No accounts — just share a code.</p>
+
+        <label class="field">
+          <span class="label">Your name</span>
+          <input id="home-name" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="Squiggler" />
+        </label>
+
+        <div id="home-join-invite" class="invite" hidden>
+          <span class="label">You're invited to game</span>
+          <div class="invite-code" id="home-invite-code"></div>
+          <button id="home-join-invite-btn" class="btn btn-primary btn-big">Join game</button>
+          <button id="home-not-this" class="link-btn">Start my own game instead</button>
+        </div>
+
+        <div id="home-default">
+          <button id="home-create" class="btn btn-primary btn-big">Create game</button>
+          <div class="divider"><span>or join with a code</span></div>
+          <form id="home-join-form" class="join-row">
+            <input
+              id="home-code"
+              class="code-input"
+              maxlength="5"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              placeholder="CODE"
+              aria-label="Game code"
+            />
+            <button class="btn">Join</button>
+          </form>
+        </div>
+        <p id="home-error" class="error" role="alert"></p>
+      </div>
+      <footer class="home-foot">A love letter to <em>Achtung, die Kurve!</em> (1995).</footer>
+    </section>
+
+    <!-- Lobby -->
+    <section id="screen-lobby" class="screen screen-lobby" hidden>
+      <header class="topbar">
+        <div class="brand">CURVE BALL</div>
+        <div class="topbar-right">
+          <span class="conn" id="lobby-conn"></span>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+      <div class="lobby">
+        <div class="panel code-panel">
+          <span class="label">Game code</span>
+          <div class="big-code" id="lobby-code"></div>
+          <div class="share-row">
+            <input id="lobby-link" readonly aria-label="Invite link" />
+            <button id="lobby-copy" class="btn">Copy link</button>
+          </div>
+          <p class="hint">Send this link to friends. Anyone with it can join — no sign-up.</p>
+        </div>
+
+        <div class="panel players-panel">
+          <div class="panel-head">
+            <h2>Players <span id="lobby-count" class="muted"></span></h2>
+          </div>
+          <ul id="lobby-players" class="lobby-players"></ul>
+          <div id="lobby-cpu" class="cpu-row">
+            <span class="label">Add CPU</span>
+            <button class="btn btn-small" data-cpu="easy">Easy</button>
+            <button class="btn btn-small" data-cpu="normal">Normal</button>
+            <button class="btn btn-small" data-cpu="hard">Hard</button>
+          </div>
+          <p id="lobby-full" class="hint" hidden></p>
+          <div class="color-row">
+            <span class="label">Your color</span>
+            <div id="lobby-colors" class="swatches"></div>
+          </div>
+        </div>
+
+        <div class="panel settings-panel">
+          <div class="panel-head"><h2>Settings</h2></div>
+          <div id="lobby-settings" class="settings"></div>
+          <p id="lobby-settings-note" class="hint"></p>
+          <button id="lobby-start" class="btn btn-primary btn-big">Start game</button>
+          <p id="lobby-wait" class="hint center"></p>
+        </div>
+
+        <div class="panel how-panel">
+          <div class="panel-head"><h2>How to play</h2></div>
+          <ul class="how">
+            <li>Your line never stops. Steer with <kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd>, or hold the left or right half of the screen.</li>
+            <li>Hit a wall or any trail, including your own, and you're out.</li>
+            <li>Every so often your trail leaves a gap. Anyone can slip through it.</li>
+            <li>Each time someone crashes, everyone still alive gets a point.</li>
+          </ul>
+        </div>
+
+        <div class="panel chat-panel">
+          <div class="panel-head"><h2>Chat</h2></div>
+          <ol class="log" data-log></ol>
+          <form class="chat-form" data-chat>
+            <input maxlength="200" placeholder="Say something…" aria-label="Chat message" />
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">CURVE BALL <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="stage-col">
+          <div class="hud" id="hud">
+            <div class="hud-turn" id="hud-status"></div>
+            <div class="hud-stat"><span class="label">Alive</span><b id="hud-alive">—</b></div>
+            <div class="hud-stat"><span class="label">You</span><b id="hud-score">—</b></div>
+            <div class="hud-stat"><span class="label">First to</span><b id="hud-target">—</b></div>
+            <div class="hud-stat"><span class="label">Round</span><b id="hud-round">—</b></div>
+          </div>
+
+          <div class="stage" id="stage">
+            <canvas id="game-canvas"></canvas>
+            <div class="touch-hint" id="touch-hint" hidden>
+              <div><span>◀</span>Hold to turn left</div>
+              <div><span>▶</span>Hold to turn right</div>
+            </div>
+            <div class="banner" id="banner" hidden></div>
+          </div>
+
+          <p class="rotate-hint">Turn your phone sideways for a bigger arena.</p>
+          <div class="waiting" id="waiting" hidden></div>
+          <p class="keys-hint">
+            <kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> to steer · on a touch screen, hold the left or right half
+          </p>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel">
+            <div class="panel-head"><h2>Scores</h2><span class="muted" id="side-target"></span></div>
+            <ul id="game-players" class="game-players"></ul>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Log</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Talk trash…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Final standings -->
+      <div class="modal-back" id="gameover" hidden>
+        <div class="modal gameover-modal" role="dialog" aria-labelledby="gameover-title">
+          <h2 id="gameover-title" class="gameover-title">Game over</h2>
+          <p class="winner-line" id="gameover-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Player</th><th>Points</th><th>Rounds won</th></tr>
+            </thead>
+            <tbody id="gameover-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <button id="gameover-lobby" class="btn btn-primary">Back to lobby</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

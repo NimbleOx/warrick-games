@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "light-cycles",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  // Cloudflare creates the DNS record and certificate for this hostname on deploy.
+  "routes": [{ "pattern": "light-cycles.warrick.games", "custom_domain": true }],
+  // Serve only from the custom domain, so invite links always use it.
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    // Serve index.html for client-side routes like /g/ABCDE.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "GAME_ROOM", "class_name": "GameRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }]
+}

@@ -50,7 +50,7 @@ export class Connection {
     if (this.stopped) return;
     this.h.status("connecting");
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/api/games/${this.code}/ws`);
+    const ws = new WebSocket(`${proto}://${location.host}${import.meta.env.BASE_URL}api/games/${this.code}/ws`);
     this.ws = ws;
 
     ws.onopen = () => {

@@ -18,6 +18,10 @@ import { CURSE_LABEL, Renderer, type ArenaView, type BombView, type BomberView }
 
 // ------------------------------------------------------------------ helpers
 
+// The app lives under Vite's `base` ("/boom-room/"): BASE is the home screen, gamePath() a game.
+const BASE = import.meta.env.BASE_URL;
+const gamePath = (code: string) => `${BASE}g/${code}`;
+
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const $$ = <T extends HTMLElement = HTMLElement>(sel: string) => Array.from(document.querySelectorAll<T>(sel));
 
@@ -145,7 +149,7 @@ function arenaNow(): number {
 // ------------------------------------------------------------------ routing
 
 function route(): void {
-  const m = location.pathname.match(/^\/g\/([A-Za-z0-9]{5})\/?$/);
+  const m = location.pathname.slice(BASE.length).match(/^g\/([A-Za-z0-9]{5})\/?$/);
   const code = m?.[1].toUpperCase();
   if (code && CODE_RE.test(code)) {
     // Coming back to a game you were in (reload, reconnect): straight back in.
@@ -199,10 +203,10 @@ async function createGame(): Promise<void> {
   const btn = $<HTMLButtonElement>("home-create");
   btn.disabled = true;
   try {
-    const res = await fetch("/api/games", { method: "POST" });
+    const res = await fetch(`${BASE}api/games`, { method: "POST" });
     const body = (await res.json()) as { code?: string; error?: string };
     if (!res.ok || !body.code) throw new Error(body.error ?? "Couldn't create a game");
-    history.pushState(null, "", `/g/${body.code}`);
+    history.pushState(null, "", gamePath(body.code));
     await joinGame(body.code);
   } catch (err) {
     $("home-error").textContent = err instanceof Error ? err.message : String(err);
@@ -220,10 +224,10 @@ async function joinGame(code: string): Promise<void> {
   const name = store("br.name") ?? readName();
   if (!name) return;
   try {
-    const res = await fetch(`/api/games/${code}`);
+    const res = await fetch(`${BASE}api/games/${code}`);
     if (res.status === 404) {
       store("br.lastGame", null);
-      if (location.pathname !== "/") history.replaceState(null, "", "/");
+      if (location.pathname !== BASE) history.replaceState(null, "", BASE);
       showHome(null);
       $("home-error").textContent = `No game with code ${code}. It may have expired.`;
       return;
@@ -237,13 +241,13 @@ async function joinGame(code: string): Promise<void> {
 
   disconnect();
   store("br.lastGame", code);
-  if (location.pathname !== `/g/${code}`) history.pushState(null, "", `/g/${code}`);
+  if (location.pathname !== gamePath(code)) history.pushState(null, "", gamePath(code));
   app.code = code;
   app.state = null;
   app.log = [];
   app.me = "";
   $("lobby-code").textContent = code;
-  $<HTMLInputElement>("lobby-link").value = `${location.origin}/g/${code}`;
+  $<HTMLInputElement>("lobby-link").value = location.origin + gamePath(code);
   $("game-code-small").textContent = code;
   $("lobby-players").innerHTML = `<li class="muted">Connecting…</li>`;
   showScreen("lobby");
@@ -254,7 +258,7 @@ async function joinGame(code: string): Promise<void> {
     status: onStatus,
     fatal: (reason) => {
       store("br.lastGame", null);
-      history.pushState(null, "", "/");
+      history.pushState(null, "", BASE);
       showHome(null);
       $("home-error").textContent = reason;
     },
@@ -282,7 +286,7 @@ function leave(): void {
   if (s && s.phase !== "lobby" && s.phase !== "gameover" && !confirm("Leave this game? You'll sit out the rest of it.")) return;
   app.conn?.send({ t: "leave" });
   store("br.lastGame", null);
-  history.pushState(null, "", "/");
+  history.pushState(null, "", BASE);
   showHome(null);
 }
 
@@ -940,7 +944,7 @@ function wire(): void {
     if (readName()) void joinGame((e.currentTarget as HTMLElement).dataset.code ?? "");
   });
   $("home-not-this").addEventListener("click", () => {
-    history.pushState(null, "", "/");
+    history.pushState(null, "", BASE);
     showHome(null);
   });
 

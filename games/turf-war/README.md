@@ -35,7 +35,7 @@ npm run deploy     # vite build && wrangler deploy
 
 That creates a Worker called `turf-war` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
 
-It's served at **https://warrick.games/turf-war/**, one path on a site shared with the other games. The hub page at the root is its own Worker (`../../hub`, route `warrick.games/*`). This Worker has the more specific zone route `warrick.games/turf-war*` in `wrangler.jsonc`, and Cloudflare sends each request to the most specific match. The `workers.dev` address is off (`workers_dev: false`).
+It's served at **https://warrick.games/turf-war/**, one path on a site shared with the other games. The hub page at the root is its own Worker (`../../hub`, with `warrick.games` as a Custom Domain). This Worker has the zone route `warrick.games/turf-war*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is off (`workers_dev: false`).
 
 - Vite's `base` is `/turf-war/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/turf-war/api/`.
 - Workers static assets are looked up by request path and know nothing about Vite's `base`. The `nestClientUnderBase` plugin in `vite.config.ts` moves the client build into `dist/client/turf-war/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/turf-war/assets/*.js` and `/turf-war/g/ABCDE` both return 200.

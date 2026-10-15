@@ -4,7 +4,7 @@
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
-  // warrick.games/* belongs to the hub Worker (../../hub); this more specific route wins.
+  // warrick.games is the hub Worker's Custom Domain (../../hub); a route on it takes precedence.
   // vite.config.ts sets the matching base path and nests the built assets under crater-club/.
   "routes": [{ "pattern": "warrick.games/crater-club*", "zone_name": "warrick.games" }],
   // Serve only from warrick.games, so invite links always use it.

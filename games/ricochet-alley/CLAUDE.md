@@ -44,7 +44,7 @@ Crater Club is turn-based. This game is real-time:
 
 ## Deploying
 
-Cloudflare, same account as Crater Club. The game is served at `https://warrick.games/ricochet-alley/`: a path on one shared site, not a subdomain. The hub page at the root is its own Worker in `../../hub` with the route `warrick.games/*`. This game gets its own Worker with a more specific route, and Cloudflare sends each request to the most specific matching route. Each game is its own folder under `games/` in this repo and its own Worker, and deploys on its own. Crater Club already works this way; copy its setup.
+Cloudflare, same account as Crater Club. The game is served at `https://warrick.games/ricochet-alley/`: a path on one shared site, not a subdomain. The hub page at the root is its own Worker in `../../hub`, with `warrick.games` as a Custom Domain. This game gets its own Worker with a zone route on the same hostname, and routes take precedence over a Custom Domain. Each game is its own folder under `games/` in this repo and its own Worker, and deploys on its own. Crater Club already works this way; copy its setup.
 
 - `wrangler.jsonc`: `"routes": [{ "pattern": "warrick.games/ricochet-alley*", "zone_name": "warrick.games" }]` (a zone route, not a custom domain), `workers_dev: false`, `preview_urls: false`, and `run_worker_first: ["/ricochet-alley/api/*"]`.
 - Vite `base: "/ricochet-alley/"`. Build every client URL from `import.meta.env.BASE_URL`: fetches, the WebSocket, invite links (`/ricochet-alley/g/CODE`) and the router's `history` paths. The Worker's API lives under `/ricochet-alley/api/...`. Locally the game is at `http://localhost:<port>/ricochet-alley/`.

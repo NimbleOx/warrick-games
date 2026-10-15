@@ -4,6 +4,11 @@
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
+  // Cloudflare creates the DNS record and certificate for this hostname on deploy.
+  "routes": [{ "pattern": "crater-club.warrick.app", "custom_domain": true }],
+  // Serve only from the custom domain, so invite links always use it.
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     // Serve index.html for client-side routes like /g/ABCDE.
     "not_found_handling": "single-page-application",

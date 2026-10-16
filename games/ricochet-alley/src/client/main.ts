@@ -59,7 +59,10 @@ const HOW_TO_PLAY = `
 
 const app = {
   round: null as NetRound | null,
-  /** Input sequence number for this connection; the server acks the latest it has applied. */
+  /**
+   * Input sequence number for this connection; the server acks the latest it has applied. Both sides count
+   * from 0 as the socket opens and says hello (see wire()).
+   */
   seq: 0,
   /** The round in progress that came with the welcome: it's started once the welcome's state is in. */
   welcome: null as { world: WorldSnapshot | null } | null,
@@ -150,8 +153,6 @@ function onReset(): void {
 
 function onWelcome(msg: ServerMsg): void {
   if (msg.t !== "welcome") return;
-  // A new connection starts input numbering over.
-  app.seq = 0;
   app.round = null;
   app.welcome = { world: msg.world };
 }
@@ -425,7 +426,7 @@ function renderGameOver(s: GameState): void {
   const back = $<HTMLButtonElement>("gameover-lobby");
   const host = canHost(s);
   back.disabled = !host;
-  back.textContent = host ? "Back to lobby" : `Waiting for ${esc(playerById(s.hostId)?.name ?? "host")}…`;
+  back.textContent = host ? "Back to lobby" : `Waiting for ${playerById(s.hostId)?.name ?? "host"}…`;
   $("gameover-hint").textContent = host ? "" : "Only the host can take everyone back to the lobby.";
 }
 
@@ -480,9 +481,17 @@ function renderSandboxHud(): void {
 function wire(): void {
   window.addEventListener("resize", () => (shell.screen === "home" ? resizeAttract() : layoutStage()));
   new ResizeObserver(() => layoutStage()).observe($("stage-col"));
-  // While the connection is down no frames come, so the clock's idea of the server's timing goes stale.
   new MutationObserver(() => {
-    if ($("game-conn").dataset.status !== "open") app.round?.clock.reset();
+    if ($("game-conn").dataset.status === "open") {
+      // A new socket, which has just said hello: the server counts this player's input from 0 again, so we
+      // do too. This runs as a microtask of the socket's open event, so before any key can go out on it.
+      // Not at the welcome: a key pressed before that arrives would go on from the old count, and the server
+      // would ignore every change after the welcome until the new count caught up.
+      app.seq = 0;
+    } else {
+      // While the connection is down no frames come, so the clock's idea of the server's timing goes stale.
+      app.round?.clock.reset();
+    }
   }).observe($("game-conn"), { attributes: true, attributeFilter: ["data-status"] });
 
   // Clicking the stage or a tank list shouldn't leave a button focused (it would swallow Space).

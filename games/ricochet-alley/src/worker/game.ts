@@ -270,7 +270,8 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     }
     if (!this.live.round) this.recover();
     else if (s.phase === "playing" && !loopRunning) this.resume();
-    else if (s.phase === "countdown" && (s.phaseDeadline ?? 0) < this.io.now() + 1000) {
+    else if (s.phase === "countdown" && (s.phaseDeadline ?? 0) <= this.io.now()) {
+      // Only once it's run out: one still going is everyone's, and someone arriving doesn't push it back.
       s.phaseDeadline = this.io.now() + COUNTDOWN_MS;
       s.timer = { kind: "countdown", at: s.phaseDeadline };
       this.touch();

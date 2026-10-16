@@ -14,6 +14,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 - Sitting still doesn't help: if rocks are waiting and you haven't moved for 4 seconds, they drop in anyway. If there's no room for them, you're buried and out.
 - After two minutes, rocks sent are multiplied (×1.5, then up by half every 30 seconds, up to ×4) so rounds come to an end. The HUD shows the multiplier.
 - Run out of moves and you're out. Whoever makes the goal tile first wins; otherwise the last one standing does. Knocking someone out (your rocks were the last to land on them) counts as a KO.
+- **Solo.** On your own in the lobby, the start button says **Play solo**: plain 2048, with no rocks either way (nobody to send them to). Making a 2048 tile wins, and you keep going until you run out of moves. The HUD shows the goal, your best tile, your score and your moves; the end screen shows your best tile, score, moves and time, with your best score on that board size (kept in this browser). The "win by" and "rocks go to" settings don't apply. Add a CPU or invite a friend and it's a match again.
 - Reloading the page puts you back in your seat. Players who arrive mid-round watch until the next one.
 
 ## Development

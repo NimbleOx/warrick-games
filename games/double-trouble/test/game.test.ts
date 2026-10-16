@@ -118,11 +118,14 @@ describe("rock multiplier", () => {
 });
 
 describe("lobby", () => {
-  it("needs two players to start", () => {
+  it("starts a match with a CPU, and only for the host", () => {
     const t = setup();
     const host = t.act((g) => g.addHuman("Ann"));
+    const bo = t.act((g) => g.addHuman("Bo"));
     t.connect(host.id);
-    expect(() => t.act((g) => g.start(host.id))).toThrow(GameError);
+    t.connect(bo.id);
+    expect(() => t.act((g) => g.start(bo.id))).toThrow(GameError);
+    t.act((g) => g.kick(host.id, bo.id));
     t.act((g) => g.addCpu(host.id, "easy"));
     t.act((g) => g.start(host.id));
     expect(t.state.phase).toBe("playing");
@@ -326,5 +329,87 @@ describe("rounds", () => {
     }
     const hit = ops(t.sent).find((o) => o.k === "g" && o.from === 1);
     expect(hit && hit.k === "g" && hit.to).toBe(2);
+  });
+});
+
+describe("solo", () => {
+  it("plays alone until the board is stuck: making 2048 wins, and the round goes on", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    t.connect(ann.id);
+    t.act((g) => g.start(ann.id));
+    expect(t.state.phase).toBe("playing");
+    const snap = t.act((g) => g.snapshot())!;
+    expect(snap).toMatchObject({ solo: true, goal: 0 });
+    expect(snap.seats.filter(Boolean)).toHaveLength(1);
+    t.advance(COUNTDOWN_MS);
+    const me = browser(t, ann.id, 0);
+    for (let i = 0; i < 20; i++) {
+      expect(me.move()).not.toBeNull();
+      t.advance(100);
+      t.act((g) => g.tick());
+    }
+
+    // Two 1024s side by side, on the server's board and ours.
+    const seat = t.live!.round.seat(0)!;
+    for (const lane of [seat.lane, me.lane]) {
+      lane.board.cells[0] = 10;
+      lane.board.cells[1] = 10;
+    }
+    expect(me.move(3)).not.toBeNull();
+    expect(ops(t.sent).filter((o) => o.k === "goal")).toEqual([{ k: "goal", s: 0 }]);
+    expect(seat.won).toBe(true);
+    expect(t.state.phase).toBe("playing");
+    expect(t.live!.round.over).toBe(false);
+
+    // Then on until there are no moves left, with nobody to send rocks to and nothing sent back.
+    for (let i = 0; i < 5000 && t.state.phase === "playing"; i++) {
+      t.advance(100);
+      if (!me.move()) break;
+    }
+    expect(me.lane.out).toBe(true);
+    expect(t.state.phase).toBe("results");
+    expect(t.direct).toHaveLength(0);
+    expect(ops(t.sent).some((o) => o.k === "g")).toBe(false);
+    expect(ops(t.sent).filter((o) => o.k === "goal")).toHaveLength(1);
+    const r = t.state.results!;
+    expect(r).toMatchObject({ solo: true, winnerId: null, how: null, goal: 0 });
+    expect(r.standings).toHaveLength(1);
+    expect(r.standings[0]).toMatchObject({
+      id: ann.id,
+      place: 1,
+      best: me.lane.best,
+      score: me.lane.score,
+      moves: me.lane.n,
+      sent: 0,
+      kos: 0,
+    });
+    expect(r.standings[0].best).toBeGreaterThanOrEqual(11);
+    expect(t.state.players[0].wins).toBe(0);
+  });
+
+  it("leaves a solo player who sits still alone", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    t.connect(ann.id);
+    t.act((g) => g.start(ann.id));
+    t.advance(COUNTDOWN_MS);
+    for (let i = 0; i < 1200; i++) {
+      t.advance(TICK_MS);
+      t.act((g) => g.tick());
+    }
+    expect(ops(t.sent)).toHaveLength(0);
+    expect(t.direct).toHaveLength(0);
+    expect(t.state.phase).toBe("playing");
+  });
+
+  it("ends when the solo player leaves", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    t.connect(ann.id);
+    t.act((g) => g.start(ann.id));
+    t.act((g) => g.leave(ann.id));
+    expect(t.state.phase).toBe("results");
+    expect(t.state.results).toMatchObject({ solo: true, winnerId: null, standings: [] });
   });
 });

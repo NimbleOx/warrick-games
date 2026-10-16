@@ -1,9 +1,10 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { $, $$, esc } from "@warrick/kit/client/dom";
+import { $, $$, esc, personalBest } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { Board, Lane, type Dir, type MoveResult } from "../shared/engine";
 import {
   SETTING_CHOICES,
+  SOLO_GOAL,
   attackScale,
   type Aim,
   type ClientMsg,
@@ -65,6 +66,8 @@ interface SeatView {
   atk: number;
   place: number;
   out: boolean;
+  /** Made SOLO_GOAL, playing on their own. */
+  won: boolean;
   popups: Popup[];
   hitAt: number;
   landAt: number;
@@ -80,6 +83,8 @@ interface RoundView {
   goal: Goal;
   who: (string | null)[];
   over: boolean;
+  /** One player on their own: make 2048, then keep going until there are no moves left. */
+  solo: boolean;
 }
 
 const app = {
@@ -127,6 +132,12 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     "Rocks slide but never merge: merge right next to one to smash it. Rocks coming at you land on your third move, and your own merges smash them first.",
     "Run out of moves and you're out. Make the goal tile first, or be the last one standing. After two minutes rocks come in bigger batches.",
   ],
+  minPlayers: 1,
+  soloRules: [
+    "On your own, it's 2048: slide with the arrow keys, WASD or a swipe, and merge tiles. No rocks.",
+    "Make a 2048 tile and you've won, but keep going: the round ends when you run out of moves.",
+    "Your best score on each board size is kept in this browser. Add a CPU or invite a friend for a match instead.",
+  ],
   settings: {
     goal: { label: "Win by", fmt: (v: Goal) => GOAL_LABELS[v] },
     size: { label: "Board", fmt: (v: Size) => SIZE_LABELS[v] },
@@ -156,6 +167,7 @@ const laneOf = (s: SeatView) => (s.slot === app.mySlot && app.lane ? app.lane : 
 const pendingOf = (s: SeatView) => (s.slot === app.mySlot && app.lane ? app.lane.pending() : s.pending);
 const alive = () => app.seats.filter((s) => s && !s.out).length;
 const playing = (): boolean => shell.state?.phase === "playing" && !!app.round && !app.round.over;
+const solo = (): boolean => !!app.round?.solo;
 /** Whether our moves count right now: in the round, past the countdown, not out, and connected. */
 const canPlay = (): boolean =>
   shell.screen === "game" &&
@@ -208,6 +220,7 @@ function seatFromSnap(slot: number, s: SeatSnap): SeatView {
     atk: s.atk,
     place: s.place,
     out: s.out,
+    won: !!s.won,
     popups: [],
     hitAt: -1e9,
     landAt: -1e9,
@@ -235,6 +248,7 @@ function setRound(snap: RoundSnap | null): void {
     goal: snap.goal,
     who: snap.who,
     over: snap.over,
+    solo: !!snap.solo,
   };
   app.mySlot = snap.who.indexOf(shell.me);
   if (fresh) {
@@ -385,6 +399,11 @@ function onOp(op: Op): void {
       sfx.thud();
     }
     const victim = who(op.s);
+    if (solo()) {
+      pushFeed(`${victim} ${op.s === app.mySlot ? "are" : "is"} out of moves`);
+      if (app.round) app.round.over = true;
+      return;
+    }
     pushFeed(killer ? `${who(op.by)} knocked out ${victim}` : `${victim} ${op.s === app.mySlot ? "are" : "is"} out`);
     // Last one standing.
     if (app.round && alive() <= 1) {
@@ -396,6 +415,18 @@ function onOp(op: Op): void {
   } else if (op.k === "goal") {
     const seat = app.seats[op.s];
     if (!seat || !app.round) return;
+    if (solo()) {
+      // A win, and the round goes on.
+      seat.won = true;
+      const mine = op.s === app.mySlot;
+      if (mine) {
+        app.popups.push({ text: "YOU WIN!", color: "#ffd23f", at: now, big: true });
+        sfx.win();
+      }
+      pushFeed(`${who(op.s)} made <b class="t">${SOLO_GOAL}</b> and ${mine ? "win! Keep going" : "wins!"}`);
+      renderHud();
+      return;
+    }
     app.round.over = true;
     seat.place = 1;
     const mine = op.s === app.mySlot;
@@ -433,7 +464,7 @@ function onState(s: GameState, prev: GameState | null): void {
       const seat = slot >= 0 ? app.seats[slot] : null;
       if (seat) seat.place = st.place;
     }
-    if (s.results?.winnerId === shell.me) sfx.win();
+    if (s.results?.winnerId === shell.me || (s.results?.solo && soloBest(s)?.fresh)) sfx.win();
   }
   if (s.phase !== "lobby") {
     renderGame(s);
@@ -474,7 +505,10 @@ function drawBoards(now: number): void {
         charge: lane.charge,
         firedAt: app.firedAt,
         out: lane.out || seat.out,
-        place: seat.place,
+        // Nobody places on their own.
+        place: solo() ? 0 : seat.place,
+        won: seat.won,
+        solo: solo(),
         popups: app.popups,
         bumpAt: app.bumpAt,
         nudge: app.nudge,
@@ -605,7 +639,7 @@ function layoutArena(): void {
 
 function renderGame(s: GameState): void {
   const n = app.seats.filter(Boolean).length;
-  $("round-label").textContent = app.round ? `Round ${app.round.n} · ${n} players` : `Round ${s.round}`;
+  $("round-label").textContent = app.round ? `Round ${app.round.n} · ${solo() ? "solo" : `${n} players`}` : `Round ${s.round}`;
   renderHud();
   renderScoreboard();
   if (s.phase === "results") {
@@ -627,8 +661,13 @@ function renderHud(): void {
   if (!mine || !seat || !lane) {
     html = `<span class="note">Watching${mine?.spectator ? " — you'll get a board next round" : ""}</span>`;
   } else {
-    const status =
-      seat.place === 1 && app.round?.over
+    const status = solo()
+      ? seat.out
+        ? "out of moves"
+        : seat.won
+          ? "you win! keep going"
+          : "solo"
+      : seat.place === 1 && app.round?.over
         ? "winner!"
         : seat.out
           ? `out · #${seat.place}`
@@ -639,14 +678,21 @@ function renderHud(): void {
               : "in play";
     html =
       `<span class="chip" style="background:${mine.color}"></span><span>${esc(mine.name)}</span>` +
-      (total ? `<span class="tag">${left}/${total} left</span>` : "") +
+      (total && !solo() ? `<span class="tag">${left}/${total} left</span>` : "") +
       (status ? `<span class="note">${status}</span>` : "");
   }
   const main = $("hud-main");
   if (main.innerHTML !== html) main.innerHTML = html;
-  const goal = app.round?.goal ?? s.settings.goal;
+  $("hud").classList.toggle("solo", solo());
+  $("screen-game").classList.toggle("solo", solo());
+  const goal = solo() ? SOLO_GOAL : (app.round?.goal ?? s.settings.goal);
   $("hud-goal").textContent = goal ? String(goal) : "Survive";
-  $("hud-goal").title = goal ? `First to make a ${goal} tile wins (or be the last one standing)` : "Last one standing wins";
+  $("hud-goal").title = solo()
+    ? `Make a ${SOLO_GOAL} tile to win, then keep going`
+    : goal
+      ? `First to make a ${goal} tile wins (or be the last one standing)`
+      : "Last one standing wins";
+  $("hud-moves").textContent = lane ? String(lane.n) : "—";
   $("hud-best").textContent = lane ? tile(lane.best) : "—";
   $("hud-score").textContent = lane ? String(lane.score) : "—";
   $("hud-sent").textContent = seat ? String(seat.atk) : "—";
@@ -677,12 +723,13 @@ function renderScoreboard(): void {
       const look = app.looks[seat.slot];
       const lane = laneOf(seat);
       const you = seat.slot === app.mySlot;
-      const status = seat.place === 1 && app.round?.over ? "winner" : seat.place ? `#${seat.place}` : "";
+      const status = solo() ? "" : seat.place === 1 && app.round?.over ? "winner" : seat.place ? `#${seat.place}` : "";
+      const meta = solo() ? `${lane.score} pts · ${lane.n} moves` : `${lane.score} pts · ${seat.atk} sent · ${seat.kos} KO`;
       return `<li class="${you ? "me" : ""} ${seat.out ? "dead" : ""}">
         <span class="chip" style="background:${look?.color ?? "#888"}"></span>
         <span class="pname">${esc(look?.name ?? "?")}${you ? ` <span class="tag tag-you">you</span>` : ""}</span>
         <span class="pct">${status || tile(lane.best)}</span>
-        <span class="meta">${lane.score} pts · ${seat.atk} sent · ${seat.kos} KO</span>
+        <span class="meta">${meta}</span>
       </li>`;
     })
     .join("");
@@ -718,7 +765,13 @@ function renderBanner(): void {
     if (until > 0) {
       const n = Math.ceil(until / 1000);
       big = String(n);
-      sub = app.lane ? (r.goal ? `First to ${r.goal} wins` : "Last one standing wins") : "";
+      sub = !app.lane
+        ? ""
+        : r.solo
+          ? `Make ${SOLO_GOAL}, then keep going`
+          : r.goal
+            ? `First to ${r.goal} wins`
+            : "Last one standing wins";
       sound = `count${n}-${r.n}`;
     } else if (until > -800 && app.lane) {
       big = "GO!";
@@ -738,39 +791,77 @@ function renderBanner(): void {
   el.innerHTML = big ? `<div class="big">${esc(big)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}` : "";
 }
 
+/** The solo player's score against their best on this board size; null for a match, or someone else's round. */
+function soloBest(s: GameState): { best: number; prev: number | null; fresh: boolean } | null {
+  const r = s.results;
+  const x = r?.solo ? r.standings[0] : null;
+  if (!r || !x || x.id !== shell.me) return null;
+  return personalBest(`best.${s.settings.size}`, `${s.code}:${r.round}`, x.score);
+}
+
 function renderResults(s: GameState): void {
   const r = s.results;
   const open = s.phase === "results" && !!r;
   $("results").hidden = !open;
   if (!open || !r) return;
-  $("results-title").textContent = `Round ${r.round} results`;
-  const winner = r.standings.find((x) => x.id === r.winnerId);
-  const you = winner?.id === shell.me;
-  const name = winner ? `<b style="color:${winner.color}">${esc(you ? "You" : winner.name)}</b>` : "";
-  $("results-winner").innerHTML = !winner
-    ? "Nobody made it."
-    : r.how === "goal"
-      ? `${name} made ${r.goal} first.`
-      : `${name} ${you ? "are" : "is"} the last one standing.`;
-  $("results-rows").innerHTML = r.standings
-    .map((x) => {
-      const p = shell.player(x.id);
-      return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
+  const pcell = (x: { id: string; name: string; color: string }) =>
+    `<span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span>`;
+  if (r.solo) {
+    const x = r.standings[0];
+    const made = !!x && 2 ** x.best >= SOLO_GOAL;
+    $("results-title").textContent = made ? "You win!" : "Game over";
+    const best = soloBest(s);
+    const who = x?.id === shell.me ? "You" : `<b style="color:${x?.color}">${esc(x?.name ?? "")}</b>`;
+    $("results-winner").innerHTML = !x
+      ? "Nobody made it."
+      : `${who}${made ? ` made ${SOLO_GOAL}, and` : ""} scored <b>${x.score}</b> with a best tile of ${tile(x.best)}.` +
+        (!best
+          ? ""
+          : best.fresh && best.prev !== null
+            ? ` <b class="best">A new personal best!</b>`
+            : best.fresh
+              ? " That's your best so far."
+              : ` Your best is ${best.best}.`);
+    $("results-head").innerHTML = `<th></th><th>Player</th><th>Best</th><th>Score</th><th>Moves</th><th>Time</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map(
+        (x) => `<tr class="${made ? "winner" : ""}"><td></td><td>${pcell(x)}</td><td>${tile(x.best)}</td><td>${x.score}</td>
+        <td>${x.moves}</td><td>${clock(x.secs)}</td></tr>`,
+      )
+      .join("");
+  } else {
+    $("results-title").textContent = `Round ${r.round} results`;
+    const winner = r.standings.find((x) => x.id === r.winnerId);
+    const you = winner?.id === shell.me;
+    const name = winner ? `<b style="color:${winner.color}">${esc(you ? "You" : winner.name)}</b>` : "";
+    $("results-winner").innerHTML = !winner
+      ? "Nobody made it."
+      : r.how === "goal"
+        ? `${name} made ${r.goal} first.`
+        : `${name} ${you ? "are" : "is"} the last one standing.`;
+    $("results-head").innerHTML =
+      `<th></th><th>Player</th><th>Best</th><th>Score</th><th>Sent</th><th>Smashed</th><th>KOs</th><th>Time</th><th>Wins</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map((x) => {
+        const p = shell.player(x.id);
+        return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
         <td>${x.place}</td>
-        <td><span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span></td>
+        <td>${pcell(x)}</td>
         <td>${tile(x.best)}</td><td>${x.score}</td><td>${x.sent}</td><td>${x.smashed}</td><td>${x.kos}</td><td>${clock(x.secs)}</td><td>${p?.wins ?? "—"}</td></tr>`;
-    })
-    .join("");
+      })
+      .join("");
+  }
   const host = shell.canHost();
   const again = $<HTMLButtonElement>("results-again");
   const lobby = $<HTMLButtonElement>("results-lobby");
   again.hidden = lobby.hidden = !host;
-  const enough = s.players.filter((p) => !p.spectator && (p.cpu || p.connected)).length >= 2;
+  // Someone has to be here to play, even on their own.
+  const enough = s.players.some((p) => p.cpu || p.connected);
   again.disabled = !enough;
   $("results-wait").textContent = host
     ? enough
       ? ""
-      : "Need at least two players for another round — add a CPU from the lobby."
+      : "Nobody's here to play another round."
     : `Waiting for ${shell.player(s.hostId)?.name ?? "the host"} to start the next round…`;
 }
 
@@ -782,7 +873,7 @@ function wire(): void {
     if (shell.screen === "game" && $("arena").clientWidth !== app.arenaWidth) layoutArena();
   }).observe($("arena"));
   const touch = () => {
-    $("keys-hint").innerHTML = "Swipe on your board to slide · merge next to a rock to smash it";
+    $("keys-hint").innerHTML = `Swipe on your board to slide<span class="rock-hint"> · merge next to a rock to smash it</span>`;
   };
   if (window.matchMedia?.("(pointer: coarse)").matches) touch();
   window.addEventListener("touchstart", touch, { once: true, passive: true });

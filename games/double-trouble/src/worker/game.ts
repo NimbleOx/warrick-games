@@ -6,6 +6,7 @@ import { COUNTDOWN_MS } from "../shared/constants";
 import {
   DEFAULT_SETTINGS,
   SETTING_CHOICES,
+  SOLO_GOAL,
   type GameState,
   type PlayerState,
   type RoundResult,
@@ -48,15 +49,19 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     if (this.live?.round.over) this.finish();
   }
 
-  /** Start a round, from the lobby or from the last round's results. */
+  /** Start a round, from the lobby or from the last round's results. One player on their own plays solo. */
   start(byId: string): void {
-    this.beginStart(byId);
+    this.beginStart(byId, 1);
     this.s.round++;
     this.participants.forEach((p, i) => (p.slot = i));
     this.startRound();
     const { goal } = this.s.settings;
     const n = this.participants.length;
-    this.event(`Round ${this.s.round}: ${n} players. ${goal ? `First to ${goal} wins!` : "Last one standing wins!"}`);
+    this.event(
+      n === 1
+        ? `Round ${this.s.round}: solo. Make ${SOLO_GOAL} to win, and keep going until you run out of moves!`
+        : `Round ${this.s.round}: ${n} players. ${goal ? `First to ${goal} wins!` : "Last one standing wins!"}`,
+    );
   }
 
   protected resetForLobby(): void {
@@ -118,7 +123,8 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
       seed: randomSeed(),
       goAt: this.io.now() + COUNTDOWN_MS,
       size: s.settings.size,
-      goal: s.settings.goal,
+      // Solo, the goal is SOLO_GOAL, and making it doesn't end the round.
+      goal: seated.length === 1 ? 0 : s.settings.goal,
       aim: s.settings.aim,
       slots: seated.map((p) => ({ slot: p.slot, cpu: p.cpu })),
       rng: mulberry32(randomSeed()),
@@ -155,12 +161,24 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
       });
     }
     standings.sort((a, b) => a.place - b.place || b.best - a.best || b.score - a.score);
-    const winner = standings.find((x) => x.place === 1) ?? null;
-    const result: RoundResult = { round: s.round, winnerId: winner?.id ?? null, how: round.how, goal: round.goal, standings };
+    const solo = round.solo;
+    const winner = solo ? null : (standings.find((x) => x.place === 1) ?? null);
+    const result: RoundResult = {
+      round: s.round,
+      winnerId: winner?.id ?? null,
+      solo,
+      how: solo ? null : round.how,
+      goal: round.goal,
+      standings,
+    };
     s.results = result;
     s.phase = "results";
     for (const p of s.players) p.slot = -1;
-    if (winner) {
+    const me = solo ? standings[0] : null;
+    if (me) {
+      const made = 2 ** me.best >= SOLO_GOAL ? ` They made ${SOLO_GOAL}!` : "";
+      this.event(`${me.name} ran out of moves with ${me.score} points and a ${2 ** me.best} tile.${made}`);
+    } else if (winner) {
       this.player(winner.id)!.wins++;
       this.event(
         round.how === "goal"

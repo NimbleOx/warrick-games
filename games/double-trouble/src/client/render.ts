@@ -78,6 +78,10 @@ export interface OwnScene {
   out: boolean;
   /** Finishing place once the round is decided for us. */
   place: number;
+  /** Made 2048 on our own: out of moves is still a win. */
+  won: boolean;
+  /** On our own: no rocks either way, so no meters. */
+  solo: boolean;
   popups: Popup[];
   /** Rocks just landed: shake the board. */
   bumpAt: number;
@@ -265,7 +269,7 @@ export class OwnView {
       (!!s.nudge && now - s.nudge.at < 140) ||
       now - s.firedAt < 400 ||
       popupsShowing(s.popups, now);
-    const key = `${s.board.encode()}|${s.pending}|${s.armed}|${s.charge}|${s.out}|${s.place}|${s.waiting}|${fontsLoaded}`;
+    const key = `${s.board.encode()}|${s.pending}|${s.armed}|${s.charge}|${s.out}|${s.place}|${s.won}|${s.solo}|${s.waiting}|${fontsLoaded}`;
     // One more frame after moving stops, so whatever was fading out is gone.
     if (!moving && !this.moving && key === this.drawn) return;
     this.drawn = key;
@@ -287,7 +291,7 @@ export class OwnView {
     const by = Math.round(dy);
     const bw = boardUnits(size) * u;
 
-    this.meters(s, bx, bw, H, now);
+    if (!s.solo) this.meters(s, bx, bw, H, now);
 
     ctx.fillStyle = WELL;
     ctx.beginPath();
@@ -302,7 +306,7 @@ export class OwnView {
     }
 
     ctx.save();
-    if (s.waiting || (s.out && s.place !== 1)) ctx.globalAlpha = 0.45;
+    if (s.waiting || (s.out && s.place !== 1 && !s.won)) ctx.globalAlpha = 0.45;
     this.tiles(s, bx, by, now);
     ctx.restore();
 
@@ -314,7 +318,7 @@ export class OwnView {
     ctx.stroke();
 
     if (s.out || s.place) {
-      const won = s.place === 1;
+      const won = s.place === 1 || s.won;
       ctx.fillStyle = won ? "rgb(8 10 20 / 0.3)" : "rgb(8 10 20 / 0.55)";
       ctx.beginPath();
       ctx.roundRect(bx, by, bw, bw, u * 0.12);
@@ -324,7 +328,7 @@ export class OwnView {
       ctx.font = `${Math.round(u * 0.42)}px ${PIXEL}`;
       ctx.fillStyle = "#000";
       // Out of moves, or someone else made the goal tile first.
-      const title = won ? "WINNER" : s.out ? "FULL!" : "BEATEN";
+      const title = s.won ? "2048!" : won ? "WINNER" : s.out ? "FULL!" : "BEATEN";
       ctx.fillText(title, bx + bw / 2 + 3, by + bw * 0.42 + 3);
       ctx.fillStyle = won ? "#ffd23f" : "#ff4d5e";
       ctx.fillText(title, bx + bw / 2, by + bw * 0.42);

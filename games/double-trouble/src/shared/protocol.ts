@@ -29,6 +29,9 @@ export const SETTING_CHOICES = {
   aim: ["random", "leader", "weakest"] as Aim[],
 };
 
+/** Make this tile on your own and you've won, and can keep going. */
+export const SOLO_GOAL = 2048;
+
 /** Rocks start getting multiplied this long into a round, so rounds come to an end. */
 export const MARGIN_S = 120;
 
@@ -67,7 +70,10 @@ export interface Standing {
 
 export interface RoundResult {
   round: number;
+  /** Nobody wins a solo round (one player on their own): it's their board that counts. */
   winnerId: string | null;
+  /** One player on their own. Missing in results from before solo play. */
+  solo?: boolean;
   /** Won by making the goal tile, or by outlasting everyone. */
   how: "goal" | "last" | null;
   /** The goal tile that round (0: none). */
@@ -92,6 +98,8 @@ export interface SeatSnap extends LaneSnap {
   atk: number;
   /** Finishing place once the round is decided for them (1 is the winner), otherwise 0. */
   place: number;
+  /** Made SOLO_GOAL in a solo round. */
+  won: boolean;
 }
 
 export interface RoundSnap {
@@ -105,6 +113,8 @@ export interface RoundSnap {
   who: (string | null)[];
   seats: (SeatSnap | null)[];
   over: boolean;
+  /** One player on their own: no rocks, SOLO_GOAL to make, and on until they run out of moves. */
+  solo: boolean;
 }
 
 /** What happened in a round since the last frame. */
@@ -133,7 +143,7 @@ export type Op =
   | { k: "g"; id: number; from: number; to: number; rocks: number }
   /** A player filled up (or left). `by` gets the KO, or -1. */
   | { k: "ko"; s: number; by: number; place: number }
-  /** A player made the goal tile and won. */
+  /** A player made the goal tile and won. Solo, they made SOLO_GOAL and play on. */
   | { k: "goal"; s: number };
 
 export interface Frame {

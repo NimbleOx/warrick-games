@@ -44,9 +44,10 @@
             <div class="hud-stat"><span class="label">Goal</span><b id="hud-goal">—</b></div>
             <div class="hud-stat"><span class="label">Best</span><b id="hud-best">—</b></div>
             <div class="hud-stat hud-score"><span class="label">Score</span><b id="hud-score">—</b></div>
-            <div class="hud-stat"><span class="label">Rocks</span><b id="hud-scale">×1</b></div>
-            <div class="hud-stat"><span class="label">Sent</span><b id="hud-sent">—</b></div>
-            <div class="hud-stat hud-kos"><span class="label">KOs</span><b id="hud-kos">—</b></div>
+            <div class="hud-stat" data-versus><span class="label">Rocks</span><b id="hud-scale">×1</b></div>
+            <div class="hud-stat" data-versus><span class="label">Sent</span><b id="hud-sent">—</b></div>
+            <div class="hud-stat hud-kos" data-versus><span class="label">KOs</span><b id="hud-kos">—</b></div>
+            <div class="hud-stat" data-solo><span class="label">Moves</span><b id="hud-moves">—</b></div>
           </div>
 
           <div class="arena" id="arena">
@@ -65,7 +66,7 @@
 
           <p class="keys-hint" id="keys-hint">
             <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to slide (or drag on your
-            board) · merge next to a rock to smash it
+            board)<span class="rock-hint"> · merge next to a rock to smash it</span>
           </p>
         </div>
 
@@ -94,9 +95,7 @@
           <p class="winner-line" id="results-winner"></p>
           <table class="standings">
             <thead>
-              <tr>
-                <th></th><th>Player</th><th>Best</th><th>Score</th><th>Sent</th><th>Smashed</th><th>KOs</th><th>Time</th><th>Wins</th>
-              </tr>
+              <tr id="results-head"></tr>
             </thead>
             <tbody id="results-rows"></tbody>
           </table>

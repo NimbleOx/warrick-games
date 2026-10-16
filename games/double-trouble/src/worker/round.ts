@@ -3,7 +3,16 @@ import { shuffle, type Rng } from "@warrick/kit/shared/rng";
 import { choose, cpuPace, type CpuLevel } from "../shared/ai";
 import { IDLE_DROP_MS } from "../shared/constants";
 import { Lane, isDir, type Dir, type MoveResult } from "../shared/engine";
-import { attackScale, type Aim, type Goal, type Op, type RoundSnap, type SeatSnap, type Size } from "../shared/protocol";
+import {
+  SOLO_GOAL,
+  attackScale,
+  type Aim,
+  type Goal,
+  type Op,
+  type RoundSnap,
+  type SeatSnap,
+  type Size,
+} from "../shared/protocol";
 
 /**
  * Rocks sent to a board this long before one of its moves arrives count as seen, whatever the
@@ -31,6 +40,8 @@ interface Seat {
   /** Rocks sent, after the multiplier. */
   atk: number;
   place: number;
+  /** Made SOLO_GOAL, playing on their own. */
+  won: boolean;
   outAt: number;
   cpu: CpuLevel | null;
   /** When a CPU next moves. */
@@ -70,6 +81,8 @@ export class Round {
   readonly size: Size;
   readonly goal: Goal;
   readonly aim: Aim;
+  /** One player on their own: no rocks, and the round goes on until they run out of moves. */
+  readonly solo: boolean;
   seats: (Seat | null)[] = Array(MAX_PLAYERS).fill(null);
   over = false;
   /** How the round was won, once it's over. */
@@ -90,6 +103,7 @@ export class Round {
     this.goalExp = o.goal ? Math.log2(o.goal) : 0;
     this.aim = o.aim;
     this.rng = o.rng;
+    this.solo = o.slots.length === 1;
     for (const { slot, cpu } of o.slots) {
       this.seats[slot] = {
         slot,
@@ -102,6 +116,7 @@ export class Round {
         kos: 0,
         atk: 0,
         place: 0,
+        won: false,
         outAt: 0,
         cpu,
         nextMoveAt: o.goAt + (cpu ? cpuPace(cpu, o.rng) : 0),
@@ -194,11 +209,12 @@ export class Round {
       who,
       seats: this.seats.map((s) => (s ? this.seatSnap(s) : null)),
       over: this.over,
+      solo: this.solo,
     };
   }
 
   seatSnap(s: Seat): SeatSnap {
-    return { ...s.lane.snap(), e: s.e, g: s.g, kos: s.kos, atk: s.atk, place: s.place };
+    return { ...s.lane.snap(), e: s.e, g: s.g, kos: s.kos, atk: s.atk, place: s.place, won: s.won };
   }
 
   /** Seconds a slot lasted. */
@@ -248,7 +264,12 @@ export class Round {
     const smashed = res.hits.filter((h) => h.hp === 0).length;
     this.ops.push(this.boardOp(seat, res.dir, { combo: res.combo, attack: res.attack, landed: res.landed.length, smashed }));
     if (target) this.attack(seat.slot, target, out, now);
-    if (this.goalExp && lane.best >= this.goalExp) this.win(seat, now);
+    if (this.solo && !seat.won && 2 ** lane.best >= SOLO_GOAL) {
+      // A win, but the round goes on for as long as they can.
+      seat.won = true;
+      this.ops.push({ k: "goal", s: seat.slot });
+    }
+    if (!this.solo && this.goalExp && lane.best >= this.goalExp) this.win(seat, now);
     else if (res.out) this.knockOut(seat, now, true);
   }
 
@@ -321,7 +342,8 @@ export class Round {
     const killer = by >= 0 && by !== seat.slot ? this.seats[by] : null;
     if (killer) killer.kos++;
     this.ops.push({ k: "ko", s: seat.slot, by: killer ? by : -1, place: seat.place });
-    if (this.alive <= 1) {
+    // Last one standing, or on your own, out of moves.
+    if (this.alive <= (this.solo ? 0 : 1)) {
       this.over = true;
       this.how = "last";
       for (const s of this.seats) {

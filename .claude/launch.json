@@ -42,6 +42,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/turf-war", "--", "--port", "5178", "--strictPort"],
       "port": 5178
+    },
+    {
+      "name": "pill-panic",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/pill-panic", "--", "--port", "5179", "--strictPort"],
+      "port": 5179
     }
   ]
 }

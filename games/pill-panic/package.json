@@ -1,0 +1,16 @@
+{
+  "name": "pill-panic",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
+    "typecheck": "tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "test": "vitest run",
+    "cf-typegen": "wrangler types",
+    "test:live": "vitest run --config vitest.live.config.ts"
+  }
+}

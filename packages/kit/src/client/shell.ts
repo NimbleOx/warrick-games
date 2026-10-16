@@ -95,6 +95,8 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   private readonly minPlayers: number;
   private readonly token: string;
   private clock = new ClockSync();
+  /** Came in by the solo link: the next game this browser creates starts as soon as its lobby arrives. */
+  private soloNext = false;
 
   constructor(private o: ShellOptions<S, M>) {
     setStorePrefix(o.prefix);
@@ -160,6 +162,10 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     if (s.phase === "lobby") {
       if (this.screen !== "lobby") this.showScreen("lobby");
       this.renderLobby(s);
+      if (this.soloNext && s.hostId === this.me && s.players.filter((p) => !p.spectator).length === 1) {
+        this.soloNext = false;
+        this.send({ t: "start" } as C);
+      }
     } else if (this.screen !== "game") {
       this.showScreen("game");
     }
@@ -194,24 +200,33 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   // ---------------------------------------------------------------- routing and joining
 
   private route(): void {
-    const m = location.pathname.slice(this.base.length).match(/^g\/([A-Za-z0-9]{5})\/?$/);
+    const path = location.pathname.slice(this.base.length);
+    const m = path.match(/^g\/([A-Za-z0-9]{5})\/?$/);
     const code = m?.[1].toUpperCase();
     if (code && CODE_RE.test(code)) {
       // Coming back to a game you were in (reload, reconnect): straight back in.
       if (store("lastGame") === code && this.savedName()) void this.joinGame(code);
       else this.showHome(code);
+    } else if (this.minPlayers <= 1 && /^solo\/?$/.test(path)) {
+      // The solo link (the hub's Solo button): create a game and start it alone. The link leaves
+      // the history, so Back doesn't make another game.
+      history.replaceState(null, "", this.base);
+      this.showHome(null, true);
+      if (this.savedName()) void this.createGame();
     } else {
       this.showHome(null);
     }
   }
 
-  private showHome(inviteCode: string | null): void {
+  private showHome(inviteCode: string | null, solo = false): void {
     this.disconnect();
     this.showScreen("home");
     document.title = this.o.title;
     $("home-error").textContent = "";
     const nameInput = $<HTMLInputElement>("home-name");
     nameInput.value = this.savedName() ?? "";
+    this.soloNext = solo;
+    $("home-create").textContent = solo ? (this.o.soloLabel ?? "Play solo") : "Create game";
     $("home-join-invite").hidden = !inviteCode;
     $("home-default").hidden = !!inviteCode;
     if (inviteCode) {
@@ -569,6 +584,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     $("home-create").addEventListener("click", () => void this.createGame());
     $("home-join-form").addEventListener("submit", (e) => {
       e.preventDefault();
+      this.soloNext = false;
       if (this.readName()) void this.joinGame($<HTMLInputElement>("home-code").value.trim());
     });
     $("home-code").addEventListener("input", (e) => {

@@ -67,6 +67,10 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
       label: "Walls",
       fmt: (v: string) => ({ open: "Open — shots fly off", bounce: "Rubber — shots bounce", wrap: "Wrap-around" })[v] ?? v,
     },
+    roughness: {
+      label: "Terrain",
+      fmt: (v: string) => ({ smooth: "Smooth", rough: "Rough", jagged: "Jagged" })[v] ?? v,
+    },
     turnSeconds: { label: "Turn timer", fmt: (v: number) => (v ? `${v} seconds` : "No limit") },
   },
   choices: SETTING_CHOICES,

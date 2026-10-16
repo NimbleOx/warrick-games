@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { CASH_SURVIVE, DRAW_TURNS_EACH, SUDDEN_DEATH_TURNS_EACH, WORLD_W } from "../src/shared/constants";
-import type { PlayerState, ShotMessage } from "../src/shared/protocol";
+import { DEFAULT_SETTINGS, type PlayerState, type Settings, type ShotMessage } from "../src/shared/protocol";
 import { maxPowerFor } from "../src/shared/sim";
+import { generateTerrain } from "../src/shared/terrain";
 import { Game, newGameState } from "../src/worker/game";
+
+// Watch what the rounds ask for their ground (the ground itself is the real thing).
+vi.mock("../src/shared/terrain", async (importOriginal) => {
+  const terrain = await importOriginal<typeof import("../src/shared/terrain")>();
+  return { ...terrain, generateTerrain: vi.fn(terrain.generateTerrain) };
+});
 
 function setup() {
   let now = 1_000_000;
@@ -120,6 +127,24 @@ describe("game flow", () => {
     const late = t.game().addHuman("Late");
     expect(late.spectator).toBe(true);
     expect(late.tank).toBeNull();
+  });
+
+  it("makes each round's ground as rough as the host set it", () => {
+    const t = setup();
+    const host = t.game().addHuman("Host");
+    t.connected.add(host.id);
+    expect(t.s.settings.roughness).toBe("rough");
+    t.game().updateSettings(host.id, { startCash: 0, roughness: "jagged" });
+    t.game().addCpu(host.id, "easy");
+    t.game().start(host.id);
+    expect(vi.mocked(generateTerrain).mock.lastCall?.[2]).toBe("jagged");
+  });
+
+  it("gives a game saved before roughness was a setting the default", () => {
+    const t = setup();
+    delete (t.s.settings as Partial<Settings>).roughness;
+    t.game();
+    expect(t.s.settings.roughness).toBe(DEFAULT_SETTINGS.roughness);
   });
 });
 

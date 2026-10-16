@@ -28,7 +28,7 @@ import {
 } from "../shared/protocol";
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randInt, randomSeed, shuffle } from "@warrick/kit/shared/rng";
-import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { GameError, Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
 import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
 import { launchFor } from "../shared/sim";
 import { TERRAIN_STYLES, flattenPad, generateTerrain } from "../shared/terrain";
@@ -81,6 +81,12 @@ export class Game extends Lobby<GameState, ServerMsg> {
   protected readonly choices = SETTING_CHOICES;
   protected readonly cpuNames = CPU_NAMES;
   protected readonly finishedPhase = "gameover";
+
+  constructor(s: GameState, io: GameIO) {
+    super(s, io);
+    // A game saved before roughness was a setting gets the default.
+    s.settings.roughness ??= DEFAULT_SETTINGS.roughness;
+  }
 
   protected betweenRounds(): boolean {
     return this.s.phase === "lobby";
@@ -190,7 +196,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.suddenDeath = false;
 
     const style = TERRAIN_STYLES[randInt(rng, 0, TERRAIN_STYLES.length - 1)];
-    const heights = generateTerrain(rng, style);
+    const heights = generateTerrain(rng, style, s.settings.roughness);
     s.theme = randInt(rng, 0, THEME_COUNT - 1);
     s.wind = s.settings.maxWind ? randInt(rng, -s.settings.maxWind, s.settings.maxWind) : 0;
 

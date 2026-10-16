@@ -52,15 +52,20 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     super.leave(id);
   }
 
-  /** Start a round, from the lobby or from the last round's results. */
+  /** Start a round, from the lobby or from the last round's results. One player on their own plays solo. */
   start(byId: string): void {
-    this.beginStart(byId);
+    this.beginStart(byId, 1);
     this.s.round++;
     this.participants.forEach((p, i) => (p.slot = i));
     this.startRound();
     const { w, h } = BOARD_SIZES[this.s.settings.board];
     const mins = this.s.settings.roundSeconds / 60;
-    this.event(`Round ${this.s.round}: ${mins} minute${mins === 1 ? "" : "s"} on a ${w} × ${h} board. Go!`);
+    const length = `${mins} minute${mins === 1 ? "" : "s"} on a ${w} × ${h} board`;
+    this.event(
+      this.participants.length === 1
+        ? `Round ${this.s.round}: solo, ${length}. Claim as much as you can!`
+        : `Round ${this.s.round}: ${length}. Go!`,
+    );
   }
 
   protected resetForLobby(): void {
@@ -139,12 +144,16 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
       }))
       .sort((a, b) => b.cells - a.cells || b.kills - a.kills || a.deaths - b.deaths);
     const [first, second] = standings;
-    const winner = first && first.cells > 0 && (!second || second.cells < first.cells) ? first : null;
-    const result: RoundResult = { round: s.round, cells, winnerId: winner?.id ?? null, standings };
+    // On your own (whoever was in the round when time ran out), there's nobody to beat.
+    const solo = standings.length === 1;
+    const winner = !solo && first && first.cells > 0 && (!second || second.cells < first.cells) ? first : null;
+    const result: RoundResult = { round: s.round, cells, winnerId: winner?.id ?? null, solo, standings };
     s.results = result;
     s.phase = "results";
     for (const p of s.players) p.slot = -1;
-    if (winner) {
+    if (solo) {
+      this.event(`${first.name} claimed ${percent(first.cells, cells)} of the board (${percent(first.best, cells)} at best)`);
+    } else if (winner) {
       this.player(winner.id)!.wins++;
       this.event(`${winner.name} wins round ${s.round} with ${percent(winner.cells, cells)} of the board!`);
     } else {

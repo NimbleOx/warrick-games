@@ -53,7 +53,10 @@ export interface RoundResult {
   round: number;
   /** Cells on the board, for percentages. */
   cells: number;
+  /** Nobody wins a solo round (one player on their own): it's their share that counts. */
   winnerId: string | null;
+  /** One player on their own when time ran out. Missing in results from before solo play. */
+  solo?: boolean;
   standings: Standing[];
 }
 

@@ -13,6 +13,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 - If someone crosses your trail while you're out, you're gone, and they get your trail as land. You also go out if you cross your own trail, hit the edge of the board, meet someone head-on, or have all your land taken.
 - You respawn 3 seconds later with a fresh home patch. Your old land is gone.
 - The biggest share of the board when the clock runs out wins. The scoreboard shows everyone's share live.
+- **Solo.** On your own in the lobby, the start button says **Play solo**: claim as much of the board as you can before time runs out. Crossing your own trail or hitting the edge still costs you your land. The HUD shows the time, your share and your deaths; the end screen shows your share when time ran out, your best share during the round and your deaths, with your best result on that board and round length (kept in this browser). If someone drops in mid-round, it's a match from then on. Add a CPU or invite a friend for one from the start.
 - Reloading the page puts you back in your seat. Players who join mid-round drop straight in if there's a free seat, with no kills or deaths yet, even if someone else had that seat a moment ago. Otherwise they watch, and the screen says why. If you lose your connection, your head goes home and circles inside your land until you're back.
 
 ## Development

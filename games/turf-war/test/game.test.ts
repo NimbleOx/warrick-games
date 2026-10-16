@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { COUNTDOWN_TICKS, TICKS_PER_SEC } from "../src/shared/constants";
 import type { Frame, ServerMsg } from "../src/shared/protocol";
 import { applyFrame, viewFromSnapshot } from "../src/shared/sim";
+import { mulberry32 } from "@warrick/kit/shared/rng";
+import { newBrain, think } from "../src/shared/ai";
 import { Game, GameError, newGameState, type Live } from "../src/worker/game";
 
 function setup() {
@@ -46,11 +48,13 @@ function setup() {
 }
 
 describe("lobby", () => {
-  it("makes the first human the host and needs two players to start", () => {
+  it("makes the first human the host, who starts a round with a CPU", () => {
     const t = setup();
     const host = t.human("Ann");
+    const bo = t.human("Bo");
     expect(t.s.hostId).toBe(host.id);
-    expect(() => t.act((g) => g.start(host.id))).toThrow(GameError);
+    expect(() => t.act((g) => g.start(bo.id))).toThrow(GameError);
+    t.act((g) => g.kick(host.id, bo.id));
     t.act((g) => g.addCpu(host.id, "normal"));
     t.act((g) => g.start(host.id));
     expect(t.s.phase).toBe("playing");
@@ -242,5 +246,52 @@ describe("a round", () => {
       if (m.t === "f") expect(applyFrame(view, JSON.parse(JSON.stringify(m)) as Frame)).toBe(true);
     }
     expect(view.board.checksum()).toBe(t.live!.round.board.checksum());
+  });
+});
+
+describe("solo", () => {
+  /** Ann on her own, steered by a CPU's brain (as if she were playing well), for the whole round. */
+  function soloRound(join?: (t: ReturnType<typeof setup>) => void) {
+    const t = setup();
+    const ann = t.human("Ann");
+    t.act((g) => g.updateSettings(ann.id, { roundSeconds: 60, board: "small" }));
+    t.act((g) => g.start(ann.id));
+    expect(t.s.phase).toBe("playing");
+    expect(t.s.players.map((p) => p.slot)).toEqual([0]);
+    const brain = newBrain("hard");
+    const rng = mulberry32(2);
+    for (let i = 0; i < 2000 && t.s.phase === "playing"; i++) {
+      if (i === 300) join?.(t);
+      const round = t.live!.round;
+      if (round.playing && round.board.heads[0].alive) t.act((g) => g.turn(ann.id, think(round, 0, brain, rng)));
+      t.act((g) => g.tick());
+    }
+    return { t, ann };
+  }
+
+  it("plays alone to the clock and shows the player's own share", () => {
+    const { t, ann } = soloRound();
+    expect(t.s.phase).toBe("results");
+    const r = t.s.results!;
+    expect(r.solo).toBe(true);
+    expect(r.winnerId).toBeNull();
+    expect(r.standings).toHaveLength(1);
+    const x = r.standings[0];
+    expect(x.id).toBe(ann.id);
+    // More than the 3 × 3 home patch, and never more than at best.
+    expect(x.best).toBeGreaterThan(9);
+    expect(x.cells).toBeLessThanOrEqual(x.best);
+    expect(x.kills).toBe(0);
+    expect(t.s.players[0].wins).toBe(0);
+    // Again, still alone.
+    t.act((g) => g.start(ann.id));
+    expect(t.s.phase).toBe("playing");
+  });
+
+  it("becomes a match when someone drops in mid-round", () => {
+    const { t } = soloRound((t) => t.human("Bo"));
+    const r = t.s.results!;
+    expect(r.solo).toBe(false);
+    expect(r.standings).toHaveLength(2);
   });
 });

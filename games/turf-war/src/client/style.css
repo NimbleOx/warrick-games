@@ -86,6 +86,12 @@
   flex: 1;
 }
 
+/* On your own there's nobody to kill: deaths in their place. */
+.hud:not(.solo) [data-solo],
+.hud.solo [data-versus] {
+  display: none;
+}
+
 .hud b {
   font-family: var(--pixel);
   font-size: 12px;

@@ -1,5 +1,5 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { $, $$, esc } from "@warrick/kit/client/dom";
+import { $, $$, esc, personalBest } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import type { DeathCause, Dir, Frame, Op } from "../shared/board";
 import { forEachRunCell } from "../shared/codec";
@@ -71,6 +71,13 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     "Don't cross your own trail, hit the edge, or meet someone head-on.",
     "Biggest share of the board when time runs out wins.",
   ],
+  minPlayers: 1,
+  soloRules: [
+    "On your own: claim as much of the board as you can before time runs out.",
+    "Leave your land to draw a trail. Get back home to claim everything the trail encloses.",
+    "Don't cross your own trail or hit the edge: you'd start again from a fresh patch.",
+    "Your best share for each board and round length is kept in this browser. Add a CPU or invite a friend for a match.",
+  ],
   colors: PLAYER_COLORS,
   settings: {
     roundSeconds: { label: "Round", fmt: (v: number) => `${v / 60} minute${v === 60 ? "" : "s"}` },
@@ -96,6 +103,8 @@ const me = (s = shell.state): PlayerState | undefined => s?.players.find((p) => 
 const playerById = (id: string | null | undefined) => shell.player(id);
 const canHost = (s = shell.state) => shell.canHost(s);
 const myHead = () => (app.view && app.mySlot >= 0 ? app.view.board.heads[app.mySlot] : null);
+/** One player on the board, on their own. Someone dropping in makes it a match. */
+const solo = (s = shell.state) => s?.phase === "playing" && s.players.filter((p) => p.slot >= 0).length === 1;
 const inPlay = () => {
   const v = app.view;
   return shell.state?.phase === "playing" && !!v && v.n < v.end;
@@ -261,7 +270,10 @@ function onState(s: GameState, prev: GameState | null): void {
     app.view = null;
     app.feed = [];
   }
-  if (prev?.phase === "playing" && s.phase === "results" && s.results?.winnerId === shell.me) sfx.win();
+  if (prev?.phase === "playing" && s.phase === "results") {
+    const best = soloBest(s);
+    if (s.results?.winnerId === shell.me || (best?.fresh && best.prev !== null)) sfx.win();
+  }
   if (s.phase !== "lobby") renderGame(s);
 }
 
@@ -332,6 +344,7 @@ function renderHud(): void {
     html = `<span class="note">Watching${mine?.spectator ? ` — ${whyWatching(s)}` : ""}</span>`;
     $("hud-land").textContent = "—";
     $("hud-kills").textContent = "—";
+    $("hud-deaths").textContent = "—";
   } else {
     const ranks = standings();
     const rank = ranks.findIndex((r) => r.slot === slot) + 1;
@@ -345,11 +358,14 @@ function renderHud(): void {
         : "respawning";
     html =
       `<span class="chip" style="background:${mine.color}"></span><span>${esc(mine.name)}</span>` +
-      (rank ? `<span class="tag">#${rank} of ${ranks.length}</span>` : "") +
+      (rank && !solo(s) ? `<span class="tag">#${rank} of ${ranks.length}</span>` : "") +
+      (solo(s) ? `<span class="tag">solo</span>` : "") +
       (state ? `<span class="note">${state}</span>` : "");
     $("hud-land").textContent = v && slot >= 0 ? percent(v.board.land[slot], v.board.size) : "—";
     $("hud-kills").textContent = v && slot >= 0 ? String(v.kills[slot]) : "—";
+    $("hud-deaths").textContent = v && slot >= 0 ? String(v.deaths[slot]) : "—";
   }
+  $("hud").classList.toggle("solo", solo(s));
   if (main.innerHTML !== html) main.innerHTML = html;
 }
 
@@ -378,7 +394,7 @@ function renderScoreboard(): void {
         <span class="chip" style="background:${look.color}"></span>
         <span class="pname">${esc(look.name)}${you ? ` <span class="tag tag-you">you</span>` : ""}</span>
         <span class="pct">${percent(land, v.board.size)}</span>
-        <span class="meta">${v.kills[slot]} kill${v.kills[slot] === 1 ? "" : "s"} · ${v.deaths[slot]} death${v.deaths[slot] === 1 ? "" : "s"}${status}</span>
+        <span class="meta">${solo() ? "" : `${v.kills[slot]} kill${v.kills[slot] === 1 ? "" : "s"} · `}${v.deaths[slot]} death${v.deaths[slot] === 1 ? "" : "s"}${status}</span>
         <span class="bar"><i style="width:${(land / lead) * 100}%;background:${look.color}"></i></span>
       </li>`;
     })
@@ -478,35 +494,75 @@ function deathTitle(): string {
   }
 }
 
+/**
+ * The solo player's share of the board when time ran out, against their best on this board
+ * and round length; null for a match, or someone else's round.
+ */
+function soloBest(s: GameState): { best: number; prev: number | null; fresh: boolean } | null {
+  const r = s.results;
+  const x = r?.solo ? r.standings[0] : null;
+  if (!r || !x || x.id !== shell.me) return null;
+  const { board, roundSeconds } = s.settings;
+  return personalBest(`best.${board}.${roundSeconds}`, `${s.code}:${r.round}`, x.cells / r.cells);
+}
+
 function renderResults(s: GameState): void {
   const r = s.results;
   const open = s.phase === "results" && !!r;
   $("results").hidden = !open;
   if (!open || !r) return;
-  $("results-title").textContent = `Round ${r.round} results`;
-  const winner = r.standings.find((x) => x.id === r.winnerId);
-  $("results-winner").innerHTML = winner
-    ? `<b style="color:${winner.color}">${esc(winner.id === shell.me ? "You" : winner.name)}</b> ${winner.id === shell.me ? "take" : "takes"} the board with ${percent(winner.cells, r.cells)}.`
-    : "It's a draw.";
-  $("results-rows").innerHTML = r.standings
-    .map((x, i) => {
-      const p = playerById(x.id);
-      return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
+  const pcell = (x: { id: string; name: string; color: string }) =>
+    `<span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span>`;
+  if (r.solo) {
+    $("results-title").textContent = "Time's up";
+    const x = r.standings[0];
+    const best = soloBest(s);
+    const who = x?.id === shell.me ? "You" : `<b style="color:${x?.color}">${esc(x?.name ?? "")}</b>`;
+    $("results-winner").innerHTML = !x
+      ? "Nobody was on the board."
+      : `${who} ended with <b>${percent(x.cells, r.cells)}</b> of the board (${percent(x.best, r.cells)} at best).` +
+        (!best
+          ? ""
+          : best.fresh && best.prev !== null
+            ? ` <b class="best">A new personal best!</b>`
+            : best.fresh
+              ? " That's your best so far on this board."
+              : ` Your best here is ${percent(best.best, 1)}.`);
+    $("results-head").innerHTML = `<th></th><th>Player</th><th>Board</th><th>Best</th><th>Deaths</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map(
+        (x) =>
+          `<tr><td></td><td>${pcell(x)}</td><td>${percent(x.cells, r.cells)}</td><td>${percent(x.best, r.cells)}</td><td>${x.deaths}</td></tr>`,
+      )
+      .join("");
+  } else {
+    $("results-title").textContent = `Round ${r.round} results`;
+    const winner = r.standings.find((x) => x.id === r.winnerId);
+    $("results-winner").innerHTML = winner
+      ? `<b style="color:${winner.color}">${esc(winner.id === shell.me ? "You" : winner.name)}</b> ${winner.id === shell.me ? "take" : "takes"} the board with ${percent(winner.cells, r.cells)}.`
+      : "It's a draw.";
+    $("results-head").innerHTML = `<th></th><th>Player</th><th>Board</th><th>Best</th><th>Kills</th><th>Deaths</th><th>Wins</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map((x, i) => {
+        const p = playerById(x.id);
+        return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
         <td>${i + 1}</td>
-        <td><span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span></td>
+        <td>${pcell(x)}</td>
         <td>${percent(x.cells, r.cells)}</td><td>${percent(x.best, r.cells)}</td><td>${x.kills}</td><td>${x.deaths}</td><td>${p?.wins ?? "—"}</td></tr>`;
-    })
-    .join("");
+      })
+      .join("");
+  }
   const host = canHost(s);
   const again = $<HTMLButtonElement>("results-again");
   const lobby = $<HTMLButtonElement>("results-lobby");
   again.hidden = lobby.hidden = !host;
-  const enough = s.players.filter((p) => !p.spectator && (p.cpu || p.connected)).length >= 2;
+  // Someone has to be here to play, even on their own.
+  const enough = s.players.some((p) => p.cpu || p.connected);
   again.disabled = !enough;
   $("results-wait").textContent = host
     ? enough
       ? ""
-      : "Need at least two players for another round — add a CPU from the lobby."
+      : "Nobody's here to play another round."
     : `Waiting for ${playerById(s.hostId)?.name ?? "the host"} to start the next round…`;
 }
 

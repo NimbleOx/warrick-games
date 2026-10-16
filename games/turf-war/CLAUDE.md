@@ -6,7 +6,8 @@ Read `README.md` for how it plays, how it's built and how to run it; this file i
 
 ## Rules for v1
 
-- 2–8 players online, each on their own device. Arrows or WASD to turn; swipe on touch screens. Players move one cell per tick (about 8–10 cells a second) and can't reverse straight back.
+- 1–8 players online, each on their own device. Arrows or WASD to turn; swipe on touch screens. Players move one cell per tick (about 8–10 cells a second) and can't reverse straight back.
+- Solo: one player on their own plays the same timed round, scored by their own share of the board, with no winner. Whether a round was solo is decided when it ends (one player on the board), since anyone may drop in mid-round.
 - The board is a grid (start around 100 × 70 cells). Everyone spawns with a small 3 × 3 home patch.
 - Claiming: when your head re-enters your own land, your trail and everything it encloses become yours. Find the enclosed area with a flood fill from the board edges: any cell the fill can't reach without crossing your land or trail is claimed.
 - Kills: crossing someone's trail kills them, and you take their trail cells. Head-on collisions kill both.

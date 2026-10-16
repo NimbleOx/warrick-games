@@ -43,7 +43,8 @@
             <div class="hud-main" id="hud-main"></div>
             <div class="hud-stat"><span class="label">Time</span><b id="hud-clock">—</b></div>
             <div class="hud-stat"><span class="label">Land</span><b id="hud-land">—</b></div>
-            <div class="hud-stat"><span class="label">Kills</span><b id="hud-kills">—</b></div>
+            <div class="hud-stat" data-versus><span class="label">Kills</span><b id="hud-kills">—</b></div>
+            <div class="hud-stat" data-solo><span class="label">Deaths</span><b id="hud-deaths">—</b></div>
           </div>
 
           <div class="stage" id="stage">
@@ -83,7 +84,7 @@
           <p class="winner-line" id="results-winner"></p>
           <table class="standings">
             <thead>
-              <tr><th></th><th>Player</th><th>Board</th><th>Best</th><th>Kills</th><th>Deaths</th><th>Wins</th></tr>
+              <tr id="results-head"></tr>
             </thead>
             <tbody id="results-rows"></tbody>
           </table>

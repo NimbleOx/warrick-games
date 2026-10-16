@@ -182,7 +182,10 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     const clear =
       !!first &&
       first.alive &&
-      (how === "conquest" || !second || first.bases > second.bases || (first.bases === second.bases && first.units > second.units));
+      (how === "conquest" ||
+        !second ||
+        first.bases > second.bases ||
+        (first.bases === second.bases && first.units > second.units));
     const winner = clear ? first : null;
     const result: RoundResult = { round: s.round, total: battle.bases.length, winnerId: winner?.id ?? null, how, standings };
     s.results = result;

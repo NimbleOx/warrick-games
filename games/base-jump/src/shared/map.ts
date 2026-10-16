@@ -248,7 +248,8 @@ function pickStarts(roadDist: number[][], players: number): number[] {
       picks.push(far);
     }
     let gap = Infinity;
-    for (let i = 0; i < picks.length; i++) for (let j = i + 1; j < picks.length; j++) gap = Math.min(gap, roadDist[picks[i]][picks[j]]);
+    for (let i = 0; i < picks.length; i++)
+      for (let j = i + 1; j < picks.length; j++) gap = Math.min(gap, roadDist[picks[i]][picks[j]]);
     if (picks.length === players && gap > bestGap) {
       bestGap = gap;
       best = picks;
@@ -280,9 +281,7 @@ function stockBases(rng: Rng, m: GameMap, roadDist: number[][]): void {
   }
   const easy = new Set<number>();
   for (const s of m.starts) {
-    const nearest = m.adj[s]
-      .filter((b) => !isStart.has(b))
-      .sort((a, b) => roadDist[s][a] - roadDist[s][b] || a - b)[0];
+    const nearest = m.adj[s].filter((b) => !isStart.has(b)).sort((a, b) => roadDist[s][a] - roadDist[s][b] || a - b)[0];
     if (nearest === undefined) continue;
     const closestStart = m.starts.reduce((p, q) => (roadDist[q][nearest] < roadDist[p][nearest] ? q : p));
     if (closestStart !== s) continue;

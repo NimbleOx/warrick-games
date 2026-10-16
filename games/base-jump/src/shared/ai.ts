@@ -41,9 +41,39 @@ export interface Style {
  * to reinforce all made a CPU weaker. Hitting with everything, and soon, made it stronger.
  */
 export const STYLES: Record<CpuLevel, Style> = {
-  easy: { think: [26, 44], margin: [0, 0], reserve: 0, attacks: 1, gang: false, foresee: 0, upgrade: [0.3, 6], leader: 0, allIn: false },
-  normal: { think: [11, 17], margin: [2, 0.15], reserve: 0.3, attacks: 1, gang: false, foresee: 0, upgrade: [0.5, 6], leader: 0, allIn: false },
-  hard: { think: [5, 9], margin: [1, 0], reserve: 0.15, attacks: 1, gang: true, foresee: 0, upgrade: [0.5, 6], leader: 3, allIn: true },
+  easy: {
+    think: [26, 44],
+    margin: [0, 0],
+    reserve: 0,
+    attacks: 1,
+    gang: false,
+    foresee: 0,
+    upgrade: [0.3, 6],
+    leader: 0,
+    allIn: false,
+  },
+  normal: {
+    think: [11, 17],
+    margin: [2, 0.15],
+    reserve: 0.3,
+    attacks: 1,
+    gang: false,
+    foresee: 0,
+    upgrade: [0.5, 6],
+    leader: 0,
+    allIn: false,
+  },
+  hard: {
+    think: [5, 9],
+    margin: [1, 0],
+    reserve: 0.15,
+    attacks: 1,
+    gang: true,
+    foresee: 0,
+    upgrade: [0.5, 6],
+    leader: 3,
+    allIn: true,
+  },
 };
 
 /** How far ahead (ticks) it looks for attacks on its own bases. */

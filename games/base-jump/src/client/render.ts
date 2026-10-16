@@ -132,7 +132,9 @@ export class Renderer {
   }
 
   private point(x: number, y: number): [number, number] {
-    return this.swap ? [this.ox + y * this.scale, this.oy + x * this.scale] : [this.ox + x * this.scale, this.oy + y * this.scale];
+    return this.swap
+      ? [this.ox + y * this.scale, this.oy + x * this.scale]
+      : [this.ox + x * this.scale, this.oy + y * this.scale];
   }
 
   private radius(level: number): number {
@@ -152,8 +154,10 @@ export class Renderer {
     g.lineWidth = 1;
     const step = Math.max(24, 100 * this.scale);
     g.beginPath();
-    for (let x = this.ox % step; x < this.cssW; x += step) g.moveTo(Math.round(x) + 0.5, 0), g.lineTo(Math.round(x) + 0.5, this.cssH);
-    for (let y = this.oy % step; y < this.cssH; y += step) g.moveTo(0, Math.round(y) + 0.5), g.lineTo(this.cssW, Math.round(y) + 0.5);
+    for (let x = this.ox % step; x < this.cssW; x += step)
+      (g.moveTo(Math.round(x) + 0.5, 0), g.lineTo(Math.round(x) + 0.5, this.cssH));
+    for (let y = this.oy % step; y < this.cssH; y += step)
+      (g.moveTo(0, Math.round(y) + 0.5), g.lineTo(this.cssW, Math.round(y) + 0.5));
     g.stroke();
 
     const width = Math.max(5, 10 * this.scale);

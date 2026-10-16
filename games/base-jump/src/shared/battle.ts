@@ -173,8 +173,7 @@ export class Battle {
     for (let s = 0; s < MAX_PLAYERS; s++) if (this.inRound(s)) slots.push(s);
     const key = (s: number) => (this.alive(s) ? Infinity : this.out[s]);
     return slots.sort(
-      (a, b) =>
-        key(b) - key(a) || this.basesOf(b) - this.basesOf(a) || this.unitsOf(b) - this.unitsOf(a) || a - b,
+      (a, b) => key(b) - key(a) || this.basesOf(b) - this.basesOf(a) || this.unitsOf(b) - this.unitsOf(a) || a - b,
     );
   }
 

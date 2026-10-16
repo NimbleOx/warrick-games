@@ -45,7 +45,16 @@ export class Attract {
       this.overAt ||= now;
       if (now - this.overAt > 3000) this.battle = null;
     }
-    const scene: Scene = { battle: b, looks: this.looks, me: -1, t: b.n + this.acc / TICK_MS, selected: [], hover: -1, aim: null, pct: 50 };
+    const scene: Scene = {
+      battle: b,
+      looks: this.looks,
+      me: -1,
+      t: b.n + this.acc / TICK_MS,
+      selected: [],
+      hover: -1,
+      aim: null,
+      pct: 50,
+    };
     this.renderer.draw(scene, now);
   }
 

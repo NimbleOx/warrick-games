@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Double Trouble</title>
+    <meta name="description" content="2048 head to head. Merge tiles to bury your friends in rocks — no accounts, just share a code." />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">DOUBLE TROUBLE <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="stage-col">
+          <div class="hud" id="hud">
+            <div class="hud-main" id="hud-main"></div>
+            <div class="hud-stat"><span class="label">Goal</span><b id="hud-goal">—</b></div>
+            <div class="hud-stat"><span class="label">Best</span><b id="hud-best">—</b></div>
+            <div class="hud-stat hud-score"><span class="label">Score</span><b id="hud-score">—</b></div>
+            <div class="hud-stat"><span class="label">Rocks</span><b id="hud-scale">×1</b></div>
+            <div class="hud-stat"><span class="label">Sent</span><b id="hud-sent">—</b></div>
+            <div class="hud-stat hud-kos"><span class="label">KOs</span><b id="hud-kos">—</b></div>
+          </div>
+
+          <div class="arena" id="arena">
+            <div class="own" id="own">
+              <canvas id="own-canvas"></canvas>
+              <div class="banner" id="banner" hidden></div>
+              <div class="legend" id="legend">
+                <span><i class="sw sw-in"></i>Rocks coming</span>
+                <span><i class="sw sw-armed"></i>Landing next move</span>
+                <span><i class="sw sw-power"></i>Power: full sends a rock</span>
+              </div>
+            </div>
+            <div class="opps" id="opps"></div>
+            <ol class="feed" id="feed" aria-live="polite"></ol>
+          </div>
+
+          <p class="keys-hint" id="keys-hint">
+            <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to slide (or drag on your
+            board) · merge next to a rock to smash it
+          </p>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Players</h2>
+              <span class="muted small" id="round-label"></span>
+            </div>
+            <ol id="scoreboard" class="scoreboard"></ol>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Chat</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Talk trash…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Round results -->
+      <div class="modal-back" id="results" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="results-title">
+          <h2 id="results-title" class="results-title">Round over</h2>
+          <p class="winner-line" id="results-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr>
+                <th></th><th>Player</th><th>Best</th><th>Score</th><th>Sent</th><th>Smashed</th><th>KOs</th><th>Time</th><th>Wins</th>
+              </tr>
+            </thead>
+            <tbody id="results-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <span class="spacer"></span>
+            <button id="results-lobby" class="btn" data-action="lobby">Back to lobby</button>
+            <button id="results-again" class="btn btn-primary" data-action="start">Play again</button>
+          </div>
+          <p class="hint center" id="results-wait"></p>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

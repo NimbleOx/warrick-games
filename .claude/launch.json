@@ -54,6 +54,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/stack-attack", "--", "--port", "5180", "--strictPort"],
       "port": 5180
+    },
+    {
+      "name": "double-trouble",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/double-trouble", "--", "--port", "5182", "--strictPort"],
+      "port": 5182
     }
   ]
 }

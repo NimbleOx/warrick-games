@@ -197,7 +197,7 @@
 
 .tray {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -372,7 +372,7 @@ kbd {
 
 .minis {
   display: grid;
-  grid-template-columns: repeat(11, 1fr);
+  grid-template-columns: repeat(11, minmax(0, 1fr));
   gap: 2px 3px;
 }
 
@@ -439,7 +439,7 @@ kbd {
   }
 
   .tray {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 4px;
   }
 

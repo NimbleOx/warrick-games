@@ -15,8 +15,10 @@ export interface DrawOpts {
   /** Names and headings over each cycle (during the countdown). */
   labels: boolean;
   tickMs: number;
-  /** The turn you've asked for that no frame has shown yet, drawn on your head right away. */
+  /** In the countdown, the turn you've asked for: your heading chevrons show it. */
   turn?: Dir | null;
+  /** Your cycle run on ahead of the frames (see `Predictor`), drawn in place of the arena's. */
+  ahead?: { i: number; cycle: Cycle; head: [number, number] } | null;
 }
 
 interface Spark {
@@ -146,7 +148,10 @@ export class Renderer {
     if (arena.shrink > 0) this.drawClosingWall(arena, now);
 
     const alpha = opts.tickMs > 0 ? Math.min(1, Math.max(0, (now - this.frameAt) / opts.tickMs)) : 1;
-    const heads = arena.cycles.map((c, i) => this.headAt(c, i, alpha));
+    const ahead = opts.ahead ?? null;
+    // Your cycle, while it's riding on screen, is drawn as predicted.
+    const shown = (c: Cycle, i: number) => (c.alive && ahead?.i === i ? ahead.cycle : c);
+    const heads = arena.cycles.map((c, i) => (c.alive && ahead?.i === i ? ahead.head : this.headAt(c, i, alpha)));
 
     // Walls of crashed cycles flicker out.
     ctx.globalCompositeOperation = "lighter";
@@ -158,19 +163,16 @@ export class Renderer {
       this.drawWall(c.trail, null, opts.riders.get(c.id)?.color ?? "#ffffff", (1 - t) * flicker);
     });
     arena.cycles.forEach((c, i) => {
-      if (c.alive) this.drawWall(c.trail, heads[i], opts.riders.get(c.id)?.color ?? "#ffffff", 1);
+      if (c.alive) this.drawWall(shown(c, i).trail, heads[i], opts.riders.get(c.id)?.color ?? "#ffffff", 1);
     });
     ctx.globalCompositeOperation = "source-over";
 
-    const turn = opts.turn ?? null;
     arena.cycles.forEach((c, i) => {
-      if (!c.alive) return;
-      const info = opts.riders.get(c.id);
-      this.drawCycle(c, heads[i], info, now);
-      if (info?.you && turn !== null && !opts.labels) this.drawTurn(heads[i], turn, info.color);
+      if (c.alive) this.drawCycle(shown(c, i), heads[i], opts.riders.get(c.id), now);
     });
     this.drawEffects(now);
     if (opts.labels) {
+      const turn = opts.turn ?? null;
       arena.cycles.forEach((c, i) => {
         if (!c.alive) return;
         const info = opts.riders.get(c.id);
@@ -323,25 +325,6 @@ export class Renderer {
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.stroke();
     }
-  }
-
-  /** A turn you've asked for: a bright chevron beside your head, pointing the new way. */
-  private drawTurn(head: [number, number], dir: Dir, color: string): void {
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.translate(head[0] + DX[dir] * 2.4, head[1] + DY[dir] * 2.4);
-    ctx.rotate(Math.atan2(DY[dir], DX[dir]));
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10 * this.dpr;
-    ctx.fillStyle = lighten(color, 0.55);
-    ctx.beginPath();
-    ctx.moveTo(0.55, 0);
-    ctx.lineTo(-0.45, -0.75);
-    ctx.lineTo(-0.15, 0);
-    ctx.lineTo(-0.45, 0.75);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
   }
 
   private drawLabel(dir: Dir, head: [number, number], info: RiderInfo | undefined, k: number, now: number): void {

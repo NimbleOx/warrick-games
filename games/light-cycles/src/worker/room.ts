@@ -46,7 +46,7 @@ export class GameRoom extends Room<GameState, Game, Arena> {
 
   protected handle(_ws: WebSocket, game: Game, pid: string, raw: { t: string }): void {
     const msg = raw as ClientMsg;
-    if (msg.t === "turn") game.turn(pid, msg.dir);
-    else if (msg.t === "boost") game.boost(pid);
+    if (msg.t === "turn") game.turn(pid, msg.dir, msg.at);
+    else if (msg.t === "boost") game.boost(pid, msg.at);
   }
 }

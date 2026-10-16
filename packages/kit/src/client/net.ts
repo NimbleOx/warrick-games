@@ -27,6 +27,11 @@ export class ClockSync {
   skew = 0;
   private pings: { rtt: number; skew: number }[] = [];
 
+  /** The quickest of the last few round trips, in ms, or null before the first pong. */
+  get rtt(): number | null {
+    return this.pings.length ? Math.min(...this.pings.map((p) => p.rtt)) : null;
+  }
+
   /** Start over (a new connection, perhaps after the computer slept). */
   reset(): void {
     this.pings = [];

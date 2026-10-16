@@ -39,7 +39,7 @@ The room calls `onTimer` once `timerAt` has come. After a restart (every deploy 
 
 **Types.** A game's `worker-configuration.d.ts` holds only its own bindings: `npm run cf-typegen` in the game runs `wrangler types --include-runtime=false`. The Workers runtime's types are written once, into the kit's `worker-runtime.d.ts` (`npm run cf-typegen -w packages/kit`, for the `compatibility_date` in the kit's `wrangler.jsonc`, which matches the games'), and each game's `tsconfig.worker.json` includes that file.
 
-**Clock.** `shell.skew` (and `shell.serverNow()`) follow the server's clock: from the quickest of the last few pings (each carries the client's clock, and the pong sends it back), or from the newest message until a ping is back. The shell pings on each welcome, and every 5 seconds while `isLive`.
+**Clock.** `shell.skew` (and `shell.serverNow()`) follow the server's clock: from the quickest of the last few pings (each carries the client's clock, and the pong sends it back), or from the newest message until a ping is back. `shell.rtt` is that quickest round trip, in ms (null until a ping is back). The shell pings on each welcome, and every 5 seconds while `isLive`.
 
 **Styles.** The game's stylesheet starts with `@import "@warrick/kit/style.css";`, sets its colours in `:root` (`--accent`, `--accent-edge`, `--accent-ink`, `--accent-hi`, `--accent-hi-edge`, `--logo`, `--logo-shade`, `--logo-deep`, `--code-shade`, and for a different palette the surface colours), then styles its game screen.
 

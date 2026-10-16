@@ -83,6 +83,22 @@ describe("CPU players", () => {
     }
   });
 
+  it("on easy, steady their aim with each miss at the same tank, until they hit it", () => {
+    // At 0.5 the rng fumbles nothing; stuck near 1, it fumbles as far as it can, every time.
+    const calm = board(flat(), 300, 700, {});
+    const meant = chooseCpuShot(calm.s, calm.cpu, "easy", () => 0.5).angle;
+    const b = board(flat(), 300, 700, {});
+    const off = (level: "easy" | "hard" = "easy") => chooseCpuShot(b.s, b.cpu, level, () => 0.99).angle - meant;
+
+    // Nobody fires in between, so the target is never hurt: every shot missed.
+    expect([off(), off(), off(), off(), off(), off()]).toEqual([11, 8, 6, 5, 4, 4]);
+    b.other.tank!.health -= 20;
+    expect([off(), off()]).toEqual([11, 8]);
+
+    // Normal and hard CPUs don't.
+    expect([off("hard"), off("hard"), off("hard")]).toEqual([1, 1, 1]);
+  });
+
   it("send a sandhog through a hill at a tank hiding behind it", () => {
     const hill = Array.from({ length: WORLD_W }, (_, x) => 200 + Math.max(0, 120 - Math.abs(x - 600)));
     const { aim, self, other } = play(board(hill, 400, 700, { sandhog: 3 }));

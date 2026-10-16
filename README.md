@@ -18,6 +18,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Dice Dominion | `/dice-dominion/` | `games/dice-dominion` | not deployed | 5181 |
 | Double Trouble | `/double-trouble/` | `games/double-trouble` | not deployed | 5182 |
 | Corner Shop | `/corner-shop/` | `games/corner-shop` | not deployed | 5183 |
+| Liar's Dice | `/liars-dice/` | `games/liars-dice` | not deployed | 5185 |
 
 The dev ports are the ones in `.claude/launch.json`, so every game can run at the same time.
 

@@ -312,11 +312,11 @@ export class Round {
     return { round, goAt, who, lanes: this.live.map((L) => this.laneSnap(L)) };
   }
 
-  stats(slot: number): { cleared: number; left: number; sent: number; bestChain: number; out: boolean } | null {
+  stats(slot: number): { cleared: number; left: number; sent: number; bestChain: number; score: number; out: boolean } | null {
     const L = this.lanes[slot];
     if (!L) return null;
     const b = L.lane.bottle;
-    return { cleared: b.cleared, left: b.viruses, sent: L.sent, bestChain: b.bestChain, out: b.phase === "dead" };
+    return { cleared: b.cleared, left: b.viruses, sent: L.sent, bestChain: b.bestChain, score: b.score, out: b.phase === "dead" };
   }
 
   // ---------------------------------------------------------------- internals

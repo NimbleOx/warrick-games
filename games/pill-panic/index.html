@@ -49,10 +49,11 @@
             <canvas id="game-canvas"></canvas>
             <div class="banner" id="banner" hidden></div>
           </div>
-          <div class="own-stats">
+          <div class="own-stats" id="own-stats">
             <div><span class="label">Germs</span><b id="hud-germs">—</b></div>
+            <div data-solo><span class="label">Score</span><b id="hud-score">—</b></div>
             <div><span class="label">Level</span><b id="hud-level">—</b></div>
-            <div><span class="label">Speed</span><b id="hud-speed">—</b></div>
+            <div data-versus><span class="label">Speed</span><b id="hud-speed">—</b></div>
           </div>
           <div class="pad" id="pad" aria-label="Touch controls">
             <button data-btn="16" aria-label="Rotate left">⟲</button>
@@ -98,7 +99,7 @@
           <p class="winner-line" id="results-winner"></p>
           <table class="standings">
             <thead>
-              <tr><th></th><th>Player</th><th>Rounds</th><th>Germs</th><th>Junk sent</th><th>Matches</th></tr>
+              <tr id="results-head"></tr>
             </thead>
             <tbody id="results-rows"></tbody>
           </table>

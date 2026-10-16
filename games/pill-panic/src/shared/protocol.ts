@@ -40,6 +40,8 @@ export interface PlayerState extends BasePlayer {
   /** Viruses cleared and attack halves sent in the current match. */
   cleared: number;
   sent: number;
+  /** Points scored in the current match. Missing in a game saved before scores. */
+  score?: number;
   /** Matches won in this room. */
   trophies: number;
 }
@@ -51,6 +53,8 @@ export interface RoundStat {
   left: number;
   sent: number;
   bestChain: number;
+  /** Points scored this round. */
+  score: number;
   out: boolean;
 }
 
@@ -80,23 +84,35 @@ export interface Standing {
   name: string;
   color: string;
   cpu: boolean;
+  /** Rounds won: in a solo run, levels cleared. */
   wins: number;
   cleared: number;
   sent: number;
+  /** Missing in results from before scores. */
+  score?: number;
 }
 
 export interface MatchResult {
   match: number;
+  /** Nobody wins a solo run: it's the player's levels and score that count. */
   winnerId: string | null;
   rounds: number;
   /** Why it ended early, if it did. */
   note: string;
+  /** A solo run, and the level it ended on. */
+  solo?: boolean;
+  level?: number;
   standings: Standing[];
 }
 
 export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
   match: number;
+  /**
+   * One player on their own: each round is the next level, and the run goes on until they top
+   * out. Missing in a game saved before solo play.
+   */
+  solo?: boolean;
   round: RoundInfo | null;
   results: MatchResult | null;
 }

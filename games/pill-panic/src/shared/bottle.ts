@@ -12,6 +12,7 @@ import {
   SPAWN_TICKS,
   SPAWN_X,
   SPEED_UP_EVERY,
+  START_SPEED,
   virusCount,
   virusTop,
 } from "./constants";
@@ -101,6 +102,9 @@ export interface BottleSnap {
   pending: Garbage[];
   cleared: number;
   bestChain: number;
+  /** Missing in a snapshot from before scores. */
+  score?: number;
+  kills?: number;
 }
 
 /**
@@ -134,6 +138,14 @@ export class Bottle {
   pending: Garbage[] = [];
   cleared = 0;
   bestChain = 0;
+  /**
+   * Points, the Dr. Mario way: a germ is worth 100, 200 or 300 by speed, and each more germ
+   * in the same combo twice the last, up to the sixth. They don't change how the bottle plays,
+   * so the checksum leaves them out.
+   */
+  score = 0;
+  /** Germs cleared in the combo in progress. */
+  kills = 0;
   /** What happened since the owner last looked. Not part of the state. */
   events: BottleEvent[] = [];
 
@@ -292,6 +304,7 @@ export class Bottle {
     for (const [x, y, c, kind] of parts) this.cells[y * COLS + x] = kind | c;
     this.events.push({ k: "land" });
     this.chain = 0;
+    this.kills = 0;
     this.groups = 0;
     this.colors = [];
     this.garbageFall = false;
@@ -307,6 +320,8 @@ export class Bottle {
       this.colors.push(...m.colors);
       this.viruses -= m.viruses;
       this.cleared += m.viruses;
+      const base = germPoints(this.start);
+      for (let i = 0; i < m.viruses; i++) this.score += base * 2 ** Math.min(this.kills++, 5);
       if (!this.garbageFall) this.bestChain = Math.max(this.bestChain, this.chain);
       this.events.push({ k: "pop", chain: this.chain, groups: m.groups, viruses: m.viruses });
       this.phase = "pop";
@@ -316,6 +331,7 @@ export class Bottle {
     // Two or more lines from one capsule, at once or in a chain, attack: one half per line, up to four.
     if (!this.garbageFall && this.groups >= 2) this.events.push({ k: "attack", colors: this.colors.slice(0, 4) });
     this.chain = 0;
+    this.kills = 0;
     this.groups = 0;
     this.colors = [];
     if (this.viruses <= 0) {
@@ -375,6 +391,8 @@ export class Bottle {
       pending: this.pending.map((g) => ({ id: g.id, p: g.p.map(([x, c]) => [x, c]) })),
       cleared: this.cleared,
       bestChain: this.bestChain,
+      score: this.score,
+      kills: this.kills,
     };
   }
 
@@ -398,6 +416,8 @@ export class Bottle {
     b.pending = s.pending.map((g) => ({ id: g.id, p: g.p.map(([x, c]) => [x, c]) }));
     b.cleared = s.cleared;
     b.bestChain = s.bestChain;
+    b.score = s.score ?? 0;
+    b.kills = s.kills ?? 0;
     return b;
   }
 
@@ -423,6 +443,11 @@ export class Bottle {
     [this.chain, this.groups, +this.garbageFall].forEach(mix);
     return h >>> 0;
   }
+}
+
+/** What one germ is worth at the speed a bottle started at (its gravity notch): 100 low, 200 medium, 300 high. */
+export function germPoints(start: number): number {
+  return start >= START_SPEED.hi ? 300 : start >= START_SPEED.med ? 200 : 100;
 }
 
 // ------------------------------------------------------------------ capsules and viruses

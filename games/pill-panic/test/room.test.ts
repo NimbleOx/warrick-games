@@ -63,3 +63,41 @@ describe("a round in progress", () => {
     expect(logged(after, "starts over")).toBe(true);
   });
 });
+
+describe("a solo run", () => {
+  it("starts with one player, keeps arrivals watching, and starts the level over after a restart", async () => {
+    const r = await openRoom(GameRoom);
+    const ann = await r.connect("Ann");
+    await r.say(ann, { t: "start" });
+    expect(state(r)).toMatchObject({ phase: "playing", solo: true });
+    expect(live(r)!.round.live).toHaveLength(1);
+    const welcome = ann.last("welcome") as { snap: unknown };
+    expect(welcome.snap).toBeNull();
+    expect((ann.last("snap") as { snap: { lanes: unknown[] } }).snap.lanes).toHaveLength(1);
+    const bo = await r.connect("Bo");
+    expect(state(r).players.find((p) => p.id === bo.you)!.spectator).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    const after = await r.restart();
+    await after.connect("Ann");
+    expect(state(after)).toMatchObject({ phase: "playing", solo: true });
+    expect(state(after).round!.n).toBe(1);
+    expect(live(after)!.round.live).toHaveLength(1);
+    expect(logged(after, "starts over")).toBe(true);
+  });
+
+  it("ends the run when the player tops out, with a watcher there to see it", async () => {
+    const r = await openRoom(GameRoom);
+    const ann = await r.connect("Ann");
+    await r.say(ann, { t: "settings", settings: { level: 0, speed: "hi" } });
+    await r.say(ann, { t: "start" });
+    const bo = await r.connect("Bo");
+    // Ann's tab closes. Bo keeps the room's loop running, and Ann's capsules drop by themselves.
+    await r.drop(ann);
+    for (let i = 0; i < 600 && state(r).phase === "playing"; i++) await vi.advanceTimersByTimeAsync(1000);
+    expect(state(r).phase).toBe("results");
+    const seen = (bo.last("state") as { state: GameState }).state;
+    expect(seen.results).toMatchObject({ solo: true, winnerId: null, level: 0, rounds: 1 });
+    expect(seen.results!.standings.map((x) => x.name)).toEqual(["Ann"]);
+  });
+});

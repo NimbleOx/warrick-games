@@ -2,7 +2,7 @@ import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randomSeed, type Rng } from "@warrick/kit/shared/rng";
 import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
-import { COUNTDOWN_MS, INTERMISSION_MS, PLAYER_COLORS, TICK_MS, virusCount } from "../shared/constants";
+import { COUNTDOWN_MS, INTERMISSION_MS, MAX_LEVEL, PLAYER_COLORS, TICK_MS, virusCount } from "../shared/constants";
 import {
   DEFAULT_SETTINGS,
   SETTING_CHOICES,
@@ -39,7 +39,7 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
   protected readonly cpuNames = CPU_NAMES;
 
   protected createPlayer(base: BasePlayer): PlayerState {
-    return { ...base, slot: -1, wins: 0, cleared: 0, sent: 0, trophies: 0 };
+    return { ...base, slot: -1, wins: 0, cleared: 0, sent: 0, score: 0, trophies: 0 };
   }
 
   bySlot(slot: number): PlayerState | undefined {
@@ -54,9 +54,9 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     return p;
   }
 
-  /** A player who arrives mid-match gets a seat, and plays from the next round. */
+  /** A player who arrives mid-match gets a seat, and plays from the next round. A solo run they watch. */
   protected joinMidGame(): boolean {
-    return true;
+    return !this.s.solo;
   }
 
   /** A player left mid-round: their bottle tops out. */
@@ -72,19 +72,26 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
 
   // ---------------------------------------------------------------- match flow
 
-  /** Start a match, from the lobby or from the last match's results. */
+  /**
+   * Start a match, from the lobby or from the last match's results. One player on their own
+   * starts a solo run instead: each round is the next level, until they top out.
+   */
   start(byId: string): void {
-    this.beginStart(byId);
+    this.beginStart(byId, 1);
     this.s.match++;
     for (const p of this.s.players) {
       p.wins = 0;
       p.cleared = 0;
       p.sent = 0;
+      p.score = 0;
     }
     this.s.results = null;
+    this.s.solo = this.participants.length === 1;
     const { level, speed, wins } = this.s.settings;
     this.event(
-      `Match ${this.s.match}: level ${level} (${virusCount(level)} germs), ${speed} speed, first to ${wins} round${wins === 1 ? "" : "s"}`,
+      this.s.solo
+        ? `Solo run from level ${level} (${virusCount(level)} germs), ${speed} speed. Clear the bottle to go up a level!`
+        : `Match ${this.s.match}: level ${level} (${virusCount(level)} germs), ${speed} speed, first to ${wins} round${wins === 1 ? "" : "s"}`,
     );
     this.startRound(1);
   }
@@ -92,6 +99,7 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
   protected resetForLobby(): void {
     this.s.results = null;
     this.s.round = null;
+    this.s.solo = false;
   }
 
   /** The room restarted and the round's bottles were lost: play it again. */
@@ -177,17 +185,20 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
 
   private startRound(n: number): void {
     const s = this.s;
-    this.promoteSpectators();
+    // A solo run stays solo: anyone who came to watch gets a seat after it.
+    if (!s.solo) this.promoteSpectators();
     for (const p of s.players) p.slot = -1;
     // Players who are offline sit this round out.
     const seated = this.participants.filter((p) => p.cpu || p.connected);
-    if (seated.length < 2) return this.endMatch(null, "Not enough players left to carry on.");
+    if (seated.length < (s.solo ? 1 : 2)) return this.endMatch(null, "Not enough players left to carry on.");
     seated.forEach((p, i) => (p.slot = i));
     // Its own stream, apart from the seed everyone sees, so the seed doesn't give away where
     // attacks will land or how the CPUs will play.
     const rng = mulberry32(randomSeed());
     const seed = randomSeed();
-    const { level, speed, aim } = s.settings;
+    const { speed, aim } = s.settings;
+    // Solo, each round is the next level up.
+    const level = s.solo ? Math.min(MAX_LEVEL, s.settings.level + n - 1) : s.settings.level;
     const round = new Round({ seed, level, speed, aim, seats: seated.map((p) => ({ slot: p.slot, cpu: p.cpu })) }, rng);
     this.live = { round, rng };
     s.phase = "playing";
@@ -212,9 +223,24 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
       const st = round.stats(p.slot)!;
       p.cleared += st.cleared;
       p.sent += st.sent;
+      p.score = (p.score ?? 0) + st.score;
       return { id: p.id, ...st };
     });
     r.over = { winners: winners.map((p) => p.id), how: winners.length ? o.how : "draw", stats };
+
+    if (s.solo) {
+      // On to the next level, or the run is over.
+      const p = seated[0];
+      if (p && winners.length) {
+        this.event(`${p.name} cleared level ${r.level}!`);
+        r.nextAt = this.io.now() + INTERMISSION_MS;
+        this.touch();
+      } else {
+        if (p) this.event(`${p.name} topped out on level ${r.level}`);
+        this.endMatch(null, "");
+      }
+      return;
+    }
 
     const names = winners.map((p) => p.name).join(" and ");
     if (!winners.length) this.event(`Round ${r.n} is a draw`);
@@ -237,9 +263,27 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
   private endMatch(winner: PlayerState | null, note: string): void {
     const s = this.s;
     const standings: Standing[] = this.participants
-      .map((p) => ({ id: p.id, name: p.name, color: p.color, cpu: !!p.cpu, wins: p.wins, cleared: p.cleared, sent: p.sent }))
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        cpu: !!p.cpu,
+        wins: p.wins,
+        cleared: p.cleared,
+        sent: p.sent,
+        score: p.score ?? 0,
+      }))
       .sort((a, b) => b.wins - a.wins || b.cleared - a.cleared || b.sent - a.sent);
     s.results = { match: s.match, winnerId: winner?.id ?? null, rounds: s.round?.n ?? 0, note, standings };
+    if (s.solo) {
+      s.results.solo = true;
+      s.results.level = s.round?.level ?? s.settings.level;
+      const x = standings[0];
+      if (x) {
+        const levels = `${x.wins} level${x.wins === 1 ? "" : "s"}`;
+        this.event(`${x.name}'s run is over: ${levels} cleared, ${(x.score ?? 0).toLocaleString("en")} points`);
+      }
+    }
     s.phase = "results";
     if (s.round && !s.round.over) s.round = null;
     if (winner) {

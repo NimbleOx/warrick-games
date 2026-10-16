@@ -25,6 +25,7 @@ import {
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randInt, randomSeed, shuffle } from "@warrick/kit/shared/rng";
 import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
 import { launchFor, maxPowerFor } from "../shared/sim";
 import { TERRAIN_STYLES, flattenPad, generateTerrain } from "../shared/terrain";
 import { isShopId, isWeaponId, shopDef, weaponCount, type ShopId, type WeaponId } from "../shared/weapons";
@@ -41,6 +42,11 @@ const RECONNECT_GRACE_MS = 8000;
 const ROUNDOVER_MS = 5000;
 const SHOP_MS = 60000;
 
+/** The turn clock: whoever drops on their turn has RECONNECT_GRACE_MS to come back. */
+const CLOCK: ClockRules = { awayMs: RECONNECT_GRACE_MS };
+/** A turn that comes round to someone who's already away is skipped sooner. */
+const SKIP_CLOCK: ClockRules = { awayMs: DISCONNECTED_SKIP_MS };
+
 export function newGameState(code: string, now: number): GameState {
   return {
     ...baseState(code, now, DEFAULT_SETTINGS),
@@ -50,6 +56,7 @@ export function newGameState(code: string, now: number): GameState {
     wind: 0,
     turnOrder: [],
     turnPlayerId: null,
+    clockEnd: null,
     turnDeadline: null,
     resolving: false,
     roundWinnerId: null,
@@ -106,21 +113,16 @@ export class Game extends Lobby<GameState, ServerMsg> {
 
   setConnected(id: string, connected: boolean): void {
     const p = this.player(id);
-    if (!p || p.cpu) return;
+    // A second tab, or a hello from someone already here, changes nothing.
+    if (!p || p.cpu || p.connected === connected) return;
     p.connected = connected;
     const s = this.s;
     if (s.phase === "playing" && s.turnPlayerId === id && !s.resolving) {
+      // Back, you get the clock you had (never more); away, your turn ends soon.
       const now = this.io.now();
-      if (connected) {
-        s.turnDeadline = s.settings.turnSeconds ? now + s.settings.turnSeconds * 1000 : null;
-        s.timer = s.turnDeadline ? { kind: "turn", at: s.turnDeadline } : null;
-      } else {
-        const at = Math.min(s.turnDeadline ?? Infinity, now + RECONNECT_GRACE_MS);
-        s.turnDeadline = at;
-        s.timer = { kind: "turn", at };
-      }
+      this.armTurn(connected ? turnHolderBack(s, CLOCK, now) : turnHolderLeft(s, CLOCK, now));
     }
-    if (s.phase === "shop" && !connected) this.maybeEndShop();
+    if (s.phase === "shop") this.armShop();
     this.touch();
   }
 
@@ -133,13 +135,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
   // ---------------------------------------------------------------- match flow
 
   start(byId: string): void {
-    this.requireHost(byId);
-    this.requirePhase("lobby");
-    // Players who closed their tab in the lobby don't hold up the game.
-    for (const p of [...this.s.players]) {
-      if (!p.cpu && !p.connected) this.removePlayer(p.id);
-    }
-    if (this.participants.length < 2) throw new GameError("Need at least two players — add a CPU?");
+    // Players who closed their tab in the lobby don't hold up the game, and watchers get their seats.
+    this.beginStart(byId);
     for (const p of this.s.players) {
       p.money = this.s.settings.startCash;
       p.inventory = {};
@@ -161,7 +158,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.terrain = [];
     s.turnOrder = [];
     s.turnPlayerId = null;
-    s.turnDeadline = null;
+    s.clockEnd = s.turnDeadline = null;
     s.roundWinnerId = null;
     s.phaseDeadline = null;
     s.timer = null;
@@ -216,19 +213,18 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.turnPlayerId = id;
     s.resolving = false;
     if (p.cpu) {
-      s.turnDeadline = null;
+      s.clockEnd = s.turnDeadline = null;
       s.timer = { kind: "cpu", at: now + CPU_THINK_MS };
-    } else if (!this.io.isConnected(id)) {
-      s.turnDeadline = now + DISCONNECTED_SKIP_MS;
-      s.timer = { kind: "turn", at: s.turnDeadline };
-    } else if (s.settings.turnSeconds) {
-      s.turnDeadline = now + s.settings.turnSeconds * 1000;
-      s.timer = { kind: "turn", at: s.turnDeadline };
     } else {
-      s.turnDeadline = null;
-      s.timer = null;
+      const here = this.io.isConnected(id);
+      this.armTurn(startTurnClock(s, here ? CLOCK : SKIP_CLOCK, now, s.settings.turnSeconds * 1000, here));
     }
     this.touch();
+  }
+
+  /** The timer for a human's turn: it ends at `at`, or never. */
+  private armTurn(at: number | null): void {
+    this.s.timer = at === null ? null : { kind: "turn", at };
   }
 
   private nextTurn(): void {
@@ -262,7 +258,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
   }
 
   private cleanAim(p: PlayerState, raw: Aim): Aim | null {
-    if (!p.tank?.alive || !raw || !isWeaponId(String(raw.weapon))) return null;
+    if (!p.tank?.alive || !raw || typeof raw.weapon !== "string" || !isWeaponId(raw.weapon)) return null;
     if (weaponCount(p.inventory, raw.weapon) <= 0) return null;
     const angle = clampInt(raw.angle, 0, 180);
     const power = clampInt(raw.power, 0, maxPowerFor(p.tank.health));
@@ -319,7 +315,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
 
     s.shotCount++;
     s.resolving = true;
-    s.turnDeadline = null;
+    s.clockEnd = s.turnDeadline = null;
     s.timer = { kind: "resolve", at: now + world.tick * TICK_MS + RESOLVE_PAUSE_MS };
     this.touch();
     this.outbox.push({ t: "shot", shot, state: s, now });
@@ -336,7 +332,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const s = this.s;
     s.phase = "roundover";
     s.turnPlayerId = null;
-    s.turnDeadline = null;
+    s.clockEnd = s.turnDeadline = null;
     s.resolving = false;
     for (const p of this.participants) if (p.tank?.alive) p.money += CASH_SURVIVE;
     if (winner) {
@@ -387,7 +383,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
   buy(id: string, item: ShopId, qty: 1 | -1): void {
     this.requirePhase("shop");
     const p = this.player(id);
-    if (!p || p.spectator || !isShopId(String(item)) || item === "baby_missile") {
+    if (!p || p.spectator || typeof item !== "string" || !isShopId(item) || item === "baby_missile") {
       throw new GameError("Can't buy that");
     }
     const def = shopDef(item);
@@ -414,10 +410,29 @@ export class Game extends Lobby<GameState, ServerMsg> {
     this.maybeEndShop();
   }
 
+  /** The players here who are shopping. */
+  private get shoppers(): PlayerState[] {
+    return this.participants.filter((p) => !p.cpu && this.io.isConnected(p.id));
+  }
+
+  /** The shop closes early once everyone here is ready. With nobody here, it waits for its time. */
   private maybeEndShop(): void {
     if (this.s.phase !== "shop") return;
-    const waiting = this.participants.filter((p) => !p.cpu && this.io.isConnected(p.id) && !p.ready);
-    if (waiting.length === 0) this.startRound();
+    const here = this.shoppers;
+    if (here.length > 0 && here.every((p) => p.ready)) this.startRound();
+  }
+
+  /**
+   * Someone came or went while shopping. Going never closes the shop at once: it may only be a
+   * reload. If everyone still here is ready, it closes once the one who went has had as long to
+   * come back as a dropped turn gets.
+   */
+  private armShop(): void {
+    const s = this.s;
+    const here = this.shoppers;
+    const end = s.phaseDeadline ?? this.io.now();
+    const waitingOnAway = here.length > 0 && here.every((p) => p.ready) && this.participants.some((p) => !p.cpu && !p.ready);
+    s.timer = { kind: "shop", at: waitingOnAway ? Math.min(end, this.io.now() + RECONNECT_GRACE_MS) : end };
   }
 
   // ---------------------------------------------------------------- timers
@@ -439,10 +454,14 @@ export class Game extends Lobby<GameState, ServerMsg> {
       }
       case "turn": {
         const p = this.player(s.turnPlayerId ?? "");
-        if (s.phase === "playing" && !s.resolving && p) {
-          this.event(p.connected ? `⏱ ${p.name} ran out of time` : `${p.name} is away — skipping`);
-          this.nextTurn();
+        if (s.phase !== "playing" || s.resolving || !p) break;
+        // Not yet, or noticed long after (the room was empty or restarting): there's time to come back.
+        if (!turnTimeUp(s, CLOCK, this.io.now())) {
+          this.armTurn(s.turnDeadline);
+          break;
         }
+        this.event(p.connected ? `⏱ ${p.name} ran out of time` : `${p.name} is away — skipping`);
+        this.nextTurn();
         break;
       }
       case "resolve":

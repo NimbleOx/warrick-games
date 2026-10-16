@@ -58,6 +58,11 @@ export class Renderer {
   private flash = 0;
   /** World units per CSS pixel, so labels stay readable at any size. */
   private ui = 1;
+  /** What the last frame drawn showed, so a frame that would look the same isn't drawn. */
+  private shownWorld: World | null = null;
+  private shown = "";
+  /** The last frame has something on it that changes by itself (a shake, a flash, a fading trail, a floater). */
+  private moving = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -88,18 +93,26 @@ export class Renderer {
     return { x, y };
   }
 
+  /** Draw the next frame whatever it shows (the fonts have loaded, say). */
+  invalidate(): void {
+    this.shown = "";
+  }
+
   /** A new World is about to be shown; projectile ids restart, so drop old trails. */
   newShot(): void {
     this.trails.clear();
+    this.invalidate();
   }
 
   clearTracers(): void {
     this.tracerPaths = [];
     this.trails.clear();
+    this.invalidate();
   }
 
   /** Visual reactions to simulation events. */
   onEvent(ev: SimEvent, world: World, now: number, colorOf: (id: string) => string): void {
+    this.invalidate();
     if (ev.type === "explode" && !ev.dirt) {
       this.shake = Math.max(this.shake, Math.min(14, ev.r / 6));
       if (ev.r >= 50) this.flash = Math.max(this.flash, Math.min(0.5, ev.r / 200));
@@ -115,7 +128,19 @@ export class Renderer {
     }
   }
 
-  draw(world: World, opts: DrawOpts, now: number): void {
+  /**
+   * Draw the world, unless the frame would look just like the last one: nothing is moving and
+   * nothing changed. Returns whether it drew.
+   */
+  draw(world: World, opts: DrawOpts, now: number): boolean {
+    // The arrow over the tank whose turn it is bobs a whole pixel at a time, so a turn spent
+    // thinking redraws a few times a second, not every frame.
+    const bob = [...opts.tanks.values()].some((t) => t.active) ? Math.round(Math.sin(now / 180) * 3) : 0;
+    const key = JSON.stringify([world.tick, world.terrainVersion, [...opts.tanks], opts, bob, this.canvas.width, this.canvas.height, this.ui]);
+    if (!this.moving && world === this.shownWorld && key === this.shown) return false;
+    this.shownWorld = world;
+    this.shown = key;
+
     const ctx = this.ctx;
     const k = this.canvas.width / WORLD_W;
     const theme = THEMES[opts.theme % THEMES.length];
@@ -150,7 +175,7 @@ export class Renderer {
     // Tanks go behind the ground so a buried tank is actually buried.
     for (const t of world.tanks) this.drawTank(t, opts.tanks.get(t.id));
     ctx.drawImage(this.ground, 0, 0);
-    for (const t of world.tanks) this.drawTankOverlay(t, opts.tanks.get(t.id), opts.labels, now);
+    for (const t of world.tanks) this.drawTankOverlay(t, opts.tanks.get(t.id), opts.labels, bob);
 
     this.updateTrails(world, now, opts.shooterColor ?? "#ffffff");
     for (const tr of this.trails.values()) {
@@ -178,12 +203,16 @@ export class Renderer {
     if (opts.aimGuide) this.drawAimGuide(opts.aimGuide);
     this.drawFloaters(now);
 
-    if (this.flash > 0.01) {
+    const flashing = this.flash > 0.01;
+    if (flashing) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = `rgba(255, 245, 220, ${this.flash})`;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       this.flash *= 0.8;
     }
+    // Each of these looks different next frame, until it's gone.
+    this.moving = this.shake > 0 || flashing || this.trails.size > 0 || this.floaters.length > 0;
+    return true;
   }
 
   // ---------------------------------------------------------------- backgrounds
@@ -313,7 +342,7 @@ export class Renderer {
     }
   }
 
-  private drawTankOverlay(t: SimTank, info: TankInfo | undefined, labels: boolean, now: number): void {
+  private drawTankOverlay(t: SimTank, info: TankInfo | undefined, labels: boolean, bob: number): void {
     if (!info) return;
     const ctx = this.ctx;
     const x = t.x;
@@ -369,7 +398,6 @@ export class Renderer {
     ctx.fillRect(x - bw / 2, labelY - 2 * u, bw * hp, bh);
 
     if (info.active) {
-      const bob = Math.sin(now / 180) * 3;
       const ty = labelY - 6 * u - fontPx - 6 - bob;
       ctx.fillStyle = "#ffd23f";
       ctx.beginPath();

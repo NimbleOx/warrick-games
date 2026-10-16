@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "pocket-wars",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  // warrick.games is the hub Worker's Custom Domain (../../hub); a route on it takes precedence.
+  // vite.config.ts sets the matching base path and nests the built assets under pocket-wars/.
+  "routes": [{ "pattern": "warrick.games/pocket-wars*", "zone_name": "warrick.games" }],
+  // Serve only from warrick.games, so invite links always use it.
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    // Serve index.html for client-side routes like /pocket-wars/g/ABCDE.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/pocket-wars/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "GAME_ROOM", "class_name": "GameRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }]
+}

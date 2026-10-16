@@ -153,13 +153,15 @@ describe("rounds", () => {
     const me = browser(t, host.id, 0);
     let handled = 0;
     for (let i = 0; i < 400 && t.state.phase === "playing"; i++) {
+      // The CPU may not send us any before someone's out, so send some ourselves too.
+      if (i % 10 === 5) attack(t, 1, 0, 1);
       const res = me.move();
       if (!res) break;
       handled += res.landed.length + res.cancelled;
       t.advance(300);
       t.act((g) => g.tick());
     }
-    // The CPU's rocks reached us and landed (or we smashed them), and the server never had to correct our board.
+    // Rocks reached us and landed (or we smashed them), and the server never had to correct our board.
     expect(ops(t.sent).some((o) => o.k === "g" && o.to === 0)).toBe(true);
     expect(handled).toBeGreaterThan(0);
     expect(t.direct.filter((d) => d.msg.t === "fix")).toEqual([]);

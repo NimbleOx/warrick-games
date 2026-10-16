@@ -1,4 +1,4 @@
-import type { Arena, Cycle, Frame } from "../shared/arena";
+import type { Arena, Cycle, Dir, Frame } from "../shared/arena";
 import { DX, DY } from "../shared/arena";
 import { rgba } from "@warrick/kit/client/color";
 import { THEMES, lighten, type Theme } from "./themes";
@@ -15,6 +15,8 @@ export interface DrawOpts {
   /** Names and headings over each cycle (during the countdown). */
   labels: boolean;
   tickMs: number;
+  /** The turn you've asked for that no frame has shown yet, drawn on your head right away. */
+  turn?: Dir | null;
 }
 
 interface Spark {
@@ -160,13 +162,20 @@ export class Renderer {
     });
     ctx.globalCompositeOperation = "source-over";
 
+    const turn = opts.turn ?? null;
     arena.cycles.forEach((c, i) => {
-      if (c.alive) this.drawCycle(c, heads[i], opts.riders.get(c.id), now);
+      if (!c.alive) return;
+      const info = opts.riders.get(c.id);
+      this.drawCycle(c, heads[i], info, now);
+      if (info?.you && turn !== null && !opts.labels) this.drawTurn(heads[i], turn, info.color);
     });
     this.drawEffects(now);
     if (opts.labels) {
       arena.cycles.forEach((c, i) => {
-        if (c.alive) this.drawLabel(c, heads[i], opts.riders.get(c.id), k, now);
+        if (!c.alive) return;
+        const info = opts.riders.get(c.id);
+        // During the countdown your heading chevrons show the line you've picked.
+        this.drawLabel(info?.you && turn !== null ? turn : c.dir, heads[i], info, k, now);
       });
     }
 
@@ -316,7 +325,26 @@ export class Renderer {
     }
   }
 
-  private drawLabel(c: Cycle, head: [number, number], info: RiderInfo | undefined, k: number, now: number): void {
+  /** A turn you've asked for: a bright chevron beside your head, pointing the new way. */
+  private drawTurn(head: [number, number], dir: Dir, color: string): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(head[0] + DX[dir] * 2.4, head[1] + DY[dir] * 2.4);
+    ctx.rotate(Math.atan2(DY[dir], DX[dir]));
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 * this.dpr;
+    ctx.fillStyle = lighten(color, 0.55);
+    ctx.beginPath();
+    ctx.moveTo(0.55, 0);
+    ctx.lineTo(-0.45, -0.75);
+    ctx.lineTo(-0.15, 0);
+    ctx.lineTo(-0.45, 0.75);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawLabel(dir: Dir, head: [number, number], info: RiderInfo | undefined, k: number, now: number): void {
     if (!info) return;
     const ctx = this.ctx;
     const [x, y] = head;
@@ -327,8 +355,8 @@ export class Renderer {
       const a = 0.35 + 0.65 * (((now / 140 - n) % 3) / 3);
       ctx.globalAlpha = a;
       ctx.save();
-      ctx.translate(x + DX[c.dir] * (1.8 + n * 0.9), y + DY[c.dir] * (1.8 + n * 0.9));
-      ctx.rotate(Math.atan2(DY[c.dir], DX[c.dir]));
+      ctx.translate(x + DX[dir] * (1.8 + n * 0.9), y + DY[dir] * (1.8 + n * 0.9));
+      ctx.rotate(Math.atan2(DY[dir], DX[dir]));
       ctx.beginPath();
       ctx.moveTo(0.35, 0);
       ctx.lineTo(-0.3, -0.45);
@@ -347,7 +375,7 @@ export class Renderer {
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
     const px = Math.min(this.canvas.width - 60 * u, Math.max(60 * u, x * k));
-    const above = y * k > 40 * u && c.dir !== 0;
+    const above = y * k > 40 * u && dir !== 0;
     const py = above ? y * k - 14 * u : y * k + 28 * u;
     ctx.lineWidth = 3 * u;
     ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";

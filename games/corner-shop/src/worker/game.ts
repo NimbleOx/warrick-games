@@ -1,6 +1,7 @@
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randomSeed, shuffle } from "@warrick/kit/shared/rng";
 import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
 import { chooseMove } from "../shared/ai";
 import { MONOMINO, PIECE_COUNT, PIECE_IDS, isPieceId } from "../shared/pieces";
 import {
@@ -26,6 +27,8 @@ export const CPU_MS = 800;
 export const AWAY_MS = 10_000;
 /** Turns passed in a row while away before a player is out. */
 export const AWAY_LIMIT = 3;
+/** The kit's turn clock: reloading gives back the clock you had, not a new one. */
+const CLOCK: ClockRules = { awayMs: AWAY_MS };
 
 export function newGameState(code: string, now: number): GameState {
   return {
@@ -37,6 +40,8 @@ export function newGameState(code: string, now: number): GameState {
     seats: [],
     turnPlayerId: null,
     turnDeadline: null,
+    clockEnd: null,
+    clockTopUp: false,
     timer: null,
     moves: [],
     winners: [],
@@ -83,22 +88,19 @@ export class Game extends Lobby<GameState, ServerMsg> {
     }
   }
 
+  /**
+   * The player whose turn it is: gone, their turn passes in AWAY_MS (or when their clock runs out);
+   * back, they get the clock they had, never a new one.
+   */
   setConnected(id: string, connected: boolean): void {
     const p = this.player(id);
     if (!p || p.cpu || p.connected === connected) return;
-    p.connected = connected;
+    super.setConnected(id, connected);
     const s = this.s;
-    if (s.phase === "playing" && s.turnPlayerId === id) {
-      const now = this.io.now();
-      if (connected) {
-        p.missed = 0;
-        this.setTurnClock(now);
-      } else {
-        s.turnDeadline = Math.min(s.turnDeadline ?? Infinity, now + AWAY_MS);
-        s.timer = { kind: "away", at: s.turnDeadline };
-      }
-    }
-    this.touch();
+    if (s.phase !== "playing" || s.turnPlayerId !== id) return;
+    const now = this.io.now();
+    if (connected) p.missed = 0;
+    this.armTurn(connected ? turnHolderBack(s, CLOCK, now) : turnHolderLeft(s, CLOCK, now), connected);
   }
 
   // ---------------------------------------------------------------- game flow
@@ -126,6 +128,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
       p.missed = 0;
       p.score = seat >= 0 ? scoreFor(p.tray, null) : 0;
     }
+    this.uniqueSeatColors();
     this.event(`Game on! ${order.length} players on a ${layout.size}×${layout.size} board.`);
     s.turnPlayerId = null;
     this.nextTurn();
@@ -141,6 +144,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.winners = [];
     s.turnPlayerId = null;
     s.turnDeadline = null;
+    s.clockEnd = null;
     s.timer = null;
     for (const p of s.players) {
       p.seat = -1;
@@ -201,21 +205,42 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const now = this.io.now();
     s.turnPlayerId = p.id;
     if (p.cpu) {
-      s.turnDeadline = null;
+      startTurnClock(s, CLOCK, now, null, true);
       s.timer = { kind: "cpu", at: now + CPU_MS };
-    } else if (!this.io.isConnected(p.id)) {
-      s.turnDeadline = now + AWAY_MS;
-      s.timer = { kind: "away", at: s.turnDeadline };
     } else {
-      this.setTurnClock(now);
+      const here = this.io.isConnected(p.id);
+      // Here for a turn of their own: whatever they missed before wasn't in a row.
+      if (here) p.missed = 0;
+      this.armTurn(startTurnClock(s, CLOCK, now, s.settings.turnSeconds * 1000, here), here);
     }
     this.touch();
   }
 
-  private setTurnClock(now: number): void {
-    const s = this.s;
-    s.turnDeadline = s.settings.turnSeconds ? now + s.settings.turnSeconds * 1000 : null;
-    s.timer = s.turnDeadline ? { kind: "turn", at: s.turnDeadline } : null;
+  /** Arm the timer for the turn's deadline: running out of time if they're here, a missed turn if not. */
+  private armTurn(at: number | null, here: boolean): void {
+    this.s.timer = at === null ? null : { kind: here ? "turn" : "away", at };
+    this.touch();
+  }
+
+  /**
+   * Every seat gets a colour of its own. They can clash: past the palette the lobby hands out
+   * colours again, and a watcher who takes a seat keeps theirs. Whoever joined first keeps it.
+   */
+  private uniqueSeatColors(): void {
+    const players = this.s.players;
+    const taken = new Set<string>();
+    const clashing: PlayerState[] = [];
+    for (const p of players) {
+      if (p.seat < 0) continue;
+      if (taken.has(p.color)) clashing.push(p);
+      else taken.add(p.color);
+    }
+    for (const p of clashing) {
+      const free = COLORS.filter((c) => !taken.has(c));
+      // Rather one that nobody watching has either.
+      p.color = free.find((c) => !players.some((o) => o.color === c)) ?? free[0];
+      taken.add(p.color);
+    }
   }
 
   private markOut(p: PlayerState, reason: OutReason): void {
@@ -244,6 +269,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.phase = "gameover";
     s.turnPlayerId = null;
     s.turnDeadline = null;
+    s.clockEnd = null;
     s.timer = null;
     const players = seated(s);
     for (const p of players) p.score = scoreFor(p.tray, p.lastPiece);
@@ -264,7 +290,15 @@ export class Game extends Lobby<GameState, ServerMsg> {
   onTimer(): void {
     const s = this.s;
     const t = s.timer;
-    if (!t || this.io.now() < t.at - 25) return;
+    if (!t) return;
+    const now = this.io.now();
+    if (t.kind === "cpu") {
+      if (now < t.at - 25) return;
+    } else if (!turnTimeUp(s, CLOCK, now)) {
+      // Not yet; or it passed long ago while nobody was here to notice, and they get AWAY_MS more.
+      if (s.turnDeadline !== t.at) this.armTurn(s.turnDeadline, this.io.isConnected(s.turnPlayerId ?? ""));
+      return;
+    }
     s.timer = null;
     const p = this.player(s.turnPlayerId ?? "");
     if (s.phase !== "playing" || !p) return;

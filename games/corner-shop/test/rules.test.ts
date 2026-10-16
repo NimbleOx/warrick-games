@@ -15,7 +15,6 @@ import {
 import {
   EMPTY,
   anchors,
-  fittingPieces,
   hasLegalMove,
   layoutFor,
   legalMoves,
@@ -146,6 +145,11 @@ describe("placing pieces", () => {
     // A board where seat 0 could reach seat 1's start: still not allowed.
     const near = paint(pos, 0, [[8, 8]]);
     expect(placementError(near, 0, { piece: MONOMINO, orient: 0, x: 9, y: 9 })).toBe("That's another player's starting square");
+    expect(legalMoves(near, 0).some((m) => moveCells(14, m)!.includes(9 * 14 + 9))).toBe(false);
+    // Once seat 1 is out (it left before its first piece, say), its start is free for anyone.
+    const gone = { ...near, out: [false, true] };
+    expect(placementError(gone, 0, { piece: MONOMINO, orient: 0, x: 9, y: 9 })).toBeNull();
+    expect(legalMoves(gone, 0).some((m) => moveCells(14, m)!.includes(9 * 14 + 9))).toBe(true);
   });
 
   it("checks the tray and the orientation", () => {
@@ -192,7 +196,6 @@ describe("placing pieces", () => {
     expect(hasLegalMove(pos, 0)).toBe(true); // the monomino fits on its start
     pos = { ...pos, trays: [pos.trays[0].filter((p) => p !== MONOMINO), pos.trays[1]] };
     expect(hasLegalMove(pos, 0)).toBe(false);
-    expect(fittingPieces(pos, 0).size).toBe(0);
   });
 
   it("scores the tray", () => {

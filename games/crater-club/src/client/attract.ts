@@ -1,5 +1,6 @@
-import { PLAYER_COLORS, THEME_COUNT, TICK_MS, WORLD_W } from "../shared/constants";
-import { mulberry32, randInt, randomSeed, type Rng } from "../shared/rng";
+import { DEFAULT_COLORS as PLAYER_COLORS } from "@warrick/kit/shared/constants";
+import { THEME_COUNT, TICK_MS, WORLD_W } from "../shared/constants";
+import { mulberry32, randInt, randomSeed, type Rng } from "@warrick/kit/shared/rng";
 import { World, launchFor } from "../shared/sim";
 import { TERRAIN_STYLES, flattenPad, generateTerrain } from "../shared/terrain";
 import type { WeaponId } from "../shared/weapons";

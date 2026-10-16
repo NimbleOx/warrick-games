@@ -1,13 +1,15 @@
-import { CODE_RE, MAX_PLAYERS, PLAYER_COLORS, TICK_MS, TURRET_Y } from "../shared/constants";
+import { unlockAudio } from "@warrick/kit/client/audio";
+import { $, $$, esc, toast } from "@warrick/kit/client/dom";
+import { Shell, type Screen } from "@warrick/kit/client/shell";
+import { TICK_MS, TURRET_Y } from "../shared/constants";
 import {
   SETTING_CHOICES,
   rankPlayers,
   type Aim,
+  type ClientMsg,
   type GameState,
-  type LogEntry,
   type PlayerState,
   type ServerMsg,
-  type Settings,
   type ShotMessage,
 } from "../shared/protocol";
 import { maxPowerFor, type World } from "../shared/sim";
@@ -22,60 +24,16 @@ import {
 } from "../shared/weapons";
 import { worldFromState } from "../shared/world-state";
 import { Attract } from "./attract";
-import { isMuted, setMuted, sfx, unlockAudio } from "./audio";
-import { Connection, type NetStatus } from "./net";
+import { sfx } from "./audio";
 import { Renderer, type DrawOpts, type TankInfo } from "./render";
 
 // ------------------------------------------------------------------ helpers
-
-// The app lives under Vite's `base` ("/crater-club/"): BASE is the home screen, gamePath() a game.
-const BASE = import.meta.env.BASE_URL;
-const gamePath = (code: string) => `${BASE}g/${code}`;
-
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const $$ = <T extends HTMLElement = HTMLElement>(sel: string) => Array.from(document.querySelectorAll<T>(sel));
-
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
 
 function money(n: number): string {
   return `$${n.toLocaleString("en-US")}`;
 }
 
-function store(key: string, value?: string | null): string | null {
-  try {
-    if (value === undefined) return localStorage.getItem(key);
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Private mode etc. — identity just won't survive a reload.
-  }
-  return value ?? null;
-}
-
-function playerToken(): string {
-  let t = store("cc.token");
-  if (!t || !/^[\w-]{8,64}$/.test(t)) {
-    t = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-    store("cc.token", t);
-  }
-  return t;
-}
-
-let toastTimer = 0;
-function toast(text: string, kind: "error" | "info" = "error"): void {
-  const el = $("toast");
-  el.textContent = text;
-  el.className = `toast ${kind}`;
-  el.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (el.hidden = true), 3200);
-}
-
 // ------------------------------------------------------------------ app state
-
-type Screen = "home" | "lobby" | "game";
 
 interface Anim {
   world: World;
@@ -85,13 +43,6 @@ interface Anim {
 }
 
 const app = {
-  screen: "home" as Screen,
-  conn: null as Connection | null,
-  code: "",
-  me: "",
-  state: null as GameState | null,
-  log: [] as LogEntry[],
-  skew: 0,
   aim: { angle: 60, power: 500, weapon: "baby_missile" } as Aim,
   turnKey: "",
   firing: false,
@@ -104,212 +55,93 @@ const app = {
   shopRound: -1,
 };
 
-const token = playerToken();
+const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
+  slug: "crater-club",
+  title: "Crater Club",
+  prefix: "cc",
+  logo: "CRATER<br />CLUB",
+  tagline: "Turn-based artillery for friends.<br />No accounts — just share a code.",
+  placeholder: "Commander",
+  footer: "A love letter to <em>Scorched Earth</em> (1991).",
+  settings: {
+    rounds: { label: "Rounds", fmt: (v: number) => String(v) },
+    startCash: { label: "Start cash", fmt: (v: number) => money(v) },
+    maxWind: { label: "Wind", fmt: (v: number) => ({ 0: "Off", 5: "Light", 10: "Normal", 20: "Gale" })[v] ?? String(v) },
+    walls: {
+      label: "Walls",
+      fmt: (v: string) => ({ open: "Open — shots fly off", bounce: "Rubber — shots bounce", wrap: "Wrap-around" })[v] ?? v,
+    },
+    turnSeconds: { label: "Turn timer", fmt: (v: number) => (v ? `${v} seconds` : "No limit") },
+  },
+  choices: SETTING_CHOICES,
+  // While a shot is in the air, the state after it waits until the animation lands.
+  intercept: (msg) => {
+    if (msg.t !== "state" || !app.anim) return false;
+    app.pending = msg.state;
+    return true;
+  },
+  onWelcome: () => {
+    app.firing = false;
+    app.anim = null;
+    app.pending = null;
+  },
+  onMessage,
+  onState,
+  onScreen,
+  onReset,
+  confirmLeave: (s): string | null =>
+    s.phase !== "lobby" && s.phase !== "gameover" ? "Leave this game? Your tank stays behind." : null,
+});
 const renderer = new Renderer($<HTMLCanvasElement>("game-canvas"));
 const attract = new Attract($<HTMLCanvasElement>("attract"));
 
-const serverNow = () => Date.now() + app.skew;
-const me = (s = app.state): PlayerState | undefined => s?.players.find((p) => p.id === app.me);
-const playerById = (id: string | null | undefined) => app.state?.players.find((p) => p.id === id);
-const isMyTurn = (s = app.state) => !!s && s.phase === "playing" && !s.resolving && s.turnPlayerId === app.me && !app.anim;
-const canHost = (s = app.state) => {
-  if (!s) return false;
-  if (s.hostId === app.me) return true;
-  const host = s.players.find((p) => p.id === s.hostId);
-  return !host || !host.connected;
-};
+const serverNow = () => shell.serverNow();
+const me = (s = shell.state): PlayerState | undefined => s?.players.find((p) => p.id === shell.me);
+const playerById = (id: string | null | undefined) => shell.player(id);
+const isMyTurn = (s = shell.state) => !!s && s.phase === "playing" && !s.resolving && s.turnPlayerId === shell.me && !app.anim;
+const canHost = (s = shell.state) => shell.canHost(s);
 
-// ------------------------------------------------------------------ routing
+// ------------------------------------------------------------------ shell hooks
 
-function route(): void {
-  const m = location.pathname.slice(BASE.length).match(/^g\/([A-Za-z0-9]{5})\/?$/);
-  const code = m?.[1].toUpperCase();
-  if (code && CODE_RE.test(code)) {
-    // Coming back to a game you were in (reload, reconnect): straight back in.
-    if (store("cc.lastGame") === code && store("cc.name")) void joinGame(code);
-    else showHome(code);
-  } else {
-    showHome(null);
-  }
-}
-
-function showScreen(screen: Screen): void {
-  app.screen = screen;
-  $("screen-home").hidden = screen !== "home";
-  $("screen-lobby").hidden = screen !== "lobby";
-  $("screen-game").hidden = screen !== "game";
+function onScreen(screen: Screen): void {
   if (screen === "game") layoutStage();
   if (screen === "home") attract.resize();
 }
 
-function showHome(inviteCode: string | null): void {
-  disconnect();
-  showScreen("home");
-  document.title = "Crater Club";
-  $("home-error").textContent = "";
-  const nameInput = $<HTMLInputElement>("home-name");
-  nameInput.value = store("cc.name") ?? "";
-  $("home-join-invite").hidden = !inviteCode;
-  $("home-default").hidden = !!inviteCode;
-  if (inviteCode) {
-    $("home-invite-code").textContent = inviteCode;
-    $("home-join-invite-btn").dataset.code = inviteCode;
-  }
-  if (!nameInput.value) nameInput.focus();
-}
-
-function readName(): string | null {
-  const input = $<HTMLInputElement>("home-name");
-  const name = input.value.trim().slice(0, 16);
-  if (!name) {
-    $("home-error").textContent = "Pick a name first.";
-    input.focus();
-    return null;
-  }
-  store("cc.name", name);
-  return name;
-}
-
-async function createGame(): Promise<void> {
-  if (!readName()) return;
-  const btn = $<HTMLButtonElement>("home-create");
-  btn.disabled = true;
-  try {
-    const res = await fetch(`${BASE}api/games`, { method: "POST" });
-    const body = (await res.json()) as { code?: string; error?: string };
-    if (!res.ok || !body.code) throw new Error(body.error ?? "Couldn't create a game");
-    history.pushState(null, "", gamePath(body.code));
-    await joinGame(body.code);
-  } catch (err) {
-    $("home-error").textContent = err instanceof Error ? err.message : String(err);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function joinGame(code: string): Promise<void> {
-  code = code.toUpperCase();
-  if (!CODE_RE.test(code)) {
-    $("home-error").textContent = "Codes are 5 letters/numbers.";
-    return;
-  }
-  const name = store("cc.name") ?? readName();
-  if (!name) return;
-  try {
-    const res = await fetch(`${BASE}api/games/${code}`);
-    if (res.status === 404) {
-      store("cc.lastGame", null);
-      if (location.pathname !== BASE) history.replaceState(null, "", BASE);
-      showHome(null);
-      $("home-error").textContent = `No game with code ${code}. It may have expired.`;
-      return;
-    }
-    if (!res.ok) throw new Error("The server didn't answer. Try again?");
-  } catch (err) {
-    showHome(code);
-    $("home-error").textContent = err instanceof Error ? err.message : String(err);
-    return;
-  }
-
-  disconnect();
-  store("cc.lastGame", code);
-  if (location.pathname !== gamePath(code)) history.pushState(null, "", gamePath(code));
-  app.code = code;
-  app.state = null;
-  app.log = [];
-  app.me = "";
-  $("lobby-code").textContent = code;
-  $<HTMLInputElement>("lobby-link").value = location.origin + gamePath(code);
-  $("game-code-small").textContent = code;
-  $("lobby-players").innerHTML = `<li class="muted">Connecting…</li>`;
-  showScreen("lobby");
-
-  app.conn = new Connection(code, {
-    hello: () => ({ t: "hello", token, name: store("cc.name") ?? name }),
-    message: onMessage,
-    status: onStatus,
-    fatal: (reason) => {
-      store("cc.lastGame", null);
-      history.pushState(null, "", BASE);
-      showHome(null);
-      $("home-error").textContent = reason;
-    },
-  });
-}
-
-function disconnect(): void {
-  app.conn?.close();
-  app.conn = null;
+/** Left the game, or lost it for good. */
+function onReset(): void {
   app.anim = null;
   app.pending = null;
-  app.state = null;
   app.world = null;
   $("shop").hidden = true;
   $("gameover").hidden = true;
 }
 
-function leave(): void {
-  const s = app.state;
-  if (s && s.phase !== "lobby" && s.phase !== "gameover" && !confirm("Leave this game? Your tank stays behind.")) return;
-  app.conn?.send({ t: "leave" });
-  store("cc.lastGame", null);
-  history.pushState(null, "", BASE);
-  showHome(null);
-}
-
-function onStatus(status: NetStatus): void {
-  for (const el of [$("lobby-conn"), $("game-conn")]) {
-    el.dataset.status = status;
-    el.textContent = status === "open" ? "" : status === "connecting" ? "Connecting…" : "Reconnecting…";
-  }
-}
-
 // ------------------------------------------------------------------ messages
 
 function onMessage(msg: ServerMsg): void {
-  if ("now" in msg) app.skew = msg.now - Date.now();
   switch (msg.t) {
-    case "welcome":
-      app.me = msg.you;
-      app.firing = false;
-      app.log = msg.log;
-      app.anim = null;
-      app.pending = null;
-      applyState(msg.state);
-      renderLog();
-      break;
-    case "state":
-      if (app.anim) app.pending = msg.state;
-      else applyState(msg.state);
-      break;
     case "shot":
       startShot(msg.shot, msg.state);
       break;
     case "aim": {
-      if (msg.id === app.me) break;
-      for (const s of [app.state, app.pending]) {
+      if (msg.id === shell.me) break;
+      for (const s of [shell.state, app.pending]) {
         const p = s?.players.find((p) => p.id === msg.id);
         if (p) p.aim = msg.aim;
       }
-      if (app.state?.turnPlayerId === msg.id) renderHud();
+      if (shell.state?.turnPlayerId === msg.id) renderHud();
       break;
     }
-    case "log":
-      app.log.push(...msg.entries);
-      if (app.log.length > 120) app.log.splice(0, app.log.length - 120);
-      renderLog();
-      break;
     case "error":
+      // The shell has shown the message.
       app.firing = false;
-      toast(msg.message);
       renderControls();
       break;
   }
 }
 
-function applyState(s: GameState): void {
-  const prev = app.state;
-  app.state = s;
+function onState(s: GameState, prev: GameState | null): void {
   if (!prev || prev.round !== s.round || prev.phase === "lobby") renderer.clearTracers();
   app.world = s.terrain.length ? worldFromState(s) : null;
 
@@ -324,15 +156,15 @@ function applyState(s: GameState): void {
   }
   if (!isMyTurn(s)) app.firing = false;
 
-  document.title = isMyTurn(s) ? `▶ Your turn — Crater Club` : `Crater Club · ${s.code}`;
-  render();
+  if (isMyTurn(s)) document.title = "▶ Your turn — Crater Club";
+  if (s.phase !== "lobby") renderGame(s);
 }
 
 function startShot(shot: ShotMessage, after: GameState): void {
   if (app.anim) finishShot(true);
-  const base = app.state;
+  const base = shell.state;
   if (!base?.terrain.length) {
-    applyState(after);
+    shell.applyState(after);
     return;
   }
   const shooter = base.players.find((p) => p.id === shot.shooterId);
@@ -345,7 +177,7 @@ function startShot(shot: ShotMessage, after: GameState): void {
   app.firing = false;
   app.dragging = false;
   app.aimGuide = null;
-  render();
+  if (shell.state) renderGame(shell.state);
 }
 
 /** Stop animating: snap to the server's result (fast-forwarding if needed). */
@@ -357,11 +189,11 @@ function finishShot(skip = false): void {
     a.cursor = a.world.events.length;
   }
   app.anim = null;
-  applyState(a.after);
+  shell.applyState(a.after);
   if (app.pending) {
     const next = app.pending;
     app.pending = null;
-    applyState(next);
+    shell.applyState(next);
   }
 }
 
@@ -381,11 +213,11 @@ function drainEvents(a: Anim, now: number): void {
 
 function frame(now: number): void {
   requestAnimationFrame(frame);
-  if (app.screen === "home") {
+  if (shell.screen === "home") {
     attract.frame(now);
     return;
   }
-  if (app.screen !== "game") return;
+  if (shell.screen !== "game") return;
 
   const a = app.anim;
   if (a) {
@@ -395,7 +227,7 @@ function frame(now: number): void {
     drainEvents(a, now);
     if (a.world.done || a.world.timedOut) finishShot();
   }
-  if (app.world && app.state) renderer.draw(app.world, drawOpts(app.state), now);
+  if (app.world && shell.state) renderer.draw(app.world, drawOpts(shell.state), now);
   tickClocks();
 }
 
@@ -407,9 +239,9 @@ function drawOpts(s: GameState): DrawOpts {
     tanks.set(p.id, {
       name: p.name,
       color: p.color,
-      angle: p.id === app.me && mine ? app.aim.angle : p.aim.angle,
+      angle: p.id === shell.me && mine ? app.aim.angle : p.aim.angle,
       active: s.phase === "playing" && s.turnPlayerId === p.id,
-      you: p.id === app.me,
+      you: p.id === shell.me,
     });
   }
   const shooter = playerById(app.anim ? app.anim.world.shooterId : s.turnPlayerId);
@@ -417,7 +249,7 @@ function drawOpts(s: GameState): DrawOpts {
 }
 
 function tickClocks(): void {
-  const s = app.state;
+  const s = shell.state;
   if (!s) return;
   const clock = document.querySelector<HTMLElement>("#hud-turn .clock");
   if (clock) {
@@ -445,89 +277,6 @@ function formatClock(ms: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
-// ------------------------------------------------------------------ rendering: top level
-
-function render(): void {
-  const s = app.state;
-  if (!s || app.screen === "home") return;
-  if (s.phase === "lobby") {
-    if (app.screen !== "lobby") showScreen("lobby");
-    renderLobby(s);
-  } else {
-    if (app.screen !== "game") showScreen("game");
-    renderGame(s);
-  }
-}
-
-// ------------------------------------------------------------------ lobby
-
-const SETTING_LABELS: Record<keyof Settings, { label: string; fmt: (v: never) => string }> = {
-  rounds: { label: "Rounds", fmt: (v: number) => String(v) },
-  startCash: { label: "Start cash", fmt: (v: number) => money(v) },
-  maxWind: { label: "Wind", fmt: (v: number) => ({ 0: "Off", 5: "Light", 10: "Normal", 20: "Gale" })[v] ?? String(v) },
-  walls: {
-    label: "Walls",
-    fmt: (v: string) => ({ open: "Open — shots fly off", bounce: "Rubber — shots bounce", wrap: "Wrap-around" })[v] ?? v,
-  },
-  turnSeconds: { label: "Turn timer", fmt: (v: number) => (v ? `${v} seconds` : "No limit") },
-};
-
-function renderLobby(s: GameState): void {
-  const host = canHost(s);
-  const participants = s.players.filter((p) => !p.spectator);
-  $("lobby-count").textContent = `${participants.length}/${MAX_PLAYERS}`;
-
-  $("lobby-players").innerHTML = s.players
-    .map((p) => {
-      const tags = [
-        p.id === app.me ? `<span class="tag tag-you">you</span>` : "",
-        p.id === s.hostId ? `<span class="tag tag-host">host</span>` : "",
-        p.cpu ? `<span class="tag">CPU · ${p.cpu}</span>` : "",
-        p.spectator ? `<span class="tag">watching</span>` : "",
-        !p.cpu && !p.connected ? `<span class="tag">offline</span>` : "",
-      ].join("");
-      const kick = host && p.id !== app.me ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button>` : "";
-      return `<li class="${!p.cpu && !p.connected ? "offline" : ""}">
-        <span class="chip" style="background:${p.color}"></span>
-        <span class="pname">${esc(p.name)}</span>${tags}<span class="spacer"></span>${kick}</li>`;
-    })
-    .join("");
-
-  $("lobby-cpu").hidden = !host;
-  for (const b of $$<HTMLButtonElement>("#lobby-cpu button")) b.disabled = participants.length >= MAX_PLAYERS;
-
-  const mine = me(s);
-  const taken = new Set(s.players.filter((p) => p.id !== app.me).map((p) => p.color));
-  $("lobby-colors").innerHTML = PLAYER_COLORS.map(
-    (c) => `<button class="swatch" style="background:${c}" data-color="${c}" aria-label="Color ${c}"
-      aria-pressed="${mine?.color === c}" ${taken.has(c) ? "disabled" : ""}></button>`,
-  ).join("");
-
-  const settings = $("lobby-settings");
-  settings.innerHTML = (Object.keys(SETTING_LABELS) as (keyof Settings)[])
-    .map((key) => {
-      const { label, fmt } = SETTING_LABELS[key];
-      const value = s.settings[key];
-      const control = host
-        ? `<select data-setting="${key}">${(SETTING_CHOICES[key] as (string | number)[])
-            .map((v) => `<option value="${v}" ${v === value ? "selected" : ""}>${esc((fmt as (v: unknown) => string)(v))}</option>`)
-            .join("")}</select>`
-        : `<span class="value">${esc((fmt as (v: unknown) => string)(value))}</span>`;
-      return `<label class="setting"><span class="label">${label}</span>${control}</label>`;
-    })
-    .join("");
-
-  const start = $<HTMLButtonElement>("lobby-start");
-  start.hidden = !host;
-  start.disabled = participants.length < 2;
-  const hostName = playerById(s.hostId)?.name ?? "the host";
-  $("lobby-wait").textContent = host
-    ? participants.length < 2
-      ? "Invite a friend or add a CPU to start."
-      : ""
-    : `Waiting for ${hostName} to start the game…`;
-}
-
 // ------------------------------------------------------------------ game
 
 function renderGame(s: GameState): void {
@@ -540,7 +289,7 @@ function renderGame(s: GameState): void {
 }
 
 function renderHud(): void {
-  const s = app.state;
+  const s = shell.state;
   if (!s || s.phase === "lobby") return;
   const turn = playerById(s.turnPlayerId);
   const turnEl = $("hud-turn");
@@ -549,7 +298,7 @@ function renderHud(): void {
     const label =
       app.anim || s.resolving
         ? `${esc(turn.name)} fires!`
-        : turn.id === app.me
+        : turn.id === shell.me
           ? "Your turn!"
           : `${esc(turn.name)}'s turn${turn.cpu ? " (thinking…)" : ""}`;
     who = `<span class="chip" style="background:${turn.color}"></span><span class="who">${label}</span>`;
@@ -562,7 +311,7 @@ function renderHud(): void {
     turnEl.dataset.html = html;
   }
 
-  const aim = turn ? (turn.id === app.me && isMyTurn(s) ? app.aim : turn.aim) : null;
+  const aim = turn ? (turn.id === shell.me && isMyTurn(s) ? app.aim : turn.aim) : null;
   const tank = turn?.tank;
   $("hud-angle").textContent = aim ? `${aim.angle}°` : "—";
   const cap = tank ? maxPowerFor(tank.health) : 1000;
@@ -591,7 +340,7 @@ function renderPlayers(s: GameState): void {
         p.tank && !p.tank.alive ? "dead" : "",
         !p.cpu && !p.connected ? "offline" : "",
       ].join(" ");
-      const tag = p.id === app.me ? ` <span class="tag tag-you">you</span>` : p.cpu ? ` <span class="tag">CPU</span>` : "";
+      const tag = p.id === shell.me ? ` <span class="tag tag-you">you</span>` : p.cpu ? ` <span class="tag">CPU</span>` : "";
       const shield = p.tank?.alive && p.tank.shield > 0 ? ` <span class="tag" title="Shield">🛡 ${p.tank.shield}</span>` : "";
       return `<li class="${cls}">
         <span class="chip" style="background:${p.color}"></span>
@@ -608,7 +357,7 @@ function renderPlayers(s: GameState): void {
 }
 
 function renderControls(): void {
-  const s = app.state;
+  const s = shell.state;
   if (!s || s.phase === "lobby") return;
   const p = me(s);
   const controls = $("controls");
@@ -663,7 +412,7 @@ function flashBanner(html: string, ms: number): void {
 }
 
 function renderBanner(): void {
-  const s = app.state;
+  const s = shell.state;
   const el = $("banner");
   if (!s) return;
   if (s.phase === "roundover" && !app.anim) {
@@ -762,28 +511,13 @@ function renderGameOver(s: GameState): void {
 
 // ------------------------------------------------------------------ log & chat
 
-function renderLog(): void {
-  const html = app.log
-    .map((e) =>
-      e.kind === "chat"
-        ? `<li><span class="who" style="color:${e.color ?? "inherit"}">${esc(e.from ?? "?")}:</span> ${esc(e.text)}</li>`
-        : `<li class="ev">${esc(e.text)}</li>`,
-    )
-    .join("");
-  for (const ol of $$("[data-log]")) {
-    const atBottom = ol.scrollHeight - ol.scrollTop - ol.clientHeight < 40;
-    ol.innerHTML = html;
-    if (atBottom) ol.scrollTop = ol.scrollHeight;
-  }
-}
-
 // ------------------------------------------------------------------ aiming & firing
 
 let aimSendTimer = 0;
 let lastAimSent = 0;
 
 function setAim(patch: Partial<Aim>): void {
-  const s = app.state;
+  const s = shell.state;
   const p = me(s);
   if (!s || !p?.tank || !isMyTurn(s) || app.firing) return;
   const next = { ...app.aim, ...patch };
@@ -798,7 +532,7 @@ function setAim(patch: Partial<Aim>): void {
   clearTimeout(aimSendTimer);
   const sendNow = () => {
     lastAimSent = performance.now();
-    app.conn?.send({ t: "aim", aim: app.aim });
+    shell.send({ t: "aim", aim: app.aim });
   };
   if (wait <= 0) sendNow();
   else aimSendTimer = window.setTimeout(sendNow, wait);
@@ -810,7 +544,7 @@ function fire(): void {
   if (!isMyTurn() || app.firing) return;
   unlockAudio();
   clearTimeout(aimSendTimer);
-  if (!app.conn?.send({ t: "fire", aim: app.aim })) {
+  if (!shell.send({ t: "fire", aim: app.aim })) {
     toast("Not connected — reconnecting, try again in a moment");
     return;
   }
@@ -898,77 +632,8 @@ function layoutStage(): void {
 // ------------------------------------------------------------------ wiring
 
 function wire(): void {
-  window.addEventListener("popstate", route);
-  window.addEventListener("resize", () => (app.screen === "home" ? attract.resize() : layoutStage()));
-  new ResizeObserver(() => app.screen === "game" && renderer.resize($("stage").clientWidth)).observe($("stage"));
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") app.conn?.nudge();
-  });
-  for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, unlockAudio, { passive: true });
-
-  // Home
-  $("home-name").addEventListener("change", (e) => store("cc.name", (e.target as HTMLInputElement).value.trim()));
-  $("home-create").addEventListener("click", () => void createGame());
-  $("home-join-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (readName()) void joinGame($<HTMLInputElement>("home-code").value.trim());
-  });
-  $("home-code").addEventListener("input", (e) => {
-    const el = e.target as HTMLInputElement;
-    el.value = el.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  });
-  $("home-join-invite-btn").addEventListener("click", (e) => {
-    if (readName()) void joinGame((e.currentTarget as HTMLElement).dataset.code ?? "");
-  });
-  $("home-not-this").addEventListener("click", () => {
-    history.pushState(null, "", BASE);
-    showHome(null);
-  });
-
-  // Shared
-  for (const b of $$("[data-action=leave]")) b.addEventListener("click", leave);
-  for (const form of $$<HTMLFormElement>("[data-chat]")) {
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const input = form.querySelector("input")!;
-      const text = input.value.trim();
-      if (text) app.conn?.send({ t: "chat", text });
-      input.value = "";
-    });
-  }
-
-  // Lobby
-  $("lobby-copy").addEventListener("click", async () => {
-    const link = $<HTMLInputElement>("lobby-link");
-    try {
-      await navigator.clipboard.writeText(link.value);
-      toast("Invite link copied", "info");
-    } catch {
-      link.select();
-      toast("Press Ctrl/⌘+C to copy", "info");
-    }
-  });
-  $("lobby-link").addEventListener("focus", (e) => (e.target as HTMLInputElement).select());
-  $("lobby-players").addEventListener("click", (e) => {
-    const id = (e.target as HTMLElement).closest<HTMLElement>("[data-kick]")?.dataset.kick;
-    if (id) app.conn?.send({ t: "kick", id });
-  });
-  $("lobby-cpu").addEventListener("click", (e) => {
-    const level = (e.target as HTMLElement).closest<HTMLElement>("[data-cpu]")?.dataset.cpu;
-    if (level) app.conn?.send({ t: "addCpu", level: level as "easy" | "normal" | "hard" });
-  });
-  $("lobby-colors").addEventListener("click", (e) => {
-    const color = (e.target as HTMLElement).closest<HTMLElement>("[data-color]")?.dataset.color;
-    if (color) app.conn?.send({ t: "color", color });
-  });
-  $("lobby-settings").addEventListener("change", (e) => {
-    const el = e.target as HTMLSelectElement;
-    const key = el.dataset.setting as keyof Settings | undefined;
-    if (!key) return;
-    const value = key === "walls" ? el.value : Number(el.value);
-    app.conn?.send({ t: "settings", settings: { [key]: value } });
-  });
-  $("lobby-start").addEventListener("click", () => app.conn?.send({ t: "start" }));
+  window.addEventListener("resize", () => (shell.screen === "home" ? attract.resize() : layoutStage()));
+  new ResizeObserver(() => shell.screen === "game" && renderer.resize($("stage").clientWidth)).observe($("stage"));
 
   // Game controls
   $("ctl-angle").addEventListener("input", (e) => setAim({ angle: 180 - Number((e.target as HTMLInputElement).value) }));
@@ -1042,7 +707,7 @@ function wire(): void {
 
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeWeaponMenu();
-    if (app.screen !== "game" || !isMyTurn()) return;
+    if (shell.screen !== "game" || !isMyTurn()) return;
     const target = e.target as HTMLElement;
     if (target.closest("input, select, textarea, #weapon-menu")) return;
     // A focused button handles its own Space/Enter (Fire fires, the steppers step).
@@ -1070,26 +735,15 @@ function wire(): void {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-buy], [data-sell]");
     if (!el) return;
     sfx.click();
-    if (el.dataset.buy) app.conn?.send({ t: "buy", item: el.dataset.buy as ShopId, qty: 1 });
-    else app.conn?.send({ t: "buy", item: el.dataset.sell as ShopId, qty: -1 });
+    if (el.dataset.buy) shell.send({ t: "buy", item: el.dataset.buy as ShopId, qty: 1 });
+    else shell.send({ t: "buy", item: el.dataset.sell as ShopId, qty: -1 });
   });
-  $("shop-ready").addEventListener("click", () => app.conn?.send({ t: "ready", ready: !me()?.ready }));
-  $("gameover-lobby").addEventListener("click", () => app.conn?.send({ t: "lobby" }));
+  $("shop-ready").addEventListener("click", () => shell.send({ t: "ready", ready: !me()?.ready }));
 
-  const mute = $("mute");
-  const paintMute = () => {
-    mute.textContent = isMuted() ? "🔇" : "🔊";
-    mute.setAttribute("aria-pressed", String(isMuted()));
-  };
-  paintMute();
-  mute.addEventListener("click", () => {
-    setMuted(!isMuted());
-    paintMute();
-  });
 }
 
 wire();
-route();
+shell.start();
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) Object.assign(window, { __cc: { app, renderer } });
+if (import.meta.env.DEV) Object.assign(window, { __cc: { app, renderer, shell } });

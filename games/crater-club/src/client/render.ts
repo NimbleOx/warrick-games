@@ -1,5 +1,5 @@
 import { BARREL_LEN, TANK_HALF_W, TURRET_Y, WORLD_H, WORLD_W } from "../shared/constants";
-import { mulberry32 } from "../shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import type { SimEvent, SimTank, World } from "../shared/sim";
 import { THEMES, gradientAt, hexToRgb, mix, type Theme } from "./themes";
 

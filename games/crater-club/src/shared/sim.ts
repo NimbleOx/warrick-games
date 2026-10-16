@@ -9,7 +9,7 @@ import {
   WIND_ACCEL,
   WORLD_W,
 } from "./constants";
-import { mulberry32, type Rng } from "./rng";
+import { mulberry32, type Rng } from "@warrick/kit/shared/rng";
 import { addDirt, carveCrater, supportHeight } from "./terrain";
 import { WEAPONS, type WeaponDef, type WeaponId, type WeaponKind } from "./weapons";
 

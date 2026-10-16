@@ -1,7 +1,7 @@
 import { COLS } from "./constants";
 import { explore, type Board, type Lane, type Placement } from "./engine";
 import { SHAPES, type Piece } from "./pieces";
-import type { Rng } from "./rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 
 export type CpuLevel = "easy" | "normal" | "hard";
 

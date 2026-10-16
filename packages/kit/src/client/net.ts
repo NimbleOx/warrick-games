@@ -1,33 +1,42 @@
-import { CLOSE_KICKED, CLOSE_NOT_FOUND, type ClientMsg, type ServerMsg } from "../shared/protocol";
+import { CLOSE_KICKED, CLOSE_NOT_FOUND } from "../shared/constants";
 
 export type NetStatus = "connecting" | "open" | "closed";
 
-export interface NetHandlers {
-  hello(): ClientMsg;
-  message(msg: ServerMsg): void;
+/** Dev aid: `?lag=150` adds that many ms of round-trip delay (half each way), to try latency locally. */
+const LAG = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get("lag")) || 0 : 0;
+
+type AnyMsg = { t: string };
+
+export interface NetHandlers<C extends AnyMsg, S extends AnyMsg> {
+  hello(): C;
+  message(msg: S): void;
   status(s: NetStatus): void;
   fatal(reason: string): void;
 }
 
 /** A WebSocket to one game room that reconnects on its own until told to stop. */
-export class Connection {
+export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
   private ws: WebSocket | null = null;
   private stopped = false;
   private attempt = 0;
   private retryTimer = 0;
   private pingTimer = 0;
+  private heartbeatTimer = 0;
 
   constructor(
     readonly code: string,
-    private h: NetHandlers,
+    private h: NetHandlers<C, S>,
   ) {
     this.open();
   }
 
   /** Returns false if the socket isn't open (the message is dropped). */
-  send(msg: ClientMsg): boolean {
-    if (this.ws?.readyState !== WebSocket.OPEN) return false;
-    this.ws.send(JSON.stringify(msg));
+  send(msg: C): boolean {
+    const ws = this.ws;
+    if (ws?.readyState !== WebSocket.OPEN) return false;
+    const data = JSON.stringify(msg);
+    if (LAG) setTimeout(() => ws.readyState === WebSocket.OPEN && ws.send(data), LAG / 2);
+    else ws.send(data);
     return true;
   }
 
@@ -35,6 +44,7 @@ export class Connection {
     this.stopped = true;
     clearTimeout(this.retryTimer);
     clearInterval(this.pingTimer);
+    clearInterval(this.heartbeatTimer);
     this.ws?.close(1000, "bye");
     this.ws = null;
   }
@@ -44,6 +54,16 @@ export class Connection {
     if (this.stopped || this.ws) return;
     clearTimeout(this.retryTimer);
     this.open();
+  }
+
+  /**
+   * While a game is live, send a real message every few seconds. It refreshes the clock skew and
+   * keeps the room's CPU budget topped up: each incoming message resets a Durable Object's
+   * 30-second budget, but the plain-text pings below are answered without waking the room.
+   */
+  heartbeat(on: boolean): void {
+    clearInterval(this.heartbeatTimer);
+    if (on) this.heartbeatTimer = window.setInterval(() => this.send({ t: "ping" } as C), 5000);
   }
 
   private open(): void {
@@ -66,13 +86,14 @@ export class Connection {
 
     ws.onmessage = (ev) => {
       if (typeof ev.data !== "string" || ev.data === "pong") return;
-      let msg: ServerMsg;
+      let msg: S;
       try {
         msg = JSON.parse(ev.data);
       } catch {
         return;
       }
-      this.h.message(msg);
+      if (LAG) setTimeout(() => this.ws === ws && this.h.message(msg), LAG / 2);
+      else this.h.message(msg);
     };
 
     ws.onclose = (ev) => {
@@ -90,6 +111,7 @@ export class Connection {
 
   private fail(reason: string): void {
     this.stopped = true;
+    clearInterval(this.heartbeatTimer);
     this.h.status("closed");
     this.h.fatal(reason);
   }

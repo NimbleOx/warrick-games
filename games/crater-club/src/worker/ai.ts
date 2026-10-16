@@ -1,6 +1,6 @@
 import { TANK_H } from "../shared/constants";
 import type { Aim, CpuLevel, GameState, PlayerState } from "../shared/protocol";
-import type { Rng } from "../shared/rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 import { launchFor, maxPowerFor, type World } from "../shared/sim";
 import { WEAPONS, shopDef, weaponCount, type ShopId, type WeaponId } from "../shared/weapons";
 import { worldFromState } from "../shared/world-state";

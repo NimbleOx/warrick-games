@@ -25,8 +25,7 @@ export const TICK_MS = 50;
 /** "3, 2, 1" before the first piece drops. */
 export const COUNTDOWN_MS = 3000;
 
-export const MAX_PLAYERS = 8;
-
+/** Stack Attack's player colours: the usual ones, with violet in place of white. */
 export const PLAYER_COLORS = [
   "#ff4d4d", // red
   "#4da6ff", // blue
@@ -37,7 +36,3 @@ export const PLAYER_COLORS = [
   "#ff9a3c", // orange
   "#b48cff", // violet
 ] as const;
-
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const CODE_LENGTH = 5;
-export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;

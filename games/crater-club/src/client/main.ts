@@ -195,10 +195,13 @@ function drainEvents(a: Anim, now: number): void {
   for (; a.cursor < evs.length; a.cursor++) {
     const ev = evs[a.cursor];
     renderer.onEvent(ev, a.world, now, (id) => playerById(id)?.color ?? "#ffffff");
-    if (ev.type === "fire") sfx.fire();
+    if (ev.type === "fire") WEAPONS[ev.weapon].kind === "laser" ? sfx.laser() : sfx.fire();
     else if (ev.type === "explode") ev.dirt ? sfx.dirt() : sfx.boom(ev.r);
     else if (ev.type === "split") sfx.split();
     else if (ev.type === "chute") sfx.chute();
+    else if (ev.type === "napalm") sfx.napalm();
+    else if (ev.type === "burrow") sfx.burrow();
+    else if (ev.type === "zap") sfx.zap();
   }
 }
 

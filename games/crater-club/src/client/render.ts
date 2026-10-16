@@ -1,7 +1,7 @@
 import { BARREL_LEN, TANK_HALF_W, TURRET_Y, WORLD_H, WORLD_W } from "../shared/constants";
 import { hexToRgb, mix, rgba } from "@warrick/kit/client/color";
 import { mulberry32 } from "@warrick/kit/shared/rng";
-import type { SimEvent, SimTank, World } from "../shared/sim";
+import type { Flame, SimEvent, SimTank, World } from "../shared/sim";
 import { THEMES, gradientAt, type Theme } from "./themes";
 import { WindStreaks } from "./wind";
 
@@ -26,6 +26,8 @@ interface Trail {
   pts: number[];
   color: string;
   tracer: boolean;
+  /** A laser: drawn as a glowing beam, all of it. */
+  beam: boolean;
   goneAt: number;
 }
 
@@ -119,6 +121,8 @@ export class Renderer {
     if (ev.type === "explode" && !ev.dirt) {
       this.shake = Math.max(this.shake, Math.min(14, ev.r / 6));
       if (ev.r >= 50) this.flash = Math.max(this.flash, Math.min(0.5, ev.r / 200));
+    } else if (ev.type === "napalm" || ev.type === "zap") {
+      this.shake = Math.max(this.shake, 3);
     } else if (ev.type === "damage") {
       const t = world.tanks.find((t) => t.id === ev.id);
       if (t) this.floaters.push({ x: t.x, y: t.y + 24, text: `-${ev.amount}`, color: "#ff6b6b", born: now });
@@ -189,12 +193,14 @@ export class Renderer {
     // Tanks go behind the ground so a buried tank is actually buried.
     for (const t of world.tanks) this.drawTank(t, opts.tanks.get(t.id));
     ctx.drawImage(this.ground, 0, 0);
+    this.drawFlames(world.flames, world.tick);
     for (const t of world.tanks) this.drawTankOverlay(t, opts.tanks.get(t.id), opts.labels, bob);
 
     this.updateTrails(world, now, opts.shooterColor ?? "#ffffff");
     for (const tr of this.trails.values()) {
-      const fade = tr.goneAt ? 1 - (now - tr.goneAt) / TRAIL_FADE_MS : 1;
-      this.drawTrail(tr, 0.9 * Math.max(0, fade), tr.tracer);
+      const fade = Math.max(0, tr.goneAt ? 1 - (now - tr.goneAt) / TRAIL_FADE_MS : 1);
+      if (tr.beam) this.drawBeam(tr, fade);
+      else this.drawTrail(tr, 0.9 * fade, tr.tracer);
     }
     for (const p of world.projectiles) {
       if (p.y > WORLD_H) {
@@ -202,9 +208,10 @@ export class Renderer {
         continue;
       }
       const y = WORLD_H - p.y;
-      ctx.fillStyle = "rgba(255, 230, 160, 0.35)";
+      // A sandhog digging glows the colour of dirt.
+      ctx.fillStyle = p.burrowing ? "rgba(214, 150, 80, 0.6)" : "rgba(255, 230, 160, 0.35)";
       ctx.beginPath();
-      ctx.arc(p.x, y, p.rolling ? 6 : 5, 0, Math.PI * 2);
+      ctx.arc(p.x, y, p.rolling || p.burrowing ? 6 : 5, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.beginPath();
@@ -431,7 +438,16 @@ export class Renderer {
       alive.add(p.id);
       let tr = this.trails.get(p.id);
       if (!tr) {
-        tr = { pts: [], color: p.kind === "tracer" ? "#9ff7ff" : lighten(color, 0.45), tracer: p.kind === "tracer", goneAt: 0 };
+        tr = {
+          pts: [],
+          color: p.kind === "tracer" ? "#9ff7ff" : lighten(color, p.kind === "laser" ? 0.2 : 0.45),
+          tracer: p.kind === "tracer",
+          beam: p.kind === "laser",
+          goneAt: 0,
+        };
+        // A beam goes straight at one speed, so it starts at the barrel however far it has got.
+        const x0 = p.x - p.vx * p.age;
+        if (tr.beam && x0 >= 0 && x0 < WORLD_W) tr.pts.push(x0, p.y - p.vy * p.age);
         this.trails.set(p.id, tr);
       }
       const n = tr.pts.length;
@@ -439,7 +455,7 @@ export class Renderer {
       const ly = tr.pts[n - 1];
       if (n >= 2 && Math.abs(p.x - lx) > 300) tr.pts.push(NaN, NaN); // wrapped around
       if (n < 2 || Math.hypot(p.x - lx, p.y - ly) > 1.5) tr.pts.push(p.x, p.y);
-      if (!tr.tracer && tr.pts.length > 140) tr.pts.splice(0, tr.pts.length - 140);
+      if (!tr.tracer && !tr.beam && tr.pts.length > 140) tr.pts.splice(0, tr.pts.length - 140);
     }
     for (const [id, tr] of this.trails) {
       if (alive.has(id)) continue;
@@ -475,6 +491,62 @@ export class Renderer {
     }
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  /** A laser beam: a wide glow in the shooter's colour around a white-hot core. */
+  private drawBeam(tr: Trail, alpha: number): void {
+    if (alpha <= 0 || tr.pts.length < 4) return;
+    const ctx = this.ctx;
+    ctx.lineCap = "round";
+    for (const [width, color] of [
+      [7, rgba(tr.color, 0.25 * alpha)],
+      [3.5, rgba(tr.color, 0.75 * alpha)],
+      [1.4, `rgba(255, 255, 255, ${alpha})`],
+    ] as const) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      let pen = false;
+      for (let i = 0; i < tr.pts.length; i += 2) {
+        const x = tr.pts[i];
+        if (Number.isNaN(x)) {
+          pen = false;
+          continue;
+        }
+        if (pen) ctx.lineTo(x, WORLD_H - tr.pts[i + 1]);
+        else ctx.moveTo(x, WORLD_H - tr.pts[i + 1]);
+        pen = true;
+      }
+      ctx.stroke();
+    }
+  }
+
+  /** Burning napalm: a glow over the pool, and a flickering tongue of fire on each blob. */
+  private drawFlames(flames: Flame[], tick: number): void {
+    if (flames.length === 0) return;
+    const ctx = this.ctx;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = "rgba(255, 96, 24, 0.14)";
+    for (const f of flames) {
+      ctx.beginPath();
+      ctx.arc(f.x, WORLD_H - f.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = "source-over";
+    const flicker = tick >> 2;
+    for (const f of flames) {
+      // Blobs shrink as they burn out.
+      const h = Math.min(1, f.life / 40) * (4 + ((f.id * 31 + flicker) % 6));
+      const x = f.x;
+      const y = WORLD_H - f.y + 1;
+      ctx.fillStyle = FIRE[1 + ((f.id + flicker) % 4)];
+      ctx.beginPath();
+      ctx.moveTo(x - 2.2, y);
+      ctx.quadraticCurveTo(x - 1.6, y - h * 0.6, x + ((f.id + flicker) % 3) - 1, y - h);
+      ctx.quadraticCurveTo(x + 1.6, y - h * 0.6, x + 2.2, y);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 
   private drawOffscreenMarker(x: number, y: number): void {

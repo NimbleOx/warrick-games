@@ -1,5 +1,5 @@
-import { TANK_H } from "../shared/constants";
-import type { Aim, CpuLevel, GameState, PlayerState } from "../shared/protocol";
+import { MAX_POWER, TANK_H, TURRET_Y } from "../shared/constants";
+import type { Aim, CpuLevel, GameState, PlayerState, TankState } from "../shared/protocol";
 import type { Rng } from "@warrick/kit/shared/rng";
 import { launchFor, maxPowerFor, type World } from "../shared/sim";
 import { WEAPONS, shopDef, weaponCount, type ShopId, type WeaponId } from "../shared/weapons";
@@ -14,14 +14,24 @@ const ERROR: Record<CpuLevel, { angle: number; power: number }> = {
 const ATTACK_WEAPONS: WeaponId[] = [
   "deaths_head",
   "nuke",
+  "hot_napalm",
   "mirv",
   "baby_nuke",
   "funky_bomb",
+  "napalm",
+  "sandhog",
   "leapfrog",
+  "laser",
   "missile",
   "roller",
   "baby_missile",
 ];
+
+/**
+ * Weapons that don't go off where they land: fire runs downhill, sandhogs dig on, lasers go
+ * straight. The CPU plays the whole shot through before it picks one of these.
+ */
+const PLAYED_THROUGH = new Set<WeaponId>(["hot_napalm", "napalm", "sandhog", "laser"]);
 
 /** Search angle/power space for the shot that lands closest to a target, then fumble it a bit. */
 export function chooseCpuShot(s: GameState, me: PlayerState, level: CpuLevel, rng: Rng): Aim {
@@ -71,29 +81,80 @@ export function chooseCpuShot(s: GameState, me: PlayerState, level: CpuLevel, rn
     }
   }
 
-  const err = ERROR[level];
-  const angle = Math.round(best.angle + (rng() * 2 - 1) * err.angle);
-  const power = Math.round(best.power * (1 + (rng() * 2 - 1) * err.power));
-
   const distToTarget = Math.abs(tx - tank.x);
   const owned = ATTACK_WEAPONS.filter((w) => weaponCount(me.inventory, w) > 0);
-  const safe = owned.filter((w) => distToTarget > WEAPONS[w].radius + 30);
-  let weapon: WeaponId = "baby_missile";
-  if (level === "easy") weapon = owned[Math.floor(rng() * owned.length)] ?? "baby_missile";
-  else weapon = safe[0] ?? "baby_missile";
+  const aimFor = (w: WeaponId) => (w === "laser" ? laserAim(tank, target.tank!, maxPower) : best);
+  let choice: Aim = { angle: best.angle, power: best.power, weapon: "baby_missile" };
+  if (level === "easy") {
+    const weapon = owned[Math.floor(rng() * owned.length)] ?? "baby_missile";
+    choice = { ...(aimFor(weapon) ?? best), weapon };
+  } else {
+    for (const weapon of owned) {
+      if (PLAYED_THROUGH.has(weapon)) {
+        const aim = aimFor(weapon);
+        if (!aim) continue;
+        const out = playThrough(s, me, { ...aim, weapon });
+        if (out.self > 0 || out.enemies < 15) continue;
+        choice = { ...aim, weapon };
+        break;
+      }
+      if (distToTarget > WEAPONS[weapon].radius + 30) {
+        choice = { angle: best.angle, power: best.power, weapon };
+        break;
+      }
+    }
+  }
 
+  const err = ERROR[level];
+  const angle = Math.round(choice.angle + (rng() * 2 - 1) * err.angle);
+  const power = Math.round(choice.power * (1 + (rng() * 2 - 1) * err.power));
   return {
     angle: Math.min(180, Math.max(0, angle)),
     power: Math.min(maxPower, Math.max(0, power)),
-    weapon,
+    weapon: choice.weapon,
   };
+}
+
+/** Point the barrel straight at the target, with power enough for the beam to reach a little past it. */
+function laserAim(tank: TankState, target: TankState, maxPower: number): { angle: number; power: number } | null {
+  const dx = target.x - tank.x;
+  const dy = target.y + TANK_H / 2 + 2 - (tank.y + TURRET_Y);
+  const angle = Math.round((Math.atan2(dy, dx) * 180) / Math.PI);
+  const power = Math.ceil((((Math.hypot(dx, dy) + 40) / (WEAPONS.laser.reach ?? 1)) * MAX_POWER) / 10) * 10;
+  if (angle < -5 || angle > 185 || power > maxPower) return null;
+  return { angle: Math.min(180, Math.max(0, angle)), power };
+}
+
+/** The damage a shot would do, to the shooter and to everyone else, played through to the end. */
+function playThrough(s: GameState, me: PlayerState, aim: Aim): { self: number; enemies: number } {
+  const world = worldFromState(s);
+  world.fire({ shooterId: me.id, weapon: aim.weapon, seed: 1, ...launchFor(me.tank!, aim.angle, aim.power) });
+  world.runToEnd();
+  const out = { self: 0, enemies: 0 };
+  for (const ev of world.events) {
+    if (ev.type === "damage") out[ev.id === me.id ? "self" : "enemies"] += ev.amount;
+  }
+  return out;
 }
 
 function trace(world: World, tank: { x: number; y: number }, angle: number, power: number) {
   return world.traceImpact(launchFor(tank, angle, power));
 }
 
-const CPU_WISHLIST: ShopId[] = ["missile", "baby_nuke", "mirv", "funky_bomb", "leapfrog", "roller", "nuke", "deaths_head"];
+const CPU_WISHLIST: ShopId[] = [
+  "missile",
+  "baby_nuke",
+  "mirv",
+  "funky_bomb",
+  "leapfrog",
+  "roller",
+  "nuke",
+  "deaths_head",
+  "napalm",
+  "hot_napalm",
+  "sandhog",
+  "laser",
+];
 
 export function cpuShop(p: PlayerState): void {
   const buy = (id: ShopId) => {

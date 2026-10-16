@@ -11,7 +11,8 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 - On your turn, aim with the sliders, the arrow keys (hold Shift for bigger steps), or by dragging on the map. Press **Fire** or Space.
 - Wind bends every shot. The HUD gives its strength, and wisps of air blowing across the sky show which way it blows and how hard.
 - Damaged tanks can't fire at full power (the HUD shows your current max). Switch weapons with the Weapon menu or Tab. Tanks take damage when the ground under them is blown away.
-- Before the first round and between rounds there's a shop with Missiles, Nukes, MIRVs, Death's Heads, Funky Bombs, Leapfrogs, Rollers, Dirt Clods, Tracers, Shields and Parachutes. You earn cash for damage, kills, surviving and winning rounds.
+- Before the first round and between rounds there's a shop with Missiles, Nukes, MIRVs, Death's Heads, Funky Bombs, Napalm, Leapfrogs, Rollers, Sandhogs, Lasers, Dirt Clods, Tracers, Shields and Parachutes. You earn cash for damage, kills, surviving and winning rounds.
+- Some weapons don't go off where they land. Napalm (and Hot Napalm) splashes burning fuel that runs downhill and pools, burning any tank it reaches until it burns out. A Sandhog digs on sideways, level through hills, and goes off under the first tank it reaches. A Laser fires dead straight from the barrel, ignoring gravity and wind, cutting through hills and every tank in its way; power sets how far it reaches.
 - Reloading the page puts you back in your seat. Anyone who joins mid-game watches until the next game.
 
 ## Development
@@ -43,7 +44,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **The server is authoritative, but clients animate.** When someone fires, the room runs the whole shot to completion with the shared simulation (`src/shared/sim.ts`). It then broadcasts the shot's inputs and the resulting state. Each client replays the same deterministic simulation frame by frame for the animation, then snaps to the server's result. The server works out the launch velocity with trig once; the per-tick physics uses only `+ − × ÷ √` and a seeded integer PRNG, which give identical results in every JS engine.
 - **One alarm drives all the timers.** Turn timeouts, CPU "thinking" time, the pause after each shot, the round-over banner and the shop countdown all run off the Durable Object alarm. Timers pause when nobody is connected. A game with no connections for 12 hours is deleted.
 - **The turn clock is the kit's** (`@warrick/kit/worker/turns`). Reloading on your turn gives you back the clock you had, never more; with under 5 seconds left, you get 5, once a turn. Drop on your turn and it ends 8 seconds later unless you're back; a turn that comes round to someone already gone is skipped after 4. Dropping out of the shop never closes it at once, since it may only be a reload.
-- **CPU players** search angle/power space with the same simulation, then add error that depends on their difficulty.
+- **CPU players** search angle/power space with the same simulation, then add error that depends on their difficulty. Before they use a weapon that doesn't go off where it lands (napalm, sandhogs, lasers), they play the whole shot through, and skip it if it would hurt them or nobody else.
 
 ### Layout
 

@@ -1,6 +1,6 @@
 import type { BasePlayer, CpuLevel } from "@warrick/kit/shared/protocol";
 import { mulberry32, randomSeed, shuffle } from "@warrick/kit/shared/rng";
-import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { GameError, Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
 import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
 import { cpuMove, timeoutMove } from "../shared/ai";
 import { boardSize, isLine, isOver, newBoard, playLine } from "../shared/board";
@@ -51,6 +51,12 @@ export function newGameState(code: string, now: number): GameState {
 export class Game extends Lobby<GameState, ServerMsg> {
   protected readonly choices = SETTING_CHOICES;
   protected readonly cpuNames = CPU_NAMES;
+
+  constructor(s: GameState, io: GameIO) {
+    super(s, io);
+    // A room saved before hints were a setting plays without them.
+    if (typeof s.settings.hints !== "boolean") s.settings.hints = false;
+  }
 
   protected createPlayer(base: BasePlayer): PlayerState {
     return base;
@@ -180,6 +186,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
   /** The player `id` takes every box they can complete. */
   takeAll(id: string): void {
     const seat = this.requireTurn(id);
+    // Take all gives the boxes away, so it comes with hints.
+    if (!this.s.settings.hints) throw new GameError("Take all comes with hints, and they're off in this game");
     if (!capturable(this.s).length) throw new GameError("There are no boxes to take");
     while (this.s.phase === "playing" && this.s.turn === seat) {
       const box = capturable(this.s)[0];

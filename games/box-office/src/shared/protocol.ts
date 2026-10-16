@@ -9,13 +9,20 @@ export interface Settings {
   size: BoardSize;
   /** 0 = no limit. */
   turnSeconds: number;
+  /**
+   * Show every player the boxes they can close: they pulse on your turn, and Take all is
+   * allowed. One setting for the whole game, so it's fair. The Game fills it in (off) for a
+   * room saved before it had one.
+   */
+  hints: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { size: "medium", turnSeconds: 20 };
+export const DEFAULT_SETTINGS: Settings = { size: "medium", turnSeconds: 20, hints: false };
 
 export const SETTING_CHOICES = {
   size: ["small", "medium", "large"] as BoardSize[],
   turnSeconds: [0, 10, 20, 30],
+  hints: [false, true],
 };
 
 export type PlayerState = BasePlayer;

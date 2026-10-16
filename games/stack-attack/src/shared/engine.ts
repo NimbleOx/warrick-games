@@ -432,8 +432,6 @@ export interface Spot {
   r: number;
   x: number;
   y: number;
-  /** Reached by a shift or a drop (so the last move can be something other than a turn). */
-  byMove: boolean;
   /** Bitmask of the wall-kick indexes turns reached it with. */
   kicks: number;
 }
@@ -452,12 +450,11 @@ export function explore(b: Board, p: Piece): Map<number, Spot> {
     const k = spotKey(r, x, y);
     let s = spots.get(k);
     if (!s) {
-      s = { r, x, y, byMove: false, kicks: 0 };
+      s = { r, x, y, kicks: 0 };
       spots.set(k, s);
       todo.push(s);
     }
-    if (kick < 0) s.byMove = true;
-    else s.kicks |= 1 << kick;
+    if (kick >= 0) s.kicks |= 1 << kick;
   };
   visit(0, SPAWN_X, SPAWN_Y, -1);
   while (todo.length) {

@@ -103,7 +103,6 @@ const app = {
   lastFrame: 0,
   arenaWidth: 0,
   boardsKey: "",
-  resyncing: false,
 };
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
@@ -206,7 +205,6 @@ function seatFromSnap(slot: number, s: SeatSnap): SeatView {
 }
 
 function setRound(snap: RoundSnap | null): void {
-  app.resyncing = false;
   if (!snap) {
     app.round = null;
     app.seats = [];

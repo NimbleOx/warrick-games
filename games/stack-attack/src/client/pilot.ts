@@ -218,8 +218,13 @@ export class Pilot {
     this.resets = 0;
     this.lowest = this.active.y;
     this.fall = 0;
-    // A charged auto-shift carries over to the new piece.
-    if (this.dir && now - this.dirSince >= this.handling().das) this.repeats = 0;
+    // A charged auto-shift carries over to the new piece: it repeats from here at the usual
+    // rate, rather than catching up on every repeat since the key went down.
+    const das = this.handling().das;
+    if (this.dir && now - this.dirSince >= das) {
+      this.dirSince = now - das;
+      this.repeats = 0;
+    }
   }
 
   private shift(dir: -1 | 1, now: number): boolean {

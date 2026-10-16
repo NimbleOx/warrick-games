@@ -35,13 +35,8 @@ export class GameRoom extends Room<GameState, Game, Live> {
     return { snap: game.snapshot() };
   }
 
-  protected handle(ws: WebSocket, game: Game, pid: string, raw: { t: string }): void {
+  protected handle(_ws: WebSocket, game: Game, pid: string, raw: { t: string }): void {
     const msg = raw as ClientMsg;
-    if (msg.t === "lock") {
-      game.lock(pid, msg);
-    } else if (msg.t === "resync") {
-      const snap = game.snapshot();
-      if (snap) ws.send(JSON.stringify({ t: "snap", snap, now: Date.now() }));
-    }
+    if (msg.t === "lock") game.lock(pid, msg);
   }
 }

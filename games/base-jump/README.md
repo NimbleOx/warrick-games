@@ -33,7 +33,7 @@ npx wrangler login
 npm run deploy     # vite build && wrangler deploy
 ```
 
-That creates a Worker called `base-jump` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets. It's served at **https://warrick.games/base-jump/** through the zone route `warrick.games/base-jump*` in `wrangler.jsonc`, like the other games. Check a build first: `npm run build && npx vite preview`, then confirm `/base-jump/assets/*.js` and `/base-jump/g/ABCDE` both return 200. `localStorage` keys start with `bj.`. After the first deploy, add Base Jump's card (and an icon) to `../../hub/public/index.html` and deploy the hub.
+That creates a Worker called `base-jump` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets. It's served at **https://warrick.games/base-jump/** through the zone route `warrick.games/base-jump*` in `wrangler.jsonc`, like the other games. Check a build first: `npm run build && npx vite preview`, then confirm `/base-jump/assets/*.js` and `/base-jump/g/ABCDE` both return 200. `localStorage` keys start with `bj.`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 

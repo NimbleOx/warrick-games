@@ -1,6 +1,6 @@
 import { newBrain, think, type Brain, type CpuLevel } from "../shared/ai";
 import { PLAYER_COLORS, TICK_MS } from "../shared/constants";
-import { mulberry32, randomSeed, shuffle } from "../shared/rng";
+import { mulberry32, randomSeed, shuffle } from "@warrick/kit/shared/rng";
 import { Round } from "../shared/sim";
 import { Renderer, type Look, type Scene } from "./render";
 

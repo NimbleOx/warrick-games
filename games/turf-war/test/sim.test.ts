@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Dir, Frame, Op } from "../src/shared/board";
 import { RESPAWN_TICKS } from "../src/shared/constants";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Round } from "../src/shared/sim";
 import { board, parseBoard, printBoard } from "./ascii";
 

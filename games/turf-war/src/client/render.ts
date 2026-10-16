@@ -1,5 +1,5 @@
 import { DX, DY, type Board } from "../shared/board";
-import { MAX_PLAYERS } from "../shared/constants";
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 
 /** How a slot looks on the board. */
 export interface Look {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Board, Dir } from "../src/shared/board";
 import { checkInvariants } from "./ascii";
-import { mulberry32, randInt } from "../src/shared/rng";
+import { mulberry32, randInt } from "@warrick/kit/shared/rng";
 import { Round, applyFrame, viewFromSnapshot, type RoundView } from "../src/shared/sim";
 
 /** Everything a client should agree with the server on, as one string (deep `expect` per tick is too slow). */

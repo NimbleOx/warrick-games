@@ -1,5 +1,5 @@
 import { reverse, type Board, type Dir } from "./board";
-import { randInt, type Rng } from "./rng";
+import { randInt, type Rng } from "@warrick/kit/shared/rng";
 import type { Round } from "./sim";
 
 export type CpuLevel = "easy" | "normal" | "hard";

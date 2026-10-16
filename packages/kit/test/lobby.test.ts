@@ -115,6 +115,17 @@ describe("lobby", () => {
     expect(t.join("Cy").spectator).toBe(true);
   });
 
+  it("leaves the lobby as it was when a start fails", () => {
+    const t = setup();
+    const host = t.join("Ann");
+    const gone = t.join("Bo");
+    t.game().setConnected(gone.id, false);
+    const g = t.game();
+    expect(() => g.start(host.id)).toThrow("Need at least two players — add a CPU?");
+    expect(t.s.players.map((p) => p.name)).toEqual(["Ann", "Bo"]);
+    expect(g.dirty).toBe(false);
+  });
+
   it("goes back to the lobby only from a finished game, and seats watchers", () => {
     const t = setup();
     const host = t.join("Ann");

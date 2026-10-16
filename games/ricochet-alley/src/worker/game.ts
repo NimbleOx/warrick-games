@@ -1,6 +1,6 @@
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randInt, randomSeed, shuffle } from "@warrick/kit/shared/rng";
-import { GameError, Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
+import { Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
 import { CpuBrain } from "../shared/ai";
 import { HANG_TICKS, MAZE_LOOPINESS, MAZE_SIZES, THEME_COUNT } from "../shared/constants";
 import { generateMaze, pickSpawns } from "../shared/maze";
@@ -160,13 +160,8 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
   // ---------------------------------------------------------------- match flow
 
   start(byId: string): void {
-    this.requireHost(byId);
-    this.requirePhase("lobby");
-    // Players who closed their tab in the lobby don't hold up the game.
-    for (const p of [...this.s.players]) {
-      if (!p.cpu && !p.connected) this.removePlayer(p.id);
-    }
-    if (this.participants.length < 2) throw new GameError("Need at least two tanks — add a CPU?");
+    // Drops players who closed their tab in the lobby, and seats watchers in any free seats.
+    this.beginStart(byId, 2, "tanks");
     for (const p of this.s.players) p.score = p.kills = p.selfHits = 0;
     this.s.round = 0;
     this.event(`Game on! First to ${this.s.settings.target} wins.`);

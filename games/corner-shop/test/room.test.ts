@@ -3,7 +3,9 @@
 // says so.
 import { type TestRoom, internals, openRoom } from "@warrick/kit/testing/room";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { GameState } from "../src/shared/protocol";
+import { chooseMove } from "../src/shared/ai";
+import { positionOf, type GameState } from "../src/shared/protocol";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { AWAY_MS } from "../src/worker/game";
 import { GameRoom } from "../src/worker/room";
 
@@ -134,5 +136,39 @@ describe("reloading for time", () => {
     await fireAlarm(r);
     expect(holder().name).not.toBe(first);
     expect(Date.now()).toBeLessThanOrEqual(T0 + 34_000);
+  });
+});
+
+describe("solitaire", () => {
+  it("waits through a reload and a deploy for its only player, then plays to the end", async () => {
+    const r = await openRoom(GameRoom);
+    const ann = await r.connect("Ann");
+    await r.say(ann, { t: "settings", settings: { turnSeconds: 30 } });
+    await r.say(ann, { t: "start" });
+    const { s } = peek(r);
+    expect(s()).toMatchObject({ phase: "playing", size: 14, turnDeadline: null, timer: null });
+    // Only the room's clean-up alarm is set: nothing passes Ann's turn.
+    expect(r.storage.alarm()).toBe(T0 + 12 * 3600_000);
+
+    await r.drop(ann);
+    vi.setSystemTime(T0 + 60_000);
+    const after = await r.restart();
+    vi.setSystemTime(T0 + 3_600_000);
+    const back = await after.connect("Ann");
+    const { s: s2, holder: h2 } = peek(after);
+    expect(h2().name).toBe("Ann");
+    expect(s2()).toMatchObject({ turnDeadline: null, timer: null });
+    expect(h2().missed).toBe(0);
+
+    const rng = mulberry32(9);
+    for (let i = 0; i < 30 && s2().phase === "playing"; i++) {
+      const move = chooseMove(positionOf(s2()), 0, "normal", rng)!;
+      await after.say(back, { t: "place", move });
+    }
+    expect(back.all("error")).toHaveLength(0);
+    const end = (back.last("state") as { state: GameState }).state;
+    expect(end.phase).toBe("gameover");
+    expect(end.winners).toEqual([]);
+    expect(end.players[0].out === "done" || end.players[0].out === "stuck").toBe(true);
   });
 });

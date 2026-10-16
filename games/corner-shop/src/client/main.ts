@@ -1,8 +1,18 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, esc, setHtml, toast } from "@warrick/kit/client/dom";
+import { $, esc, personalBest, setHtml, toast } from "@warrick/kit/client/dom";
 import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { PIECE_IDS, flipT, orientFor, orientations, pieceDef, pieceSize, rotateT, type PieceId } from "../shared/pieces";
+import {
+  PIECE_COUNT,
+  PIECE_IDS,
+  flipT,
+  orientFor,
+  orientations,
+  pieceDef,
+  pieceSize,
+  rotateT,
+  type PieceId,
+} from "../shared/pieces";
 import {
   COLORS,
   MAX_SEATS,
@@ -76,6 +86,14 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     "Your first piece covers your starting square. After that, your own pieces may touch only at the corners.",
     "No move left? You're passed. The game ends when nobody can move.",
     "−1 for each square left in your tray; +15 for placing all 21 pieces, +5 more if the monomino goes last.",
+  ],
+  minPlayers: 1,
+  soloLabel: "Play solitaire",
+  soloRules: [
+    "Solitaire: just you, on the 14×14 board, starting from its top-left corner. No turn timer.",
+    "Your pieces may touch only at the corners. Fit in as many of your 21 as you can.",
+    "−1 for each square left in your tray; +15 for placing all 21 pieces, +5 more if the monomino goes last.",
+    "Your best score is kept in this browser. Add a CPU or invite a friend for a game instead.",
   ],
   colors: COLORS,
   maxPlayers: MAX_SEATS,
@@ -165,19 +183,23 @@ function onState(s: GameState, prev: GameState | null): void {
   if (turnKey !== app.turnKey) {
     app.turnKey = turnKey;
     app.placing = false;
-    if (isMyTurn(s)) {
+    // Solitaire is all your turns: only say so at the start.
+    if (isMyTurn(s) && (!solo(s) || !s.moves.length)) {
       sfx.yourTurn();
-      flashBanner(`<span class="big">YOUR TURN</span>`, 1200);
-    } else if (s.phase === "playing" && prev?.phase === "playing") sfx.turn();
+      flashBanner(`<span class="big">${solo(s) ? "SOLITAIRE" : "YOUR TURN"}</span>`, 1200);
+    } else if (s.phase === "playing" && prev?.phase === "playing" && !solo(s)) sfx.turn();
   }
   const wasOut = me(prev ?? undefined)?.out;
   if (mine?.out && !wasOut && prev?.phase === "playing") {
     if (mine.out === "stuck") {
       sfx.out();
-      flashBanner(`<span class="big">NO MOVES LEFT</span>You're passed for the rest of the game`, 2600);
+      flashBanner(`<span class="big">NO MOVES LEFT</span>${solo(s) ? "" : "You're passed for the rest of the game"}`, 2600);
     } else if (mine.out === "done") flashBanner(`<span class="big">ALL 21 PLACED!</span>`, 2600);
   }
-  if (s.phase === "gameover" && prev?.phase === "playing") sfx.gameOver(s.winners.includes(shell.me));
+  if (s.phase === "gameover" && prev?.phase === "playing") {
+    const best = soloBest(s);
+    sfx.gameOver(s.winners.includes(shell.me) || !!(best?.fresh && best.prev !== null) || mine?.out === "done");
+  }
   document.title = isMyTurn(s) ? "▶ Your turn — Corner Shop" : `Corner Shop · ${s.code}`;
   render();
 }
@@ -510,7 +532,7 @@ function renderTools(s: GameState): void {
 function renderHint(s: GameState): void {
   const p = me(s);
   let text = "";
-  if (s.phase === "gameover") text = "Game over. Nobody can move.";
+  if (s.phase === "gameover") text = solo(s) ? "Solitaire over. Back to the lobby to try again." : "Game over. Nobody can move.";
   else if (!p || p.seat < 0) text = "You're watching this game. You'll get a seat when the host starts the next one.";
   else if (p.out === "done") text = "You placed all 21 pieces! Final scores when everyone's done.";
   else if (p.out === "stuck") text = "No moves left for you. Final scores when everyone's done.";
@@ -579,6 +601,18 @@ function renderBanner(): void {
   $("banner").hidden = true;
 }
 
+/** Solitaire: one seat, just you. */
+function solo(s: GameState): boolean {
+  return s.seats.length === 1;
+}
+
+/** The solitaire player's score against their best in this browser; null for a game, or someone else's solitaire. */
+function soloBest(s: GameState): { best: number; prev: number | null; fresh: boolean } | null {
+  const p = solo(s) && s.phase === "gameover" ? seated(s)[0] : null;
+  if (!p || p.id !== shell.me) return null;
+  return personalBest("best", `${s.code}:${s.game}`, p.score);
+}
+
 function renderGameOver(s: GameState): void {
   const open = s.phase === "gameover" && !app.hideResults;
   $("gameover").hidden = !open;
@@ -586,14 +620,34 @@ function renderGameOver(s: GameState): void {
   const ranked = seated(s).sort(rankPlayers);
   const winners = ranked.filter((p) => s.winners.includes(p.id));
   const youWin = s.winners.includes(shell.me);
-  $("gameover-title").textContent = youWin ? (winners.length > 1 ? "Shared win!" : "You win!") : "Game over";
-  const names = winners.map((p) => `<b style="color:${p.color}">${esc(p.name)}</b>`);
-  setHtml(
-    $("gameover-winner"),
-    winners.length
-      ? `${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} share the win` : `${names[0]} wins`} with ${winners[0].score} point${Math.abs(winners[0].score) === 1 ? "" : "s"}.`
-      : "",
-  );
+  const pts = (n: number) => `${n} point${Math.abs(n) === 1 ? "" : "s"}`;
+  if (solo(s) && ranked[0]) {
+    const p = ranked[0];
+    const placed = PIECE_COUNT - p.tray.length;
+    const best = soloBest(s);
+    $("gameover-title").textContent = placed === PIECE_COUNT ? "All 21 placed!" : "Solitaire over";
+    const who = p.id === shell.me ? "You" : `<b style="color:${p.color}">${esc(p.name)}</b>`;
+    setHtml(
+      $("gameover-winner"),
+      `${who} placed ${placed === PIECE_COUNT ? "every piece" : `${placed} of 21 pieces`}${p.lastPiece === "1" && !p.tray.length ? ", monomino last," : ""} for <b>${pts(p.score)}</b>.` +
+        (!best
+          ? ""
+          : best.fresh && best.prev !== null
+            ? ` <b class="best">A new personal best!</b>`
+            : best.fresh
+              ? " That's your best so far."
+              : ` Your best is ${pts(best.best)}.`),
+    );
+  } else {
+    $("gameover-title").textContent = youWin ? (winners.length > 1 ? "Shared win!" : "You win!") : "Game over";
+    const names = winners.map((p) => `<b style="color:${p.color}">${esc(p.name)}</b>`);
+    setHtml(
+      $("gameover-winner"),
+      winners.length
+        ? `${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} share the win` : `${names[0]} wins`} with ${pts(winners[0].score)}.`
+        : "",
+    );
+  }
   let place = 0;
   const rows = ranked
     .map((p, i) => {
@@ -603,7 +657,7 @@ function renderGameOver(s: GameState): void {
         ? ` <span class="muted small" title="Placed every piece${p.lastPiece === "1" ? ", monomino last" : ""}">${p.lastPiece === "1" ? "★★" : "★"}</span>`
         : "";
       return `<tr class="${s.winners.includes(p.id) ? "winner" : ""}">
-        <td>${place}${tie ? "=" : ""}</td>
+        <td>${solo(s) ? "" : `${place}${tie ? "=" : ""}`}</td>
         <td><span class="pcell"><span class="chip" style="background:${p.color}"></span>${esc(p.name)}</span></td>
         <td>${p.score}${bonus}</td><td>${p.tray.length}</td><td>${squaresLeft(p.tray)}</td></tr>`;
     })

@@ -64,6 +64,11 @@ export class Game extends Lobby<GameState, ServerMsg> {
     return this.s.phase === "lobby";
   }
 
+  /** One player on their own: solitaire, with no clock. */
+  private get solo(): boolean {
+    return this.s.seats.length === 1;
+  }
+
   protected createPlayer(base: BasePlayer): PlayerState {
     return { ...base, seat: -1, tray: [], lastPiece: null, out: null, missed: 0, score: 0 };
   }
@@ -97,7 +102,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
     if (!p || p.cpu || p.connected === connected) return;
     super.setConnected(id, connected);
     const s = this.s;
-    if (s.phase !== "playing" || s.turnPlayerId !== id) return;
+    // Solitaire waits for its player, however long they're gone.
+    if (s.phase !== "playing" || s.turnPlayerId !== id || this.solo) return;
     const now = this.io.now();
     if (connected) p.missed = 0;
     this.armTurn(connected ? turnHolderBack(s, CLOCK, now) : turnHolderLeft(s, CLOCK, now), connected);
@@ -106,7 +112,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
   // ---------------------------------------------------------------- game flow
 
   start(byId: string): void {
-    this.beginStart(byId);
+    this.beginStart(byId, 1);
     const s = this.s;
     const rng = mulberry32(randomSeed());
     const order = shuffle(
@@ -132,7 +138,11 @@ export class Game extends Lobby<GameState, ServerMsg> {
       p.score = seat >= 0 ? scoreFor(p.tray, null) : 0;
     }
     this.uniqueSeatColors();
-    this.event(`Game on! ${order.length} players on a ${layout.size}×${layout.size} board.`);
+    this.event(
+      order.length === 1
+        ? `Solitaire on a ${layout.size}×${layout.size} board: fit in as many of your 21 pieces as you can.`
+        : `Game on! ${order.length} players on a ${layout.size}×${layout.size} board.`,
+    );
     s.turnPlayerId = null;
     this.nextTurn();
   }
@@ -210,6 +220,9 @@ export class Game extends Lobby<GameState, ServerMsg> {
     if (p.cpu) {
       startTurnClock(s, CLOCK, now, null, true);
       s.timer = { kind: "cpu", at: now + CPU_MS };
+    } else if (this.solo) {
+      // Nobody's waiting on a solitaire: no clock, and no passing while they're away.
+      this.armTurn(startTurnClock(s, CLOCK, now, null, true), true);
     } else {
       const here = this.io.isConnected(p.id);
       // Here for a turn of their own: whatever they missed before wasn't in a row.
@@ -276,6 +289,20 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.timer = null;
     const players = seated(s);
     for (const p of players) p.score = scoreFor(p.tray, p.lastPiece);
+    const p = players[0];
+    if (this.solo && p) {
+      // Nobody wins a solitaire: it's the score that counts.
+      s.winners = [];
+      const placed = PIECE_COUNT - p.tray.length;
+      const pts = `${p.score} point${Math.abs(p.score) === 1 ? "" : "s"}`;
+      this.event(
+        placed === PIECE_COUNT
+          ? `🏁 ${p.name} placed all 21 pieces, for ${pts}`
+          : `🏁 ${p.name} placed ${placed} of 21 pieces, for ${pts}`,
+      );
+      this.touch();
+      return;
+    }
     const top = Math.max(...players.map((p) => p.score));
     const winners = players.filter((p) => p.score === top);
     s.winners = winners.map((p) => p.id);

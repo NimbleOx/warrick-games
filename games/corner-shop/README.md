@@ -5,7 +5,8 @@ A turn-based territory game like *Blokus*. Everyone has the same 21 pieces: ever
 ## Rules for v1
 
 - 2–4 players online, each on their own device, plus CPU players. The lobby holds at most 4. Anyone who arrives mid-game watches until the next one.
-- The board depends on how many play:
+- **Solitaire.** On your own in the lobby, the start button says **Play solitaire**: just you on the 14×14 board, starting from its top-left corner, and every turn is yours. Fit in as many of your 21 pieces as you can; the game ends when none of the rest fit, and the usual scoring applies. There's no turn timer and nothing passes while you're away: nobody is waiting. The end screen shows your score, pieces and squares left, and your best score (kept in this browser). Add a CPU or invite a friend and it's a game again. (On 20×20 every CPU places all 21 pieces every time; on 14×14 the normal CPU manages it about a third of the time.)
+- The board depends on how many play (solitaire is above):
   - 3–4 players: a 20×20 board, and everyone starts in their own corner, clockwise from the top left. With 3 players the bottom-left corner stays empty.
   - 2 players: a 14×14 board with the starting squares near the middle, on the diagonal at (5, 5) and (10, 10) counting from 1, like *Blokus Duo*.
 - Turn order is random and stays the same all game; seats go round the corners clockwise in that order.
@@ -39,6 +40,7 @@ A turn-based territory game like *Blokus*. Everyone has the same 21 pieces: ever
 - A move is `{ piece, orient, x, y }`: the orientation's index and the top-left of its bounding box. The server checks the piece is in your tray, the orientation index is real, and the placement is legal, using the same pure function the client uses for the ghost.
 - Move generation works from each player's open corners (anchors): empty squares diagonal to one of their pieces and not edge-adjacent to any. On the first move the only anchor is the starting square. For each anchor, each piece left in the tray, each orientation and each of its cells, put that cell on the anchor and check the rest. A placement found from two anchors counts once.
 - Rules, move generation, scoring and the CPU are pure functions in `src/shared/`, with no state beyond their arguments and a seeded RNG, so Vitest can test them and the client can run them for the ghost, the open corners and the home-screen demo.
+- Solitaire is a game with one seat (`layoutFor(1)`): the turn always comes back to the same player, nobody wins (`winners` stays empty), and its turns have no deadline, so the room's alarm is only its clean-up.
 - "Out of moves" is checked when a player's turn comes round, with an early-exit search. The game is over when every seat is out.
 - The CPU runs on the server. A mid-game 20×20 position has a few thousand legal moves; Hard's lookahead looks at its best 8 and stays well under 100 ms.
 - Watch the first-move advantage in playtests, especially in 2-player games. If going first wins too often, Duo's usual fix is to let the second player pick their colour first; here we could rotate who starts between games.

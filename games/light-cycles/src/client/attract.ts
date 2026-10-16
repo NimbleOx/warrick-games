@@ -50,7 +50,7 @@ export class Attract {
     });
     this.renderer.beforeFrame(arena, now);
     const f = arena.step();
-    this.renderer.afterFrame(arena, f, now, (id) => this.riders.get(id)?.color ?? "#ffffff");
+    this.renderer.afterFrame(arena, f.e, now, (id) => this.riders.get(id)?.color ?? "#ffffff");
     if (arena.aliveCount <= 1 && !this.resetAt) this.resetAt = now + 2200;
   }
 

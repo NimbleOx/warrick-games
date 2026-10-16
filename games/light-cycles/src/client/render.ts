@@ -1,4 +1,4 @@
-import type { Arena, Cycle, Dir, Frame } from "../shared/arena";
+import type { Arena, ArenaEvent, Cycle, Dir } from "../shared/arena";
 import { DX, DY } from "../shared/arena";
 import { rgba } from "@warrick/kit/client/color";
 import { THEMES, lighten, type Theme } from "./themes";
@@ -15,6 +15,11 @@ export interface DrawOpts {
   /** Names and headings over each cycle (during the countdown). */
   labels: boolean;
   tickMs: number;
+  /**
+   * How far the heads are on their way into the cells of the arena's latest tick: 0 where they
+   * were before it, 1 there. Without it, they get there `tickMs` after the latest frame.
+   */
+  alpha?: number;
   /** In the countdown, the turn you've asked for: your heading chevrons show it. */
   turn?: Dir | null;
   /** Your cycle run on ahead of the frames (see `Predictor`), drawn in place of the arena's. */
@@ -45,7 +50,7 @@ const RING_MS = 650;
 /**
  * Draws an Arena onto a canvas. Everything is in cell units (cell centers at
  * x + 0.5); the arena only changes once per tick, so heads are interpolated
- * from where they were before the latest frame.
+ * from where they were before the latest frame (see `DrawOpts.alpha`).
  */
 export class Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -100,9 +105,9 @@ export class Renderer {
     this.frameAt = now;
   }
 
-  /** Visual reactions to what happened in a frame (call after applying it). */
-  afterFrame(arena: Arena, f: Frame, now: number, colorOf: (id: string) => string, youId?: string): void {
-    for (const ev of f.e) {
+  /** Visual reactions to what happened in a frame (its events; call after applying it). */
+  afterFrame(arena: Arena, events: ArenaEvent[], now: number, colorOf: (id: string) => string, youId?: string): void {
+    for (const ev of events) {
       if (ev.k === "crash") {
         const c = arena.cycles[ev.i];
         const color = colorOf(c.id);
@@ -147,7 +152,7 @@ export class Renderer {
 
     if (arena.shrink > 0) this.drawClosingWall(arena, now);
 
-    const alpha = opts.tickMs > 0 ? Math.min(1, Math.max(0, (now - this.frameAt) / opts.tickMs)) : 1;
+    const alpha = opts.alpha ?? (opts.tickMs > 0 ? Math.min(1, Math.max(0, (now - this.frameAt) / opts.tickMs)) : 1);
     const ahead = opts.ahead ?? null;
     // Your cycle, while it's riding on screen, is drawn as predicted.
     const shown = (c: Cycle, i: number) => (c.alive && ahead?.i === i ? ahead.cycle : c);

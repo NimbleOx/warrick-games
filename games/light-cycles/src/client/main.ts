@@ -2,7 +2,7 @@ import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc } from "@warrick/kit/client/dom";
 import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { Arena, type ArenaSnapshot, type Cycle, type Dir, type Frame, type WallMode } from "../shared/arena";
+import { Arena, type ArenaEvent, type ArenaSnapshot, type Cycle, type Dir, type Frame, type WallMode } from "../shared/arena";
 import { PLAYER_COLORS, tickMsFor, type ArenaSize, type Speed } from "../shared/constants";
 import {
   SETTING_CHOICES,
@@ -14,6 +14,7 @@ import {
 } from "../shared/protocol";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
+import { Playback } from "./playback";
 import { Predictor, type Predicted } from "./predict";
 import { Renderer, type DrawOpts, type RiderInfo } from "./render";
 
@@ -26,16 +27,15 @@ function plural(n: number, word: string): string {
 // ------------------------------------------------------------------ app state
 
 const app = {
-  /** The round on screen, kept in step by the server's frames. */
+  /** The round on screen, kept in step by the server's frames as playback reaches them. */
   arena: null as Arena | null,
-  /** Frames received but not shown yet, oldest first. */
-  frames: [] as Frame[],
-  /** Where playback is, in ticks. It trails the newest frame a little to smooth out network jitter. */
-  clock: 0,
+  /** The frames on their way to the screen, played back on the server's schedule. */
+  playback: new Playback(),
   /** The newest frame, and your cycle run on from it, so it steers the moment you press. */
   predictor: new Predictor(),
   /** Your cycle as drawn this animation frame, while a round is being ridden. */
   ahead: null as Predicted | null,
+  /** When the last animation frame ran. */
   lastNow: 0,
   /** The state being applied came with a welcome (joining or reconnecting), not a change of phase. */
   welcomed: false,
@@ -44,13 +44,8 @@ const app = {
   swipe: null as { x: number; y: number; dir: Dir | null } | null,
 };
 
-/**
- * Playback runs in real time and never passes the newest frame, so it shows each frame about a
- * tick after it arrives. Further behind than this, in ticks (frames came in a bunch), it speeds up.
- */
-const BUFFER_TICKS = 1.5;
-/** Further behind than this (say, the tab was in the background) and playback skips ahead. */
-const MAX_BEHIND_TICKS = 30;
+/** No animation frame for this long (in ms) means the page isn't animating: it's in a hidden pane, say. */
+const STILL_MS = 250;
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "light-cycles",
@@ -135,8 +130,7 @@ function onMessage(msg: ServerMsg): void {
 
 function setArena(snap: ArenaSnapshot | null, s = shell.state): void {
   app.arena = snap ? new Arena(snap) : null;
-  app.frames = [];
-  app.clock = app.arena?.tick ?? 0;
+  app.playback.reset(app.arena?.tick ?? 0);
   app.predictor.reset(snap, tickMsFor(s?.settings.speed ?? "classic"));
   app.ahead = null;
   if (app.arena) renderer.reset(app.arena);
@@ -164,46 +158,57 @@ function onState(s: GameState, prev: GameState | null): void {
 }
 
 function onFrame(f: Frame): void {
-  if (!app.arena || !app.predictor.frame(f, shell.me, performance.now())) return;
-  app.frames.push(f);
-  // A background tab doesn't animate, so keep its round current rather than queueing. Your own
-  // crash shows as soon as it's heard: your cycle runs ahead of playback (see `Predictor`), so
-  // it would otherwise sit at the wall until playback caught up.
-  if (document.hidden || f.e.some((e) => e.k === "crash" && app.arena!.cycles[e.i]?.id === shell.me)) drain();
+  const now = performance.now();
+  if (!app.arena || !app.predictor.frame(f, shell.me, now)) return;
+  app.playback.push(f);
+  // A background tab or a hidden pane doesn't animate, so keep its round current rather than queueing.
+  if (document.hidden || now - app.lastNow > STILL_MS) drain();
+  else crashAhead(f, now);
 }
 
 /**
- * Play buffered frames in real time, a little behind the newest one, so a late frame or two
- * arriving together don't make the heads stall and jump. Playback speeds up when it falls behind.
+ * Your own crash shows as soon as it's heard, while everyone else plays on at their own pace.
+ * Your cycle runs ahead of playback (see `Predictor`), so it would otherwise sit at the wall
+ * until playback caught up. When playback gets to this frame, it doesn't show the crash again.
  */
+function crashAhead(f: Frame, now: number): void {
+  const a = app.arena!;
+  for (const ev of f.e) {
+    if (ev.k !== "crash" || a.cycles[ev.i]?.id !== shell.me || !a.cycles[ev.i].alive) continue;
+    const c = app.predictor.arena?.cycles[ev.i];
+    if (!c) return;
+    a.crashAs(ev.i, c);
+    showEvents([ev], now);
+  }
+}
+
+/** Show the frames playback has reached (see `Playback`). */
 function advance(now: number): void {
-  const dt = app.lastNow ? Math.min(250, now - app.lastNow) : 0;
-  app.lastNow = now;
-  const a = app.arena;
-  const s = shell.state;
-  if (!a || !s) return;
-  const newest = app.frames.at(-1)?.n ?? a.tick;
-  const behind = newest - app.clock;
-  if (behind > MAX_BEHIND_TICKS) app.clock = newest - BUFFER_TICKS;
-  else app.clock += (dt / tickMsFor(s.settings.speed)) * (1 + Math.max(0, behind - BUFFER_TICKS) * 0.5);
-  if (app.clock > newest) app.clock = newest;
-  while (app.frames.length && app.frames[0].n <= app.clock) applyFrame(app.frames.shift()!, now);
+  if (!app.arena) return;
+  for (const f of app.playback.advance(now, app.predictor.clock)) applyFrame(f, now);
 }
 
 /** Show every buffered frame now. */
 function drain(): void {
   const now = performance.now();
-  while (app.frames.length) applyFrame(app.frames.shift()!, now);
-  if (app.arena) app.clock = app.arena.tick;
+  for (const f of app.playback.drain()) applyFrame(f, now);
 }
 
 function applyFrame(f: Frame, now: number): void {
   const a = app.arena!;
+  // A crash shown already isn't shown again: yours shows as soon as it comes in (see `crashAhead`).
+  const events = f.e.filter((ev) => ev.k !== "crash" || a.cycles[ev.i]?.alive);
   renderer.beforeFrame(a, now);
   a.apply(f);
-  renderer.afterFrame(a, f, now, (id) => playerById(id)?.color ?? "#ffffff", shell.me);
-  if (!f.e.length) return;
-  for (const ev of f.e) {
+  showEvents(events, now);
+}
+
+/** The sparks, sounds and banners for what happened in a tick, once it's in the arena on screen. */
+function showEvents(events: ArenaEvent[], now: number): void {
+  const a = app.arena!;
+  renderer.afterFrame(a, events, now, (id) => playerById(id)?.color ?? "#ffffff", shell.me);
+  if (!events.length) return;
+  for (const ev of events) {
     if (ev.k === "crash") {
       const mine = a.cycles[ev.i].id === shell.me;
       sfx.crash(mine);
@@ -219,6 +224,7 @@ function applyFrame(f: Frame, now: number): void {
 
 function frame(now: number): void {
   requestAnimationFrame(frame);
+  app.lastNow = now;
   if (shell.screen === "home") {
     attract.frame(now);
     return;
@@ -239,6 +245,7 @@ function drawOpts(s: GameState): DrawOpts {
     riders,
     labels: s.phase === "countdown",
     tickMs: tickMsFor(s.settings.speed),
+    alpha: app.playback.alpha,
     turn: s.phase === "countdown" ? app.predictor.next : null,
     ahead: app.ahead,
   };

@@ -279,13 +279,15 @@ export class Arena {
     this.tick = f.n;
     for (const ev of f.e) if (ev.k === "shrink") this.shrink = ev.s;
     f.m.forEach((cells, i) => {
+      // One that has crashed already (shown ahead of the frames: see `crashAs`) is left as it ended.
+      if (!this.cycles[i]?.alive) return;
       for (let k = 0; k + 1 < cells.length; k += 2) this.enter(i, cells[k], cells[k + 1]);
     });
     f.d.forEach((d, i) => {
-      if (this.cycles[i]) this.cycles[i].dir = d;
+      if (this.cycles[i]?.alive) this.cycles[i].dir = d;
     });
     for (const ev of f.e) {
-      if (ev.k === "shrink" || !this.cycles[ev.i]) continue;
+      if (ev.k === "shrink" || !this.cycles[ev.i]?.alive) continue;
       if (ev.k === "crash") {
         this.kill(ev.i);
       } else {
@@ -294,6 +296,16 @@ export class Arena {
       }
     }
     for (const c of this.cycles) if (c.alive && c.boost > 0) c.boost--;
+  }
+
+  /**
+   * Cycle `i` has crashed, as `c` (the same cycle in an arena further on) ended up. The client
+   * shows your own crash this way as soon as it's heard, ahead of playback. The frames before
+   * the crash are still applied after it, but leave this cycle where it ended.
+   */
+  crashAs(i: number, c: Cycle): void {
+    this.kill(i);
+    this.cycles[i] = copyCycle(c);
   }
 
   // ---------------------------------------------------------------- internals

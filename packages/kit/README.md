@@ -12,7 +12,7 @@ What every Warrick game shares, so each game's folder holds only its game: rooms
 | `@warrick/kit/shared/protocol` | `BasePlayer`, `BaseState`, `LogEntry`, the lobby's client messages and the room's server messages |
 | `@warrick/kit/shared/constants` | room codes, `MAX_PLAYERS`, the default colours, CPU levels, close codes |
 | `@warrick/kit/shared/rng` | seeded random numbers (mulberry32) |
-| `@warrick/kit/client/shell` | `Shell`: the home card, create/join, the lobby, chat, connection status, leave, mute |
+| `@warrick/kit/client/shell` | `Shell`: the home card (with the link back to the hub), create/join, the lobby, chat, connection status, leave, mute |
 | `@warrick/kit/client/net` | the reconnecting WebSocket, with the heartbeat real-time games need and a `?lag=150` dev aid |
 | `@warrick/kit/client/dom` | `$`, `$$`, `esc`, `toast`, and `store` (localStorage under the game's prefix) |
 | `@warrick/kit/client/audio` | the synthesized-sound core (`tone`, `noiseBurst`, mute); each game builds its own `sfx` |

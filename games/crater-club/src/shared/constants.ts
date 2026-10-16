@@ -20,6 +20,14 @@ export const BARREL_LEN = 14;
 export const START_HEALTH = 100;
 export const SHIELD_HP = 60;
 
+/**
+ * Stalemates. When this many turns each go by with nobody hurt, sudden death lifts the power caps
+ * on damaged tanks for the rest of the round...
+ */
+export const SUDDEN_DEATH_TURNS_EACH = 3;
+/** ...and in sudden death, this many turns each with nobody hurt end the round in a draw. */
+export const DRAW_TURNS_EACH = 10;
+
 // Economy and scoring.
 export const CASH_PER_DAMAGE = 40;
 export const CASH_PER_KILL = 3000;

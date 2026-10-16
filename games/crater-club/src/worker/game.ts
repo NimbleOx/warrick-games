@@ -3,6 +3,7 @@ import {
   CASH_PER_KILL,
   CASH_SURVIVE,
   CASH_WIN,
+  DRAW_TURNS_EACH,
   SCORE_PER_KILL,
   SCORE_PER_WIN,
   SHIELD_HP,
@@ -14,6 +15,9 @@ import {
 import {
   DEFAULT_SETTINGS,
   SETTING_CHOICES,
+  powerCap,
+  quietLimit,
+  quietTurnsEach,
   rankPlayers,
   type Aim,
   type GameState,
@@ -26,7 +30,7 @@ import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randInt, randomSeed, shuffle } from "@warrick/kit/shared/rng";
 import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
 import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
-import { launchFor, maxPowerFor } from "../shared/sim";
+import { launchFor } from "../shared/sim";
 import { TERRAIN_STYLES, flattenPad, generateTerrain } from "../shared/terrain";
 import { isShopId, isWeaponId, shopDef, weaponCount, type ShopId, type WeaponId } from "../shared/weapons";
 import { worldFromState } from "../shared/world-state";
@@ -63,6 +67,8 @@ export function newGameState(code: string, now: number): GameState {
     phaseDeadline: null,
     timer: null,
     shotCount: 0,
+    quietTurns: 0,
+    suddenDeath: false,
   };
 }
 
@@ -162,6 +168,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.roundWinnerId = null;
     s.phaseDeadline = null;
     s.timer = null;
+    s.quietTurns = 0;
+    s.suddenDeath = false;
     for (const p of s.players) {
       p.tank = null;
       p.ready = false;
@@ -177,6 +185,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.phase = "playing";
     s.roundWinnerId = null;
     s.phaseDeadline = null;
+    s.quietTurns = 0;
+    s.suddenDeath = false;
 
     const style = TERRAIN_STYLES[randInt(rng, 0, TERRAIN_STYLES.length - 1)];
     const heights = generateTerrain(rng, style);
@@ -264,7 +274,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     if (!p.tank?.alive || !raw || typeof raw.weapon !== "string" || !isWeaponId(raw.weapon)) return null;
     if (weaponCount(p.inventory, raw.weapon) <= 0) return null;
     const angle = clampInt(raw.angle, 0, 180);
-    const power = clampInt(raw.power, 0, maxPowerFor(p.tank.health));
+    const power = clampInt(raw.power, 0, powerCap(this.s, p.tank));
     return { angle, power, weapon: raw.weapon };
   }
 
@@ -294,7 +304,9 @@ export class Game extends Lobby<GameState, ServerMsg> {
       if (t.parachutes > 0) pl.inventory.parachute = t.parachutes;
       else delete pl.inventory.parachute;
     }
+    let hurt = false;
     for (const ev of world.events) {
+      if (ev.type === "damage" || ev.type === "shield") hurt = true;
       if (ev.type === "damage" && ev.by !== ev.id) {
         const a = this.player(ev.by);
         if (a) {
@@ -317,6 +329,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     }
 
     s.shotCount++;
+    s.quietTurns = hurt ? 0 : (s.quietTurns ?? 0) + 1;
     s.resolving = true;
     s.clockEnd = s.turnDeadline = null;
     s.timer = { kind: "resolve", at: now + world.tick * TICK_MS + RESOLVE_PAUSE_MS };
@@ -328,7 +341,24 @@ export class Game extends Lobby<GameState, ServerMsg> {
     this.s.resolving = false;
     const alive = this.participants.filter((p) => p.tank?.alive);
     if (alive.length <= 1) this.roundOver(alive[0] ?? null);
-    else this.nextTurn();
+    else this.endTurn();
+  }
+
+  /**
+   * A turn is over. Too many in a row with nobody hurt (tanks that can't reach each other, or
+   * players who won't fire) bring on sudden death, which lifts the power caps that damaged tanks
+   * fire under. If that doesn't break the stalemate either, the round is a draw.
+   */
+  private endTurn(): void {
+    const s = this.s;
+    if ((s.quietTurns ?? 0) >= quietLimit(s)) {
+      if (s.suddenDeath) return this.roundOver(null);
+      this.event(`💀 Sudden death! Nobody was hurt in ${quietTurnsEach(s)} turns each, so damaged tanks fire at full power now`);
+      s.suddenDeath = true;
+      s.quietTurns = 0;
+      this.event(`If nobody is hurt in the next ${DRAW_TURNS_EACH} turns each, round ${s.round} is a draw`);
+    }
+    this.nextTurn();
   }
 
   private roundOver(winner: PlayerState | null): void {
@@ -343,6 +373,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
       winner.money += CASH_WIN;
       winner.score += SCORE_PER_WIN;
       this.event(`🏆 ${winner.name} wins round ${s.round}`);
+    } else if (this.participants.some((p) => p.tank?.alive)) {
+      this.event(`Round ${s.round} is a draw — nobody was hurt in ${DRAW_TURNS_EACH} turns each of sudden death`);
     } else {
       this.event(`Round ${s.round} is a draw — nobody survived`);
     }
@@ -464,7 +496,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
           break;
         }
         this.event(p.connected ? `⏱ ${p.name} ran out of time` : `${p.name} is away — skipping`);
-        this.nextTurn();
+        s.quietTurns = (s.quietTurns ?? 0) + 1;
+        this.endTurn();
         break;
       }
       case "resolve":

@@ -2,9 +2,12 @@ import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc, toast } from "@warrick/kit/client/dom";
 import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { TICK_MS, TURRET_Y } from "../shared/constants";
+import { DRAW_TURNS_EACH, TICK_MS, TURRET_Y } from "../shared/constants";
 import {
   SETTING_CHOICES,
+  powerCap,
+  quietLimit,
+  quietTurnsEach,
   rankPlayers,
   type Aim,
   type ClientMsg,
@@ -13,7 +16,7 @@ import {
   type ServerMsg,
   type ShotMessage,
 } from "../shared/protocol";
-import { maxPowerFor, type World } from "../shared/sim";
+import type { World } from "../shared/sim";
 import { SHOP_ORDER, WEAPONS, WEAPON_ORDER, shopDef, weaponCount, type ShopId, type WeaponId } from "../shared/weapons";
 import { worldFromState } from "../shared/world-state";
 import { Attract } from "./attract";
@@ -139,13 +142,18 @@ function onState(s: GameState, prev: GameState | null): void {
   app.world = s.terrain.length ? worldFromState(s) : null;
 
   const key = `${s.round}:${s.shotCount}:${s.turnPlayerId}`;
+  const suddenDeath = s.phase === "playing" && s.suddenDeath && prev?.round === s.round && !prev.suddenDeath;
   if (isMyTurn(s) && key !== app.turnKey) {
     app.turnKey = key;
     const p = me(s)!;
     app.aim = { ...p.aim };
     app.firing = false;
     sfx.turn();
-    flashBanner(`<span class="big">YOUR TURN</span>`, 1300);
+    if (!suddenDeath) flashBanner(`<span class="big">YOUR TURN</span>`, 1300);
+  }
+  if (suddenDeath) {
+    const after = isMyTurn(s) ? "<br>Your turn!" : "";
+    flashBanner(`<span class="big">SUDDEN DEATH</span>Damaged tanks fire at full power now${after}`, 3500);
   }
   if (!isMyTurn(s)) app.firing = false;
 
@@ -305,7 +313,7 @@ function renderHud(): void {
   const aim = turn ? (turn.id === shell.me && isMyTurn(s) ? app.aim : turn.aim) : null;
   const tank = turn?.tank;
   $("hud-angle").textContent = aim ? `${aim.angle}°` : "—";
-  const cap = tank ? maxPowerFor(tank.health) : 1000;
+  const cap = tank ? powerCap(s, tank) : 1000;
   $("hud-power").textContent = aim ? (cap < 1000 ? `${aim.power}/${cap}` : String(aim.power)) : "—";
   $("hud-power").title = cap < 1000 ? `Damaged: max power ${cap} at ${tank!.health} health` : "";
   $("hud-weapon").textContent = aim ? WEAPONS[aim.weapon].name : "—";
@@ -317,6 +325,28 @@ function renderHud(): void {
   if (!canPick) closeWeaponMenu();
   $("hud-wind").textContent = s.wind === 0 ? "Calm" : `${s.wind > 0 ? "→" : "←"} ${Math.abs(s.wind)}`;
   $("hud-round").textContent = s.round ? `${s.round}/${s.settings.rounds}` : "—";
+  renderSuddenDeath(s);
+}
+
+/**
+ * Turns with nobody hurt run down to sudden death, then (in sudden death) to a draw. The count
+ * shows once everyone has had a turn with nobody hurt, and all through sudden death.
+ */
+function renderSuddenDeath(s: GameState): void {
+  const el = $("hud-sudden");
+  const tanks = s.players.filter((p) => !p.spectator && p.tank?.alive).length;
+  const quiet = s.quietTurns ?? 0;
+  const show = s.phase === "playing" && (!!s.suddenDeath || (tanks > 0 && quiet >= tanks));
+  el.hidden = !show;
+  el.classList.toggle("on", !!s.suddenDeath);
+  if (!show) return;
+  const left = Math.max(0, quietLimit(s) - quiet);
+  const turns = `${left} turn${left === 1 ? "" : "s"}`;
+  $("hud-sudden-left").textContent = s.suddenDeath ? `Draw in ${left}` : `In ${turns}`;
+  el.title = s.suddenDeath
+    ? `Sudden death: damaged tanks fire at full power. If nobody is hurt in the next ${turns}, the round is a draw.`
+    : `Nobody has been hurt for ${quiet} turns. After ${quietTurnsEach(s)} turns each with nobody hurt ` +
+      `(${turns} more), sudden death begins: damaged tanks fire at full power.`;
 }
 
 function renderPlayers(s: GameState): void {
@@ -369,7 +399,7 @@ function renderControls(): void {
   controls.classList.toggle("disabled", !mine);
   $("stage").classList.toggle("aiming", mine);
 
-  const maxPower = maxPowerFor(p.tank!.health);
+  const maxPower = powerCap(s, p.tank!);
   if (app.aim.power > maxPower) app.aim.power = maxPower;
   if (weaponCount(p.inventory, app.aim.weapon) <= 0) app.aim.weapon = "baby_missile";
 
@@ -409,9 +439,12 @@ function renderBanner(): void {
   if (s.phase === "roundover" && !app.anim) {
     el.classList.remove("flash");
     const winner = playerById(s.roundWinnerId);
+    const standing = s.players.some((p) => !p.spectator && p.tank?.alive);
     const head = winner
       ? `<span class="big" style="color:${winner.color}">${esc(winner.name)} wins round ${s.round}</span>`
-      : `<span class="big">Round ${s.round}: nobody survived</span>`;
+      : standing
+        ? `<span class="big">Round ${s.round} is a draw</span>Nobody was hurt in ${DRAW_TURNS_EACH} turns each of sudden death.<br>`
+        : `<span class="big">Round ${s.round}: nobody survived</span>`;
     const next = s.round >= s.settings.rounds ? "Final results" : "Arms dealer opens";
     el.innerHTML = `${head}${next} in <span data-countdown></span>s`;
     el.hidden = false;
@@ -511,7 +544,7 @@ function setAim(patch: Partial<Aim>): void {
   if (!s || !p?.tank || !isMyTurn(s) || app.firing) return;
   const next = { ...app.aim, ...patch };
   next.angle = Math.min(180, Math.max(0, Math.round(next.angle)));
-  next.power = Math.min(maxPowerFor(p.tank.health), Math.max(0, Math.round(next.power)));
+  next.power = Math.min(powerCap(s, p.tank), Math.max(0, Math.round(next.power)));
   if (weaponCount(p.inventory, next.weapon) <= 0) next.weapon = "baby_missile";
   app.aim = next;
   renderHud();

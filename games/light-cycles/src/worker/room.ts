@@ -16,8 +16,6 @@ export class GameRoom extends Room<GameState, Game, Arena> {
   /** Follows the speed setting: see `wantsLoop`. */
   protected tickMs = tickMsFor(DEFAULT_SETTINGS.speed);
   private rng = mulberry32(randomSeed());
-  /** Whether the tick loop was running when the message being handled arrived. */
-  private riding = false;
 
   protected newState(code: string, now: number): GameState {
     return newGameState(code, now);
@@ -37,14 +35,9 @@ export class GameRoom extends Room<GameState, Game, Arena> {
     return state.phase === "playing" && !!this.live;
   }
 
-  async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    this.riding = !!this.state && this.wantsLoop(this.state) && this.connectedIds().size > 0;
-    await super.webSocketMessage(ws, raw);
-  }
-
   /** A round that stopped ticking (everyone had gone, or the room restarted) picks back up. */
   protected afterHello(game: Game): void {
-    if (!this.riding) game.recover();
+    if (!this.looping) game.recover();
   }
 
   protected welcome(game: Game): object {

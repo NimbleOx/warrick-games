@@ -160,6 +160,29 @@
   color: var(--accent-ink);
 }
 
+/* Turns: Done at the end of the buttons, and the tip on a line of its own (it says more). */
+.orders.turns .tip {
+  order: 1;
+  flex-basis: 100%;
+  text-align: left;
+}
+
+.orders.turns #done {
+  margin-left: auto;
+}
+
+/* Turned on while it can't be done yet: still clickable, to say why. */
+.orders .btn[aria-disabled="true"] {
+  opacity: 0.5;
+}
+
+/* Turns: finished planning, waiting on the others (click to take it back). */
+#done[aria-pressed="true"] {
+  background: var(--tag-you);
+  border-color: #3f7a48;
+  color: var(--text);
+}
+
 .tip {
   flex: 1;
   min-width: 160px;
@@ -295,6 +318,24 @@
   width: 10px;
   height: 10px;
   transform: rotate(45deg);
+}
+
+/* Turns: finished planning. */
+.tag-ready {
+  background: var(--tag-you);
+}
+
+/* Three level dots, as drawn above a base. */
+.key-level {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin: 0 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow:
+    -7px 0 var(--muted),
+    7px 0 var(--muted);
 }
 
 .heli-ink {

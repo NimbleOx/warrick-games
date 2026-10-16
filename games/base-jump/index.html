@@ -4,16 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Base Jump</title>
-    <meta name="description" content="Take every base. Tanks need roads, helicopters don't. Real-time strategy for friends — no accounts, just share a code." />
+    <meta name="description" content="Take every base. Tanks need roads, helicopters don't. Real-time or turn-based strategy for friends — no accounts, just share a code." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Warrick Games" />
     <meta property="og:title" content="Base Jump" />
-    <meta property="og:description" content="Take every base. Tanks need roads, helicopters don't. Real-time strategy for friends — no accounts, just share a code." />
+    <meta property="og:description" content="Take every base. Tanks need roads, helicopters don't. Real-time or turn-based strategy for friends — no accounts, just share a code." />
     <meta property="og:url" content="https://warrick.games/base-jump/" />
     <meta property="og:image" content="https://warrick.games/base-jump/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Base Jump: Send tanks down the roads and helicopters over them to take every base in real time, after Modern Conflict." />
+    <meta property="og:image:alt" content="Base Jump: Send tanks down the roads and helicopters over them to take every base in real time or in turns, after Modern Conflict." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#0e120c" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -41,7 +41,8 @@
         <div class="stage-col">
           <div class="hud" id="hud">
             <div class="hud-main" id="hud-main"></div>
-            <div class="hud-stat"><span class="label">Time</span><b id="hud-clock">—</b></div>
+            <div class="hud-stat" id="hud-turn-stat" hidden><span class="label">Turn</span><b id="hud-turn">—</b></div>
+            <div class="hud-stat"><span class="label" id="hud-clock-label">Time</span><b id="hud-clock">—</b></div>
             <div class="hud-stat"><span class="label">Bases</span><b id="hud-bases">—</b></div>
             <div class="hud-stat"><span class="label">Units</span><b id="hud-units">—</b></div>
           </div>
@@ -54,8 +55,10 @@
               <button class="seg-btn" data-pct="100" aria-pressed="false" title="Send everything (3)">All</button>
             </div>
             <button class="btn btn-small" id="select-all" title="Select all your bases (A)">All bases</button>
-            <button class="btn btn-small" id="upgrade" title="Upgrade the selected base (U)" disabled>Upgrade</button>
+            <button class="btn btn-small" id="upgrade" title="Upgrade the selected base (U)">Upgrade</button>
+            <button class="btn btn-small" id="undo" title="Take back your last order (Backspace)" hidden>Undo</button>
             <span class="tip" id="tip"></span>
+            <button class="btn btn-small btn-primary" id="done" title="Finished planning: the turn plays once everyone is (Enter)" hidden>Done</button>
           </div>
 
           <div class="stage" id="stage">
@@ -65,12 +68,18 @@
           </div>
           <p class="keys-hint">
             Drag from your base to a target (sweep across more of yours to send from them too), or tap yours then the target ·
-            <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> send size · <kbd>A</kbd> all bases · <kbd>U</kbd> upgrade · <kbd>Esc</kbd> clear
+            <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> send size · <kbd>A</kbd> all bases · <kbd>U</kbd> upgrade · <kbd>Esc</kbd> clear<span
+              id="turn-keys"
+              hidden
+            >
+              · <kbd>Backspace</kbd> undo · <kbd>Enter</kbd> done</span
+            >
           </p>
           <p class="legend">
             <span><i class="key-depot"></i> depot: builds tanks, which drive along roads</span>
             <span><i class="key-air"></i> airfield: builds helicopters, which fly anywhere</span>
             <span><b class="heli-ink">✈</b> blue numbers are helicopters · 1 tank = 2 helicopters in a fight</span>
+            <span><i class="key-level"></i> dots above a base: its level (1–3). Upgrade it to build faster and hold more</span>
           </p>
         </div>
 

@@ -33,6 +33,11 @@ export interface Style {
   leader: number;
   /** Sends everything from a front-line base when that's what it takes (otherwise only from bases behind the front). */
   allIn: boolean;
+  /**
+   * Sizes an attack for what the target will hold when its units get there: what it builds on the
+   * way, and help already heading there. Otherwise, for what's there now.
+   */
+  ahead: boolean;
 }
 
 /**
@@ -51,6 +56,7 @@ export const STYLES: Record<CpuLevel, Style> = {
     upgrade: [0.3, 6],
     leader: 0,
     allIn: false,
+    ahead: false,
   },
   normal: {
     think: [11, 17],
@@ -62,6 +68,7 @@ export const STYLES: Record<CpuLevel, Style> = {
     upgrade: [0.5, 6],
     leader: 0,
     allIn: false,
+    ahead: false,
   },
   hard: {
     think: [5, 9],
@@ -73,7 +80,20 @@ export const STYLES: Record<CpuLevel, Style> = {
     upgrade: [0.5, 6],
     leader: 3,
     allIn: true,
+    ahead: false,
   },
+};
+
+/**
+ * Turns: a CPU looks once a turn, where in real time it would look several times, so it makes
+ * more attacks in that one look. Its orders can't be followed up until the next turn, so it
+ * sizes them for what it will find when they arrive: without that, hard beat normal only 70% of
+ * the time (README).
+ */
+export const TURN_STYLES: Record<CpuLevel, Style> = {
+  easy: { ...STYLES.easy, ahead: true },
+  normal: { ...STYLES.normal, attacks: 3, ahead: true },
+  hard: { ...STYLES.hard, attacks: 6, ahead: true },
 };
 
 /** How far ahead (ticks) it looks for attacks on its own bases. */
@@ -95,8 +115,24 @@ export function think(b: Battle, slot: number, brain: Brain, rng: Rng, act: (cmd
   const style = STYLES[brain.level];
   const [lo, hi] = style.think;
   brain.next = b.n + lo + Math.floor(rng() * (hi - lo + 1));
+  decide(b, slot, brain.level, style, rng, act);
+}
+
+/**
+ * Turns: a CPU player's plan for the coming turn. It decides on a copy of the battle, carrying
+ * out each order there, so later decisions see the earlier ones; the battle itself doesn't change.
+ */
+export function planTurn(b: Battle, slot: number, level: CpuLevel, rng: Rng): Cmd[] {
+  if (!b.playing || !b.alive(slot)) return [];
+  const copy = b.clone();
+  const plan: Cmd[] = [];
+  decide(copy, slot, level, TURN_STYLES[level], rng, (cmd) => copy.apply(cmd) && plan.push(cmd) > 0);
+  return plan;
+}
+
+function decide(b: Battle, slot: number, level: CpuLevel, style: Style, rng: Rng, act: (cmd: Cmd) => boolean): void {
   const mind = new Mind(b, slot, style, rng, act);
-  if (brain.level === "easy") return mind.easy();
+  if (level === "easy") return mind.easy();
   mind.defend();
   mind.attack();
   if (style.gang) mind.gang();
@@ -221,7 +257,7 @@ class Mind {
         .slice(0, 3);
       if (srcs.length < 2) continue;
       const eta = srcs[srcs.length - 1].eta;
-      const hold = this.holdAt(target, eta);
+      const hold = this.holdAt(target, this.arrival(eta));
       const force = srcs.reduce((sum, { s }) => sum + Battle.portion(this.b.bases[s].t, 50), 0);
       if (clash(hold.t, hold.h, TANK, force).left <= this.margin(hold) + 1) continue;
       const score = this.value(target) / (force + eta / 8 + 4);
@@ -300,6 +336,15 @@ class Mind {
     return v;
   }
 
+  /**
+   * The tick to size an attack for, given its travel time. Without `ahead`, it's the travel time
+   * itself, read as a tick: so outside a round's first seconds, the target as it is now. That's
+   * what real-time CPUs were tuned with; sizing for the arrival made them weaker (README).
+   */
+  private arrival(eta: number): number {
+    return this.style.ahead ? this.b.n + eta : eta;
+  }
+
   private margin(hold: { t: number; h: number }): number {
     const [few, share] = this.style.margin;
     return few + share * (hold.t + hold.h / 2);
@@ -311,7 +356,7 @@ class Mind {
    */
   private enough(src: number, target: number, eta: number, byRoad: boolean): SendPct | null {
     const base = this.b.bases[src];
-    const hold = this.holdAt(target, eta);
+    const hold = this.holdAt(target, this.arrival(eta));
     const margin = this.margin(hold);
     // A full base builds nothing, so holding units back there costs more than it saves.
     const full = base.t + base.h >= CAP[base.level];

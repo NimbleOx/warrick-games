@@ -440,6 +440,11 @@ export class Battle {
     return battle;
   }
 
+  /** A copy to try orders on: the same map, everything else its own. */
+  clone(): Battle {
+    return Battle.fromSnapshot(this.snapshot());
+  }
+
   /** A hash of everything that changes, to spot a client that has drifted from the server. */
   checksum(): number {
     let h = 0x811c9dc5 ^ this.n;
@@ -491,6 +496,17 @@ export function clash(t: number, h: number, kind: UnitKind, n: number): { t: num
     }
   }
   return { t, h, left };
+}
+
+/**
+ * Turns: the battle as a player's plan would leave it, before anything moves. A copy, with the
+ * plan's orders carried out in turn (each sees the ones before it), so the next order is checked
+ * against what's left.
+ */
+export function planned(battle: Battle, plan: Cmd[]): Battle {
+  const copy = battle.clone();
+  for (const cmd of plan) copy.apply(cmd);
+  return copy;
 }
 
 /** Run a server frame on a client's copy. Returns the tick's events, or null if it doesn't follow on. */

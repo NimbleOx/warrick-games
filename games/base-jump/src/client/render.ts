@@ -1,6 +1,6 @@
 import { Battle, clash, type Group } from "../shared/battle";
-import { CAP, HELI, RADIUS, TANK, type SendPct } from "../shared/constants";
-import type { GameMap } from "../shared/map";
+import { CAP, HELI, RADIUS, TANK, TURN_TICKS, type SendPct } from "../shared/constants";
+import { distance, travelTicks, type GameMap } from "../shared/map";
 
 /** How a slot looks on the map. */
 export interface Look {
@@ -22,6 +22,16 @@ export interface Scene {
   /** The pointer while dragging out an order (screen px), or null. */
   aim: { x: number; y: number } | null;
   pct: SendPct;
+  /** Turns: the orders planned so far, as the groups they'd send (they haven't left yet). */
+  plan?: Group[];
+  /** Turns: the tick the plan is made at, for when orders would land; -1 (or missing) in real time. */
+  turnTick?: number;
+}
+
+/** Turns: when units leaving at the start of a run that begins at `from` get there, in words. */
+export function landing(from: number, at: number): string {
+  const k = Math.max(1, Math.ceil((at - from) / TURN_TICKS));
+  return k === 1 ? "this turn" : k === 2 ? "next turn" : `in ${k} turns`;
 }
 
 const GROUND = "#1a2116";
@@ -105,6 +115,7 @@ export class Renderer {
     this.fit(battle.map);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.drawImage(this.layer, 0, 0, this.cssW, this.cssH);
+    this.drawPlan(scene);
     this.drawOrders(scene);
     for (const g of battle.groups) this.drawGroup(scene, g, now);
     battle.bases.forEach((_, b) => this.drawBase(scene, b));
@@ -185,6 +196,58 @@ export class Renderer {
     return owner >= 0 ? (scene.looks[owner]?.color ?? NEUTRAL) : NEUTRAL;
   }
 
+  /** Turns: the orders planned so far, as arrows, with what lands at each target and when. */
+  private drawPlan(scene: Scene): void {
+    const plan = scene.plan;
+    if (!plan?.length) return;
+    const { ctx } = this;
+    const map = scene.battle.map;
+    const mine = this.colorOf(scene, scene.me);
+    const at = new Map<number, { tanks: number; helis: number; first: number }>();
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const g of plan) {
+      const tank = g.kind === TANK;
+      const pts = g.path.map((b) => this.toScreen(map, b));
+      ctx.strokeStyle = tank ? mine : HELI_INK;
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = tank ? 3.5 : 2.5;
+      ctx.setLineDash(tank ? [10, 5] : [3, 5]);
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p)));
+      ctx.stroke();
+      // An arrowhead at the edge of the target.
+      const [ax, ay] = pts[pts.length - 2];
+      const [bx, by] = pts[pts.length - 1];
+      const to = g.path[g.path.length - 1];
+      const ang = Math.atan2(by - ay, bx - ax);
+      const r = this.radius(scene.battle.bases[to].level) + 6;
+      const tx = bx - Math.cos(ang) * r;
+      const ty = by - Math.sin(ang) * r;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(tx - Math.cos(ang - 0.45) * 11, ty - Math.sin(ang - 0.45) * 11);
+      ctx.lineTo(tx - Math.cos(ang + 0.45) * 11, ty - Math.sin(ang + 0.45) * 11);
+      ctx.closePath();
+      ctx.fill();
+      const sum = at.get(to) ?? { tanks: 0, helis: 0, first: Infinity };
+      if (tank) sum.tanks += g.n;
+      else sum.helis += g.n;
+      sum.first = Math.min(sum.first, g.at[g.at.length - 1]);
+      at.set(to, sum);
+    }
+    ctx.restore();
+    const from = scene.turnTick ?? scene.battle.n;
+    for (const [to, { tanks, helis, first }] of at) {
+      const [x, y] = this.toScreen(map, to);
+      const parts = [tanks ? `${tanks}` : "", helis ? `✈${helis}` : ""].filter(Boolean).join(" ");
+      label(ctx, `${parts} · ${landing(from, first)}`, x, y + this.radius(scene.battle.bases[to].level) + 16, 11, mine);
+    }
+  }
+
   /** Where the selection would go: road routes for tanks, straight lines for helicopters. */
   private drawOrders(scene: Scene): void {
     const { ctx } = this;
@@ -215,12 +278,15 @@ export class Renderer {
     }
     let tanks = 0;
     let helis = 0;
+    let first = Infinity;
     for (const s of selected) {
       if (s === target) continue;
       const base = battle.bases[s];
       const route = base.t > 0 ? battle.route(scene.me, s, target) : null;
       if (route) tanks += Battle.portion(base.t, scene.pct);
       helis += Battle.portion(base.h, scene.pct);
+      if (route) first = Math.min(first, route.ticks[route.ticks.length - 1]);
+      if (base.h > 0) first = Math.min(first, travelTicks(distance(map, s, target), HELI));
       if (route) {
         ctx.strokeStyle = mine;
         ctx.globalAlpha = 0.85;
@@ -273,7 +339,8 @@ export class Renderer {
       const enough = air.left > 0 || (tanks > 0 && clash(air.t, air.h, TANK, tanks).left > 0);
       verdict = enough ? " · enough" : " · too few";
     }
-    label(ctx, `→ ${parts.join(" ")}${verdict}`, tx, top, 12, verdict === " · too few" ? "#ffb26b" : "#fff");
+    const when = (scene.turnTick ?? -1) >= 0 && first < Infinity ? ` · lands ${landing(0, first)}` : "";
+    label(ctx, `→ ${parts.join(" ")}${verdict}${when}`, tx, top, 12, verdict === " · too few" ? "#ffb26b" : "#fff");
   }
 
   private groupAt(map: GameMap, g: Group, t: number): { x: number; y: number; dx: number; dy: number } {

@@ -37,6 +37,11 @@ export const sfx = {
     noiseBurst(0.6, 1200, 0.4);
     tone(300, 0.7, 0.2, "sawtooth", 50);
   },
+  /** Turns: time to plan. */
+  turn(): void {
+    tone(587, 0.1, 0.1, "triangle");
+    tone(880, 0.16, 0.1, "triangle", 880, 0.09);
+  },
   count(): void {
     tone(520, 0.12, 0.14, "square");
   },

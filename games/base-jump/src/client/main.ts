@@ -1,10 +1,28 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { $, $$, esc, toast } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { applyFrame, Battle, type BattleEvent, type Frame, type Snapshot } from "../shared/battle";
-import { MAX_LEVEL, PLAYER_COLORS, SEND_PCTS, TICKS_PER_SEC, TICK_MS, UPGRADE_COST, type SendPct } from "../shared/constants";
+import { applyFrame, Battle, planned, type BattleEvent, type Cmd, type Frame, type Group, type Snapshot } from "../shared/battle";
+import {
+  MAX_LEVEL,
+  PLAYER_COLORS,
+  SEND_PCTS,
+  TICKS_PER_SEC,
+  TICK_MS,
+  TURN_TICKS,
+  UPGRADE_COST,
+  type SendPct,
+} from "../shared/constants";
 import { BASES_PER_PLAYER, type MapSize } from "../shared/map";
-import { SETTING_CHOICES, type ClientMsg, type GameState, type PlayerState, type ServerMsg } from "../shared/protocol";
+import {
+  SETTING_CHOICES,
+  type ClientMsg,
+  type GameState,
+  type Mode,
+  type PlayerState,
+  type ServerMsg,
+  type Settings,
+  type TurnState,
+} from "../shared/protocol";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
 import { Controls } from "./input";
@@ -18,6 +36,7 @@ function clock(ticks: number): string {
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const NO_PLAN: Cmd[] = [];
 
 // ------------------------------------------------------------------ app state
 
@@ -40,6 +59,16 @@ const app = {
   sounded: "",
   stageWidth: 0,
   pct: 50 as SendPct,
+  /** Turns: my plan, as the server last sent it, and the turn it's for. */
+  plan: NO_PLAN,
+  planN: 0,
+  /** Turns: the last turn whose plan we've seen start, and when (performance.now). */
+  planSeen: 0,
+  planAt: 0,
+  /** Turns: when I was knocked out (performance.now), for the banner. */
+  outAt: 0,
+  /** Turns: the last countdown second beeped. */
+  beeped: "",
 };
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
@@ -56,11 +85,27 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     "<b>Tanks</b> drive along roads, through your own bases. <b>Helicopters</b> fly straight to anywhere.",
     "Like fights like first, and one tank is worth two helicopters. If any attackers survive, they take the base.",
     "Spend units to upgrade a base: it builds faster and holds more. Past its cap, it slowly loses units.",
-    "Take every base, or hold the most when time runs out.",
+    "<b>Real time</b>: orders go out as you give them. <b>Turns</b>: everyone plans at once, then watches the next 5 seconds play out.",
+    "Take every base, or hold the most when time (or the last turn) runs out.",
   ],
   colors: PLAYER_COLORS,
   settings: {
-    minutes: { label: "Time limit", fmt: (v: number) => (v ? `${v} minutes` : "None") },
+    mode: { label: "Mode", fmt: (v: Mode) => (v === "turns" ? "Turns: plan, then watch" : "Real time") },
+    minutes: {
+      label: "Time limit",
+      fmt: (v: number) => (v ? `${v} minutes` : "None"),
+      when: (s: Settings) => s.mode !== "turns",
+    },
+    turns: {
+      label: "Turn limit",
+      fmt: (v: number) => (v ? `${v} turns` : "None"),
+      when: (s: Settings) => s.mode === "turns",
+    },
+    plan: {
+      label: "Time to plan",
+      fmt: (v: number) => (v ? `${v} seconds a turn` : "No limit"),
+      when: (s: Settings) => s.mode === "turns",
+    },
     map: {
       label: "Map",
       fmt: (v: MapSize) => `${v[0].toUpperCase()}${v.slice(1)} · ${BASES_PER_PLAYER[v]} bases a player`,
@@ -82,10 +127,24 @@ const attract = new Attract($<HTMLCanvasElement>("attract"));
 
 const me = (s = shell.state): PlayerState | undefined => s?.players.find((p) => p.id === shell.me);
 const mine = (b: number) => !!app.battle && app.mySlot >= 0 && app.battle.bases[b]?.owner === app.mySlot;
+/** The round's turn, in turns; null in real time. */
+const turnOf = (s = shell.state): TurnState | null => (s?.phase === "playing" ? (s.turn ?? null) : null);
+/** Turns: planning now, with our copy of the battle where the plan is made. */
+const planning = () => {
+  const t = turnOf();
+  return t?.stage === "plan" && !!app.battle && app.battle.n === t.tick && !app.resyncing;
+};
 const inCommand = () => {
   const b = app.battle;
-  return shell.screen === "game" && shell.state?.phase === "playing" && !!b && b.playing && b.alive(app.mySlot);
+  if (shell.screen !== "game" || shell.state?.phase !== "playing" || !b || !b.alive(app.mySlot)) return false;
+  return turnOf() ? planning() : b.playing;
 };
+/** Turns: my plan for the turn being planned. */
+const myPlan = (): Cmd[] => {
+  const t = turnOf();
+  return t?.stage === "plan" && app.planN === t.n ? app.plan : NO_PLAN;
+};
+const iAmDone = () => !!turnOf()?.done.includes(shell.me ?? "");
 
 const controls = new Controls(canvas, {
   active: inCommand,
@@ -96,6 +155,28 @@ const controls = new Controls(canvas, {
   },
   changed: renderOrders,
 });
+
+// ------------------------------------------------------------------ the plan
+
+let planCache: { battle: Battle; n: number; plan: Cmd[]; shown: Battle; groups: Group[] } | null = null;
+
+/**
+ * What to show: our copy of the battle, or in turns, the battle as my plan would leave it (the
+ * units it sends taken out of their bases) and the groups it would send.
+ */
+function view(): { battle: Battle; groups: Group[] } | null {
+  const b = app.battle;
+  if (!b) return null;
+  const plan = myPlan();
+  if (!plan.length) return { battle: b, groups: [] };
+  const c = planCache;
+  if (c && c.battle === b && c.n === b.n && c.plan === plan) return { battle: c.shown, groups: c.groups };
+  const shown = planned(b, plan);
+  const groups = shown.groups.filter((g) => g.id >= b.nextId);
+  shown.groups = shown.groups.filter((g) => g.id < b.nextId);
+  planCache = { battle: b, n: b.n, plan, shown, groups };
+  return { battle: shown, groups };
+}
 
 // ------------------------------------------------------------------ shell hooks
 
@@ -109,6 +190,7 @@ function onReset(): void {
   app.battle = null;
   app.mySlot = -1;
   app.feed = [];
+  app.plan = NO_PLAN;
   controls.clear();
   $("results").hidden = true;
 }
@@ -123,6 +205,12 @@ function onMessage(msg: ServerMsg): void {
     case "f":
       onFrame(msg);
       break;
+    case "plan":
+      app.plan = msg.c;
+      app.planN = msg.n;
+      renderHud();
+      renderOrders();
+      break;
     case "error":
       sfx.deny();
       break;
@@ -135,16 +223,20 @@ function setBattle(snap: Snapshot | null): void {
   const prev = app.battle;
   const b = Battle.fromSnapshot(snap);
   if (!prev || prev.map.id !== b.map.id || b.n < prev.n) {
-    // A new round.
+    // A new round, or in turns, the same one picked up from an earlier turn after the server
+    // restarted: what happened since, and any plan for then, are gone.
     app.feed = [];
     renderFeed();
     controls.clear();
+    app.plan = NO_PLAN;
+    app.planSeen = 0;
   }
   app.battle = b;
   app.frameAt = performance.now();
   layoutStage();
   renderHud();
   renderScoreboard();
+  renderOrders();
 }
 
 function requestResync(): void {
@@ -163,10 +255,13 @@ function onFrame(f: Frame): void {
     console.warn(`The battle drifted from the server at tick ${f.n}; resyncing`);
     requestResync();
   }
-  for (const cmd of f.c ?? []) {
-    if (cmd[1] !== app.mySlot) continue;
-    if (cmd[0] === "s") sfx.send();
-    else sfx.upgrade();
+  // In turns, the whole plan goes out at once, at the start of the run (the run's own sound says so).
+  if (!turnOf()) {
+    for (const cmd of f.c ?? []) {
+      if (cmd[1] !== app.mySlot) continue;
+      if (cmd[0] === "s") sfx.send();
+      else sfx.upgrade();
+    }
   }
   for (const ev of events) onEvent(ev);
   controls.prune();
@@ -205,6 +300,7 @@ function onEvent(ev: BattleEvent): void {
     case "out":
       if (ev.slot === meSlot) {
         sfx.dead();
+        app.outAt = performance.now();
         pushFeed(`<b>You're out.</b> Watch the rest, or leave.`);
       } else {
         sfx.out();
@@ -231,7 +327,20 @@ function onState(s: GameState, prev: GameState | null): void {
   if (s.phase === "lobby") {
     app.battle = null;
     app.feed = [];
+    app.plan = NO_PLAN;
     controls.clear();
+  }
+  const turn = turnOf(s);
+  const was = prev ? turnOf(prev) : null;
+  const playing = app.mySlot >= 0 && !!app.battle?.alive(app.mySlot);
+  if (turn?.stage === "plan" && turn.n !== app.planSeen) {
+    // Time to plan: a fresh turn.
+    app.planSeen = turn.n;
+    app.planAt = performance.now();
+    if (playing) sfx.turn();
+  } else if (turn?.stage === "run" && was?.stage === "plan" && was.n === turn.n) {
+    controls.clear();
+    sfx.go();
   }
   if (prev?.phase === "playing" && s.phase === "results" && s.results?.winnerId === shell.me) sfx.win();
   if (s.phase !== "lobby") renderGame(s);
@@ -246,19 +355,25 @@ function frame(now: number): void {
     return;
   }
   const b = app.battle;
-  if (shell.screen !== "game" || !b) return;
+  const v = view();
+  if (shell.screen !== "game" || !b || !v) return;
+  const turn = turnOf();
   const scene: Scene = {
-    battle: b,
+    battle: v.battle,
     looks: app.looks,
     me: app.mySlot,
-    t: b.n + Math.min(1, (now - app.frameAt) / TICK_MS),
+    // Units glide between frames; while everyone plans, nothing moves.
+    t: turn?.stage === "plan" ? b.n : b.n + Math.min(1, (now - app.frameAt) / TICK_MS),
     selected: controls.selected,
     hover: controls.hover,
     aim: controls.aim,
     pct: app.pct,
+    plan: v.groups,
+    turnTick: turn ? turn.tick : -1,
   };
   renderer.draw(scene, now);
-  renderBanner();
+  renderClock();
+  renderBanner(now);
   ageFeed(now);
 }
 
@@ -273,24 +388,70 @@ function renderGame(s: GameState): void {
   renderResults(s);
 }
 
+/** Turns: the turn limit of the round, or 0 for none. */
+function turnLimit(b: Battle): number {
+  return b.end ? Math.round(b.end / TURN_TICKS) : 0;
+}
+
+/** The clock: the time left (or played) in real time; in turns, the time left to plan, or to watch. */
+function renderClock(): void {
+  const s = shell.state;
+  const b = app.battle;
+  if (!s || shell.screen !== "game") return;
+  const el = $("hud-clock");
+  const turn = turnOf(s);
+  let label = "Time";
+  let text: string;
+  let low = false;
+  if (b && turn) {
+    if (turn.stage === "plan") {
+      label = "Plan";
+      if (turn.deadline === null) {
+        text = "no limit";
+      } else {
+        const left = Math.max(0, turn.deadline - shell.serverNow());
+        text = clock(Math.ceil(left / 1000) * TICKS_PER_SEC);
+        low = left <= 5000;
+        // A beep a second for the last five, while there's still something to decide.
+        const secs = Math.ceil(left / 1000);
+        const key = `${turn.n}:${secs}`;
+        if (low && secs > 0 && key !== app.beeped && inCommand() && !iAmDone()) {
+          app.beeped = key;
+          sfx.count();
+        }
+      }
+    } else {
+      label = "Battle";
+      text = clock(turn.tick + TURN_TICKS - b.n);
+    }
+  } else if (b && s.phase === "playing") {
+    if (b.end) {
+      const left = b.end - Math.max(b.n, b.go);
+      text = clock(left);
+      low = left <= 30 * TICKS_PER_SEC;
+    } else {
+      text = clock(Math.max(0, b.n - b.go));
+    }
+  } else {
+    text = s.phase === "results" ? "Over" : "—";
+  }
+  if (el.textContent !== text) el.textContent = text;
+  el.classList.toggle("low", low);
+  const labelEl = $("hud-clock-label");
+  if (labelEl.textContent !== label) labelEl.textContent = label;
+}
+
 function renderHud(): void {
   const s = shell.state;
   const b = app.battle;
   if (!s || shell.screen !== "game") return;
   const mineP = me(s);
-  const clockEl = $("hud-clock");
-  if (b && s.phase === "playing") {
-    if (b.end) {
-      const left = b.end - Math.max(b.n, b.go);
-      clockEl.textContent = clock(left);
-      clockEl.classList.toggle("low", left <= 30 * TICKS_PER_SEC);
-    } else {
-      clockEl.textContent = clock(Math.max(0, b.n - b.go));
-      clockEl.classList.remove("low");
-    }
-  } else {
-    clockEl.textContent = s.phase === "results" ? "Over" : "—";
-    clockEl.classList.remove("low");
+  renderClock();
+  const turn = turnOf(s);
+  $("hud-turn-stat").hidden = !turn;
+  if (turn && b) {
+    const limit = turnLimit(b);
+    $("hud-turn").textContent = limit ? `${turn.n}/${limit}` : String(turn.n);
   }
 
   const slot = app.mySlot;
@@ -314,59 +475,120 @@ function renderHud(): void {
   if (main.innerHTML !== html) main.innerHTML = html;
 }
 
-/** The send size, the upgrade button and the line that says what the selection can do. */
+/** Why the selected base can't be upgraded now, or null if it can. */
+function upgradeBlock(b: Battle, sel: number[]): string | null {
+  if (sel.length !== 1) return sel.length ? "Select just one base to upgrade it" : "Select one of your bases to upgrade it";
+  const base = b.bases[sel[0]];
+  if (base.level >= MAX_LEVEL) return "This base is level 3, as big as it gets";
+  const cost = UPGRADE_COST[base.level + 1];
+  const have = base.t + base.h;
+  if (have < cost)
+    return `Upgrading to level ${base.level + 1} costs ${cost} units in the base. It has ${have}${myPlan().length ? " left after your orders" : ""}`;
+  return null;
+}
+
+/** The send size, the upgrade button, the turn's buttons and the line that says what the selection can do. */
 function renderOrders(): void {
   for (const btn of $$<HTMLButtonElement>("[data-pct]"))
     btn.setAttribute("aria-pressed", String(Number(btn.dataset.pct) === app.pct));
-  const b = app.battle;
+  const b = view()?.battle ?? null;
   const up = $<HTMLButtonElement>("upgrade");
   const all = $<HTMLButtonElement>("select-all");
+  const undo = $<HTMLButtonElement>("undo");
+  const done = $<HTMLButtonElement>("done");
   const tip = $("tip");
+  const turn = turnOf();
   const live = inCommand();
+  const plan = myPlan();
   all.disabled = !live;
+  undo.hidden = done.hidden = !turn;
+  $("turn-keys").hidden = !turn;
   $("orders").classList.toggle("idle", !live);
+  $("orders").classList.toggle("turns", !!turn);
+  undo.disabled = !live;
+  undo.setAttribute("aria-disabled", String(!plan.length));
+  undo.textContent = plan.length ? `Undo · ${plan.length}` : "Undo";
+  done.disabled = !live;
+  const finished = iAmDone();
+  done.setAttribute("aria-pressed", String(finished));
+  done.textContent = finished ? "✓ Done" : "Done";
+  done.title = finished
+    ? "Waiting for the others. Click to keep planning (Enter)"
+    : "Finished planning: the turn plays once everyone is (Enter)";
+
   if (!b || !live) {
     up.disabled = true;
+    up.removeAttribute("aria-disabled");
     up.textContent = "Upgrade";
     up.title = "Upgrade the selected base (U)";
-    tip.textContent = b && !b.playing && !b.over && app.mySlot >= 0 ? "Get ready…" : "";
+    tip.textContent = idleTip(b);
     return;
   }
+  up.disabled = false;
   const sel = controls.selected.filter(mine);
+  const why = upgradeBlock(b, sel);
+  up.setAttribute("aria-disabled", String(!!why));
+  up.title = why ?? "";
   if (sel.length === 1) {
     const base = b.bases[sel[0]];
     if (base.level >= MAX_LEVEL) {
-      up.disabled = true;
       up.textContent = "Level 3 (max)";
-      up.title = "This base is as big as it gets";
     } else {
       const cost = UPGRADE_COST[base.level + 1];
-      up.textContent = `Upgrade · ${cost}`;
-      up.disabled = base.t + base.h < cost;
-      up.title = up.disabled
-        ? `Needs ${cost} units in the base to reach level ${base.level + 1} (it has ${base.t + base.h})`
-        : `Spend ${cost} units: level ${base.level + 1} builds faster and holds more (U)`;
+      const have = base.t + base.h;
+      up.textContent = have < cost ? `Upgrade · ${have}/${cost}` : `Upgrade · ${cost}`;
+      if (!why) up.title = `Spend ${cost} units: level ${base.level + 1} builds faster and holds more (U)`;
     }
   } else {
-    up.disabled = true;
     up.textContent = "Upgrade";
-    up.title = sel.length ? "Select just one base to upgrade it" : "Select one of your bases to upgrade it (U)";
   }
   if (!sel.length) {
-    tip.textContent = "Drag from your base to a target";
+    if (!turn) tip.textContent = "Drag from your base to a target";
+    else if (finished) tip.textContent = waitingFor();
+    else if (plan.length) tip.textContent = `${plural(plan.length, "order")} planned · press Done when you're ready`;
+    else tip.textContent = "Drag from your base to a target to plan a move";
   } else {
     const tanks = sel.reduce((n, i) => n + b.bases[i].t, 0);
     const helis = sel.reduce((n, i) => n + b.bases[i].h, 0);
     const units =
-      [tanks ? plural(tanks, "tank") : "", helis ? plural(helis, "helicopter") : ""].filter(Boolean).join(", ") || "no units yet";
+      [tanks ? plural(tanks, "tank") : "", helis ? plural(helis, "helicopter") : ""].filter(Boolean).join(", ") ||
+      (turn ? "no units left to send" : "no units yet");
     tip.textContent = `${plural(sel.length, "base")} · ${units} · now pick a target`;
   }
+}
+
+/** The tip while you can't give orders: why not. */
+function idleTip(b: Battle | null): string {
+  const s = shell.state;
+  const turn = turnOf();
+  if (!b || s?.phase !== "playing") return "";
+  const inRound = app.mySlot >= 0 && b.inRound(app.mySlot);
+  if (!turn) return !b.playing && !b.over && inRound ? "Get ready…" : "";
+  if (turn.stage === "run") return `Turn ${turn.n} is playing out…`;
+  if (!inRound) return `The players are planning turn ${turn.n}`;
+  if (!b.alive(app.mySlot)) return "";
+  return "Catching up with the battle…";
+}
+
+/** Turns: who we're waiting for, once I'm done. */
+function waitingFor(): string {
+  const s = shell.state;
+  const turn = turnOf();
+  const b = app.battle;
+  if (!s || !turn || !b) return "";
+  const names = s.players
+    .filter((p) => !p.cpu && p.slot >= 0 && b.alive(p.slot) && !turn.done.includes(p.id) && p.id !== shell.me)
+    .map((p) => (p.connected ? p.name : `${p.name} (away)`));
+  return names.length ? `Done · waiting for ${names.join(", ")}` : "Done";
 }
 
 let lastBoardHtml = "";
 function renderScoreboard(): void {
   const b = app.battle;
-  if (!b || shell.screen !== "game") return;
+  const s = shell.state;
+  if (!b || !s || shell.screen !== "game") return;
+  const turn = turnOf(s);
+  const bySlot = new Map(s.players.filter((p) => p.slot >= 0).map((p) => [p.slot, p]));
   const rows = b.ranking().map((slot) => ({ slot, bases: b.basesOf(slot), units: b.unitsOf(slot) }));
   const lead = Math.max(1, ...rows.map((r) => r.bases));
   const html = rows
@@ -375,9 +597,17 @@ function renderScoreboard(): void {
       if (!look) return "";
       const you = slot === app.mySlot;
       const out = !b.alive(slot);
+      // Turns: who's still planning.
+      let status = "";
+      const p = bySlot.get(slot);
+      if (turn?.stage === "plan" && !out && p) {
+        if (p.cpu || turn.done.includes(p.id)) status = `<span class="tag tag-ready">ready</span>`;
+        else if (!p.connected) status = `<span class="tag">away</span>`;
+        else status = `<span class="tag">planning</span>`;
+      }
       return `<li class="${you ? "me" : ""} ${out ? "dead" : ""}">
         <span class="chip" style="background:${look.color}"></span>
-        <span class="pname">${esc(look.name)}${you ? ` <span class="tag tag-you">you</span>` : ""}</span>
+        <span class="pname">${esc(look.name)}${you ? ` <span class="tag tag-you">you</span>` : ""} ${status}</span>
         <span class="pct">${bases}</span>
         <span class="meta">${out ? "out" : `${plural(units, "unit")} · ${b.taken[slot]} taken`}</span>
         <span class="bar"><i style="width:${(bases / lead) * 100}%;background:${look.color}"></i></span>
@@ -404,8 +634,8 @@ function ageFeed(now: number): void {
   }
 }
 
-/** The big message over the map: the countdown, GO, being out, time's up. */
-function renderBanner(): void {
+/** The big message over the map: the countdown, GO, each turn, being out, time's up. */
+function renderBanner(now: number): void {
   const b = app.battle;
   const s = shell.state;
   let big = "";
@@ -413,16 +643,25 @@ function renderBanner(): void {
   let sound = "";
   if (b && s?.phase === "playing") {
     const inRound = app.mySlot >= 0 && b.inRound(app.mySlot);
-    if (b.n < b.go) {
+    const turn = turnOf(s);
+    const color = app.looks[app.mySlot]?.color ?? "#fff";
+    if (b.over) {
+      big = b.end && b.n >= b.end ? "TIME!" : "VICTORY";
+    } else if (turn) {
+      const alive = inRound && b.alive(app.mySlot);
+      if (inRound && !alive && now - app.outAt < 4000) {
+        big = "YOU'RE OUT";
+        sub = "Every one of your bases fell";
+      } else if (turn.stage === "plan" && alive && now - app.planAt < (turn.n === 1 ? 4000 : 1200)) {
+        big = `TURN ${turn.n}`;
+        if (turn.n === 1) sub = `You're <b style="color:${color}">this colour</b>. Plan your moves, then press Done`;
+        else if (turn.n === turnLimit(b)) sub = "The last turn";
+      }
+    } else if (b.n < b.go) {
       const n = Math.ceil((b.go - b.n) / TICKS_PER_SEC);
       big = String(n);
-      if (inRound) {
-        const color = app.looks[app.mySlot]?.color ?? "#fff";
-        sub = `You're <b style="color:${color}">this colour</b>. Drag from your base to a neighbour to take it`;
-      }
+      if (inRound) sub = `You're <b style="color:${color}">this colour</b>. Drag from your base to a neighbour to take it`;
       sound = `count${n}`;
-    } else if (b.over) {
-      big = b.end && b.n >= b.end ? "TIME!" : "VICTORY";
     } else if (b.n < b.go + TICKS_PER_SEC * 0.8 && inRound) {
       big = "GO!";
       sound = "go";
@@ -449,14 +688,15 @@ function renderResults(s: GameState): void {
   const open = s.phase === "results" && !!r;
   $("results").hidden = !open;
   if (!open || !r) return;
-  $("results-title").textContent = `Round ${r.round} results`;
+  $("results-title").textContent = r.turns ? `Round ${r.round} results · ${plural(r.turns, "turn")}` : `Round ${r.round} results`;
   const winner = r.standings.find((x) => x.id === r.winnerId);
   const you = winner?.id === shell.me;
+  const end = r.turns ? "when the last turn ends" : "when time runs out";
   $("results-winner").innerHTML = winner
     ? `<b style="color:${winner.color}">${esc(you ? "You" : winner.name)}</b> ${
         r.how === "conquest"
           ? (you ? "take" : "takes") + " every base!"
-          : `${you ? "hold" : "holds"} the most bases when time runs out: ${winner.bases} of ${r.total}.`
+          : `${you ? "hold" : "holds"} the most bases ${end}: ${winner.bases} of ${r.total}.`
       }`
     : "It's a draw: nobody holds more bases than everyone else.";
   $("results-rows").innerHTML = r.standings
@@ -489,8 +729,15 @@ function setPct(pct: SendPct): void {
 }
 
 function upgradeSelected(): void {
+  const b = view()?.battle;
+  if (!b || !inCommand()) return;
   const sel = controls.selected.filter(mine);
-  if (!inCommand() || sel.length !== 1) return;
+  const why = upgradeBlock(b, sel);
+  if (why) {
+    toast(why);
+    sfx.deny();
+    return;
+  }
   shell.send({ t: "up", b: sel[0] });
 }
 
@@ -498,6 +745,23 @@ function selectAll(): void {
   const b = app.battle;
   if (!b || !inCommand()) return;
   controls.selectAll(b.bases.map((_, i) => i).filter(mine));
+}
+
+/** Turns: take back the last order. */
+function undo(): void {
+  if (!inCommand()) return;
+  if (!myPlan().length) {
+    toast("There are no orders to take back");
+    sfx.deny();
+    return;
+  }
+  shell.send({ t: "undo" });
+}
+
+/** Turns: finished planning, or not after all. */
+function toggleDone(): void {
+  if (!inCommand()) return;
+  shell.send({ t: "done", done: !iAmDone() });
 }
 
 // ------------------------------------------------------------------ layout
@@ -535,14 +799,18 @@ function wire(): void {
       btn.blur();
     });
   }
-  $("upgrade").addEventListener("click", (e) => {
-    upgradeSelected();
-    (e.currentTarget as HTMLElement).blur();
-  });
-  $("select-all").addEventListener("click", (e) => {
-    selectAll();
-    (e.currentTarget as HTMLElement).blur();
-  });
+  const buttons: [string, () => void][] = [
+    ["upgrade", upgradeSelected],
+    ["select-all", selectAll],
+    ["undo", undo],
+    ["done", toggleDone],
+  ];
+  for (const [id, fn] of buttons) {
+    $(id).addEventListener("click", (e) => {
+      fn();
+      (e.currentTarget as HTMLElement).blur();
+    });
+  }
 
   window.addEventListener("keydown", (e) => {
     if (shell.screen !== "game" || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -555,6 +823,8 @@ function wire(): void {
     else if (k === "a") selectAll();
     else if (k === "u") upgradeSelected();
     else if (k === "escape") controls.clear();
+    else if (k === "backspace" && turnOf()) undo();
+    else if (k === "enter" && turnOf()) toggleDone();
     else return;
     e.preventDefault();
   });

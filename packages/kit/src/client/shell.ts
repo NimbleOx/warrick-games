@@ -13,6 +13,8 @@ export interface SettingLabel {
   label: string;
   /** How a value reads in the dropdown (and for players who aren't the host). */
   fmt: (v: never) => string;
+  /** Show the setting only when this is true of the current settings (one that only applies in one mode, say). */
+  when?: (settings: never) => boolean;
 }
 
 export interface ShellOptions<S extends BaseState, M extends AnyMsg> {
@@ -446,6 +448,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
 
     const settings = s.settings as Record<string, unknown>;
     $("lobby-settings").innerHTML = Object.entries(this.o.settings)
+      .filter(([, { when }]) => !when || (when as (v: unknown) => boolean)(settings))
       .map(([key, { label, fmt }]) => {
         const show = fmt as (v: unknown) => string;
         const value = settings[key];

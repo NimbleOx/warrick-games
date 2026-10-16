@@ -1,0 +1,160 @@
+/* The milestone 1 sandbox: a full-window canvas with a small HUD. The kit's styles come with the Shell (milestone 4). */
+:root {
+  --ink: #2a1a0e;
+  --ink-soft: rgb(42 26 14 / 0.65);
+  --card: rgb(255 246 230 / 0.82);
+  --accent: #ff7a1a;
+  --bg: #9fd3f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+#view {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hud {
+  position: fixed;
+  top: 12px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.hud-left,
+.hud-right {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.hud-right {
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: pre;
+  text-align: right;
+}
+
+.brand {
+  font-family: "Press Start 2P", monospace;
+  font-size: 12px;
+  color: var(--accent);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+
+.tag {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-shadow: none;
+}
+
+.clock {
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+
+.stats {
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.banner {
+  position: fixed;
+  top: 28%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+  max-width: calc(100% - 32px);
+}
+
+.banner small {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+.help {
+  position: fixed;
+  bottom: 10px;
+  left: 16px;
+  right: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+.help b {
+  color: var(--ink);
+}
+
+.tune {
+  position: fixed;
+  top: 110px;
+  right: 16px;
+  width: 280px;
+  max-height: calc(100% - 160px);
+  overflow: auto;
+  background: var(--card);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+}
+
+.tune label {
+  display: grid;
+  grid-template-columns: 1fr 52px;
+  gap: 2px 8px;
+  margin: 4px 0;
+}
+
+.tune input {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.tune button {
+  font: inherit;
+  margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .help {
+    display: none;
+  }
+
+  .clock {
+    font-size: 22px;
+  }
+}

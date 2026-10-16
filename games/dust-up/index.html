@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Dust Up · bike sandbox</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div class="hud">
+      <div class="hud-left">
+        <div class="brand">DUST UP <span class="tag">sandbox</span></div>
+        <div class="clock" id="clock">0:00.00</div>
+        <div class="stats"><span id="speed">0 km/h</span> · <span id="checkpoint">CP 0</span></div>
+      </div>
+      <div class="hud-right" id="perf"></div>
+    </div>
+    <div class="banner" id="banner" hidden></div>
+    <div class="help">
+      <b>↑/W</b> gas · <b>↓/S</b> brake · <b>←/A</b> lean back · <b>→/D</b> lean forward · <b>R</b> back to checkpoint ·
+      <b>Enter</b> restart
+    </div>
+    <div class="tune" id="tune" hidden></div>
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

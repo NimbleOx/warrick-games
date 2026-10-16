@@ -6,5 +6,7 @@
     "lib": ["ES2022"],
     "types": ["vitest"]
   },
-  "include": ["src/shared", "src/worker/lobby.ts", "test"]
+  "include": ["src/shared", "src/worker/lobby.ts", "test"],
+  // The room test imports the room, which needs the Workers runtime's types.
+  "exclude": ["test/room.test.ts", "test/stubs"]
 }

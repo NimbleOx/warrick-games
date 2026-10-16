@@ -36,4 +36,4 @@ Every game that uses the kit picks up a change on its next build, and only on it
 - Run `npm test` and `npm run typecheck` at the repo root, which cover every game, and play the games the change touches.
 - Redeploy each game the change affects.
 
-Games on the kit: Stack Attack, Crater Club. The others still have their own copies of this code and are moving over one at a time.
+Every game in the repo is built on the kit, so any change here needs every game's tests to pass.

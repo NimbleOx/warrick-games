@@ -54,10 +54,10 @@ export interface Timer {
 export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
   /**
-   * The map never changes during a game, so state messages leave it out (null). It comes in
-   * the welcome and with the state that starts the game; `mapId` says which map is current.
+   * The current game's map (its `id`); 0 in the lobby. The map itself never changes during a
+   * game, so it isn't in the state: it comes in the welcome, and in a "map" message when a game
+   * starts or when a client asks for it.
    */
-  map: HexMap | null;
   mapId: number;
   /** Each territory's owner (a seat) and dice. */
   owner: number[];
@@ -71,10 +71,15 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   attackNo: number;
   /** Territories taken this turn, for the turn's line in the log. */
   turnCaptures: number;
-  /** When the current turn ends by itself, as shown on the clock. */
+  /**
+   * The kit's turn clock (`@warrick/kit/worker/turns`). When the current turn ends by itself, as
+   * shown on the clock: the thinking clock, or sooner while the player is away.
+   */
   turnDeadline: number | null;
   /** The thinking clock of the human whose turn it is, kept while they're away. */
   clockEnd: number | null;
+  /** This turn's 5 seconds for coming back with the clock nearly out have been used. */
+  clockTopUp?: boolean;
   timer: Timer | null;
   /** Player ids in the order they were knocked out. */
   knockedOut: string[];
@@ -107,11 +112,18 @@ export type ClientMsg =
   | { t: "end" }
   | { t: "takeover"; id: string }
   | { t: "fast"; on: boolean }
-  /** "I don't have this game's map": the server answers with the full state. */
+  /** "I don't have this game's map": the server answers with a "map" message. */
   | { t: "sync" };
+
+/** What the welcome carries besides the state: the current game's map (null in the lobby). */
+export interface WelcomeExtra {
+  map: HexMap | null;
+}
 
 export type ServerMsg =
   | RoomMsg<GameState>
+  /** The map of a game that's starting (before its first state), or the answer to "sync". */
+  | { t: "map"; map: HexMap }
   /** An attack's rolls and result. The state after it follows in the next state message. */
   | { t: "attack"; attack: AttackEvent; now: number }
   /** Where a player's end-of-turn dice landed. The state after it follows. */

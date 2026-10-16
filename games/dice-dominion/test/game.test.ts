@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { HexMap } from "../src/shared/map";
 import type { GameState, ServerMsg } from "../src/shared/protocol";
 import { largestGroup, seatBonus, sum, territoryCount } from "../src/shared/rules";
 import { Game, newGameState } from "../src/worker/game";
@@ -8,10 +9,14 @@ function setup() {
   const connected = new Set<string>();
   const s = newGameState("ABCDE", now);
   const io = { now: () => now, isConnected: (id: string) => connected.has(id) };
-  const game = () => new Game(s, io);
+  // The map is the game's live state, which the room hands from one action's Game to the next.
+  let last: Game | null = null;
+  const game = () => (last = new Game(s, io, last?.live ?? null));
   return {
     s,
     game,
+    /** The current game's map. */
+    map: () => last!.live!,
     connected,
     now: () => now,
     advance(ms: number) {
@@ -55,11 +60,11 @@ const turnId = (s: GameState) => s.order[s.turn];
 const seatOf = (s: GameState, id: string) => s.order.indexOf(id);
 
 /** Give `id` an attack it can make: its first territory with an enemy neighbour gets 8 dice. */
-function armAttack(s: GameState, id: string): [number, number] {
+function armAttack(s: GameState, map: HexMap, id: string): [number, number] {
   const seat = seatOf(s, id);
   for (let t = 0; t < s.owner.length; t++) {
     if (s.owner[t] !== seat) continue;
-    const enemy = s.map!.adj[t].find((u) => s.owner[u] !== seat);
+    const enemy = map.adj[t].find((u) => s.owner[u] !== seat);
     if (enemy === undefined) continue;
     s.dice[t] = 8;
     return [t, enemy];
@@ -87,11 +92,11 @@ describe("starting", () => {
       expect(territoryCount(s.owner, seat)).toBe(4);
       expect(sum(s.dice.filter((_, i) => s.owner[i] === seat))).toBe(4 + 8 + bonus[seat]);
     }
-    // The state that starts the game carries the map; the lobby is closed.
+    // The map goes out with the start (the room's state message follows); the lobby is closed.
     const msgs = wire(g.outbox);
-    const state = msgs.find((m) => m.t === "state") as Extract<ServerMsg, { t: "state" }>;
-    expect(state.state.map?.adj).toHaveLength(12);
-    expect(state.state.mapId).toBe(s.mapId);
+    const map = msgs.find((m) => m.t === "map") as Extract<ServerMsg, { t: "map" }>;
+    expect(map.map.adj).toHaveLength(12);
+    expect(map.map.id).toBe(s.mapId);
     expect(() => t.game().addCpu(a, "easy")).toThrow("Wait for the round to end");
   });
 
@@ -114,13 +119,13 @@ describe("turns", () => {
     const s = t.s;
     const me = turnId(s);
     const other = me === a ? b : a;
-    const [from, to] = armAttack(s, me);
+    const [from, to] = armAttack(s, t.map(), me);
     expect(() => t.game().attack(other, from, to)).toThrow(/turn/);
     const mine = s.owner.findIndex((o, i) => o === seatOf(s, me) && i !== from);
     s.dice[mine] = 1;
     expect(() => t.game().attack(me, mine, to)).toThrow("A territory needs 2 or more dice to attack");
     expect(() => t.game().attack(me, from, from)).toThrow("You can't attack your own territory");
-    const far = s.owner.findIndex((o, i) => o !== seatOf(s, me) && !s.map!.adj[from].includes(i));
+    const far = s.owner.findIndex((o, i) => o !== seatOf(s, me) && !t.map().adj[from].includes(i));
     if (far >= 0) expect(() => t.game().attack(me, from, far)).toThrow("You can only attack a neighbouring territory");
 
     const g = t.game();
@@ -132,9 +137,9 @@ describe("turns", () => {
     expect(ev.def.length).toBeGreaterThanOrEqual(1);
     expect(s.dice[from]).toBe(1);
     expect(s.owner[to]).toBe(ev.won ? seatOf(s, me) : seatOf(s, other));
-    // The state after it comes next, without the map.
-    expect(msgs[1].t).toBe("state");
-    expect((msgs[1] as Extract<ServerMsg, { t: "state" }>).state.map).toBeNull();
+    // The room's state message comes next.
+    expect(msgs).toHaveLength(1);
+    expect(g.dirty).toBe(true);
   });
 
   it("the clock restarts after each attack, and running out ends the turn with dice", () => {
@@ -146,13 +151,13 @@ describe("turns", () => {
     const me = turnId(s);
     expect(s.turnDeadline).toBe(t.now() + 15_000);
     t.advance(10_000);
-    const [from, to] = armAttack(s, me);
+    const [from, to] = armAttack(s, t.map(), me);
     t.game().attack(me, from, to);
     expect(s.turnDeadline).toBe(t.now() + 15_000);
 
     const seat = seatOf(s, me);
     const before = sum(s.dice.filter((_, i) => s.owner[i] === seat));
-    const gain = largestGroup(s.map!.adj, s.owner, seat);
+    const gain = largestGroup(t.map().adj, s.owner, seat);
     const msgs = t.tick();
     const drop = msgs.find((m) => m.t === "drop") as Extract<ServerMsg, { t: "drop" }>;
     expect(drop.drop.gain).toBe(gain);
@@ -192,7 +197,7 @@ describe("turns", () => {
     while (turnId(s) !== a) t.tick();
     const seat = seatOf(s, a);
     s.owner.forEach((o, i) => o === seat && (s.dice[i] = 8));
-    const gain = largestGroup(s.map!.adj, s.owner, seat);
+    const gain = largestGroup(t.map().adj, s.owner, seat);
     t.game().endTurn(a);
     const me = s.players.find((p) => p.id === a)!;
     expect(me.reserve).toBe(gain);
@@ -203,7 +208,7 @@ describe("turns", () => {
     s.owner.forEach((o, i) => o === seat && (s.dice[i] = 8));
     s.dice[spot] = 1;
     me.reserve = 10;
-    const gain2 = largestGroup(s.map!.adj, s.owner, seat);
+    const gain2 = largestGroup(t.map().adj, s.owner, seat);
     const g = t.game();
     g.endTurn(a);
     const drop = (wire(g.outbox).find((m) => m.t === "drop") as Extract<ServerMsg, { t: "drop" }>).drop;
@@ -285,7 +290,7 @@ describe("a whole game", () => {
     // Back to the lobby: the board is cleared for the next game.
     t.game().backToLobby(host);
     expect(s.phase).toBe("lobby");
-    expect(s.map).toBeNull();
+    expect(t.game().live).toBeNull();
     expect(s.timer).toBeNull();
     expect(s.players.every((p) => p.seat === -1 && p.reserve === 0)).toBe(true);
   });
@@ -297,7 +302,7 @@ describe("a whole game", () => {
     t.game().start(a);
     const g = t.game();
     g.sync(a);
-    const msg = wire(g.direct.map((d) => d.msg))[0] as Extract<ServerMsg, { t: "state" }>;
-    expect(msg.state.map?.id).toBe(t.s.mapId);
+    const msg = wire(g.direct.map((d) => d.msg))[0] as Extract<ServerMsg, { t: "map" }>;
+    expect(msg.map.id).toBe(t.s.mapId);
   });
 });

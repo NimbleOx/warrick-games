@@ -1,0 +1,269 @@
+@import "@warrick/kit/style.css";
+
+/* Box Office's colours: ticket red and marquee gold. */
+:root {
+  --accent: #ff5d6c;
+  --accent-edge: #ff9aa3;
+  --accent-ink: #2a0508;
+  --accent-hi: #ff7683;
+  --accent-hi-edge: #ffc4ca;
+  --logo: var(--accent-2);
+  --logo-shade: #c2272f;
+  --logo-deep: #4a0a10;
+  --logo-glow: rgb(255 210 63 / 0.25);
+  --code-shade: #8f1d27;
+}
+
+/* The home screen's demo board is drawn crisp at full size, not scaled pixel art. */
+.attract {
+  image-rendering: auto;
+}
+
+.size-hint {
+  margin: -6px 0 14px;
+}
+
+/* ------------------------------------------------------------ game */
+
+.screen-game {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-topbar {
+  padding: 6px 16px;
+}
+
+.game-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+  padding: 12px 16px 16px;
+  align-items: start;
+}
+
+.stage-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.hud {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  min-height: 44px;
+}
+
+.hud-turn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.hud-turn .who {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-turn .clock {
+  margin-left: auto;
+  font-family: var(--pixel);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hud-turn .clock.low {
+  color: var(--danger);
+}
+
+.hud-left {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.scores {
+  width: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.scores li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 4px;
+  background: var(--panel-2);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  min-width: 0;
+  max-width: 190px;
+}
+
+.scores li.turn {
+  border-color: var(--accent-2);
+}
+
+.scores li.you .pname {
+  color: var(--accent-2);
+}
+
+.scores li.offline {
+  opacity: 0.55;
+}
+
+.scores .chip {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.scores b {
+  font-family: var(--pixel);
+  font-size: 11px;
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+.stage {
+  position: relative;
+  line-height: 0;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(255 93 108 / 0.07), transparent 70%),
+    var(--panel);
+}
+
+.stage canvas {
+  display: block;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.banner {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  transform: translate(-50%, -50%);
+  padding: 10px 18px;
+  background: rgb(8 10 20 / 0.88);
+  border: 2px solid rgb(255 210 63 / 0.7);
+  border-radius: 6px;
+  font-family: var(--pixel);
+  font-size: clamp(12px, 2.4vw, 18px);
+  line-height: 1.4;
+  color: var(--accent-2);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: pop 0.25s ease-out;
+}
+
+@keyframes pop {
+  from {
+    transform: translate(-50%, -50%) scale(0.85);
+    opacity: 0;
+  }
+}
+
+.actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+}
+
+.actions .hint {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+}
+
+.side-col {
+  display: grid;
+  gap: 14px;
+}
+
+.side-col .log {
+  height: 340px;
+}
+
+.results-modal .modal-foot {
+  flex-wrap: wrap;
+}
+
+.results-modal .modal-foot .hint {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 980px) {
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .side-col .log {
+    height: 160px;
+  }
+}
+
+@media (max-width: 760px) {
+  .game-layout {
+    padding: 8px;
+    gap: 10px;
+  }
+
+  .stage-col {
+    gap: 8px;
+  }
+
+  .hud {
+    padding: 6px 10px;
+    min-height: 40px;
+  }
+
+  .actions .hint {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 520px) {
+  .hud .aside {
+    display: none;
+  }
+
+  /* With a crowd, the chips and counts are enough. */
+  .scores.crowded .pname {
+    display: none;
+  }
+
+  .scores.crowded li {
+    padding-right: 8px;
+  }
+}

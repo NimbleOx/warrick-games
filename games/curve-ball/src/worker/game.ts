@@ -1,29 +1,23 @@
+import type { BasePlayer } from "@warrick/kit/shared/protocol";
+import { randomSeed, shuffle, type Rng } from "@warrick/kit/shared/rng";
+import { GameError, Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
 import { cpuSteer } from "../shared/ai";
-import { COUNTDOWN_MS, MAX_PLAYERS, PLAYER_COLORS, ROUNDOVER_MS, WIN_LEAD } from "../shared/constants";
+import { COUNTDOWN_MS, ROUNDOVER_MS, WIN_LEAD } from "../shared/constants";
 import {
   CHECKSUM_EVERY,
   DEFAULT_SETTINGS,
   SETTING_CHOICES,
   autoTarget,
   rankPlayers,
-  type CpuLevel,
   type FrameMsg,
   type GameState,
-  type LogEntry,
   type PlayerState,
   type RoundSnapshot,
   type ServerMsg,
-  type Settings,
 } from "../shared/protocol";
-import { randomSeed, shuffle, type Rng } from "../shared/rng";
 import { Round, configFor, isSteer, type Death, type Input, type Steer } from "../shared/sim";
 
-export class GameError extends Error {}
-
-export interface GameIO {
-  now(): number;
-  isConnected(playerId: string): boolean;
-}
+export { GameError, type GameIO } from "@warrick/kit/worker/lobby";
 
 /** The round in progress. Memory only: it changes every tick, far too often to persist. */
 export interface Live {
@@ -37,33 +31,19 @@ export interface Live {
 }
 
 const CPU_NAMES = ["Bert", "Ziggy", "Moe", "Pixel", "Noodle", "Squiggle", "Loopy", "Zag", "Wobble", "Spud"];
+/** Ticks per loop tick once only CPUs are left in a round. */
+const FAST_FORWARD = 2;
 
 export function newGameState(code: string, now: number): GameState {
   return {
-    code,
-    createdAt: now,
-    lastActive: now,
-    phase: "lobby",
-    hostId: "",
-    settings: { ...DEFAULT_SETTINGS },
-    players: [],
+    ...baseState(code, now, DEFAULT_SETTINGS),
     round: 0,
     target: 0,
     roundWinnerId: null,
     winnerId: null,
     phaseDeadline: null,
     timer: null,
-    nextPlayerNum: 1,
   };
-}
-
-export function cleanName(raw: unknown, fallback: string): string {
-  const s = String(raw ?? "")
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 16);
-  return s || fallback;
 }
 
 export function snapshot(live: Live): RoundSnapshot {
@@ -79,70 +59,35 @@ export function snapshot(live: Live): RoundSnapshot {
 }
 
 /**
- * All the game rules, as plain state transitions. The Durable Object owns the
- * sockets, storage, alarm and tick loop; this class only changes `s` and
- * `live`, and queues messages.
+ * Curve Ball's rules on top of the kit's lobby: rounds, steering, the tick, scoring and the
+ * timers between rounds. The lobby is only open in the "lobby" phase, and a finished match sits
+ * in "gameover" until the host takes everyone back.
  */
-export class Game {
-  /** Messages to broadcast once the current action is done. */
-  outbox: ServerMsg[] = [];
-  logs: LogEntry[] = [];
-  /** The stored state changed: broadcast it and save it. */
-  dirty = false;
+export class Game extends Lobby<GameState, ServerMsg, Live> {
+  protected readonly choices = SETTING_CHOICES;
+  protected readonly cpuNames = CPU_NAMES;
+  protected readonly finishedPhase = "gameover";
 
   constructor(
-    public s: GameState,
-    private io: GameIO,
-    public live: Live | null,
+    s: GameState,
+    io: GameIO,
+    live: Live | null,
     private rng: Rng,
-  ) {}
+  ) {
+    super(s, io, live);
+  }
+
+  protected betweenRounds(): boolean {
+    return this.s.phase === "lobby";
+  }
+
+  protected createPlayer(base: BasePlayer): PlayerState {
+    return { ...base, score: 0, wins: 0 };
+  }
 
   // ---------------------------------------------------------------- players
 
-  player(id: string): PlayerState | undefined {
-    return this.s.players.find((p) => p.id === id);
-  }
-
-  get participants(): PlayerState[] {
-    return this.s.players.filter((p) => !p.spectator);
-  }
-
-  addHuman(rawName: string): PlayerState {
-    const id = `p${this.s.nextPlayerNum++}`;
-    const name = cleanName(rawName, `Player ${id.slice(1)}`);
-    const spectator = this.s.phase !== "lobby" || this.participants.length >= MAX_PLAYERS;
-    const p = this.newPlayer(id, name, null, spectator);
-    this.s.players.push(p);
-    if (!this.s.hostId || !this.player(this.s.hostId)) this.s.hostId = id;
-    this.event(spectator ? `${name} is watching` : `${name} joined`);
-    this.touch();
-    return p;
-  }
-
-  addCpu(byId: string, level: CpuLevel): void {
-    this.requireHost(byId);
-    this.requirePhase("lobby");
-    if (!["easy", "normal", "hard"].includes(level)) throw new GameError("Unknown CPU level");
-    if (this.participants.length >= MAX_PLAYERS) throw new GameError(`The game is full (${MAX_PLAYERS} players)`);
-    const used = new Set(this.s.players.map((p) => p.name));
-    const name = `CPU ${CPU_NAMES.find((n) => !used.has(`CPU ${n}`)) ?? this.s.nextPlayerNum}`;
-    const p = this.newPlayer(`p${this.s.nextPlayerNum++}`, name, level, false);
-    this.s.players.push(p);
-    this.event(`${name} (${level}) joined`);
-    this.touch();
-  }
-
-  /** Returns true if a human was removed, so the caller can close their sockets. */
-  kick(byId: string, targetId: string): boolean {
-    this.requireHost(byId);
-    this.requirePhase("lobby");
-    const target = this.player(targetId);
-    if (!target || targetId === byId) return false;
-    this.removePlayer(targetId);
-    this.event(`${target.name} was removed`);
-    return !target.cpu;
-  }
-
+  /** Mid-match, a leaving player keeps their place in the scores. */
   leave(id: string): void {
     const p = this.player(id);
     if (!p) return;
@@ -156,55 +101,12 @@ export class Game {
   }
 
   setConnected(id: string, connected: boolean): void {
-    const p = this.player(id);
-    if (!p || p.cpu || p.connected === connected) return;
-    p.connected = connected;
+    super.setConnected(id, connected);
     // Nobody is holding the key any more.
     if (!connected) {
       const slot = this.slotOf(id);
       if (slot >= 0) this.setSteer(slot, 0);
     }
-    this.touch();
-  }
-
-  rename(id: string, rawName: string): void {
-    const p = this.player(id);
-    if (!p || this.s.phase !== "lobby") return;
-    const name = cleanName(rawName, p.name);
-    if (name === p.name) return;
-    p.name = name;
-    this.touch();
-  }
-
-  setColor(id: string, color: string): void {
-    this.requirePhase("lobby");
-    const p = this.player(id);
-    if (!p || !(PLAYER_COLORS as readonly string[]).includes(color)) return;
-    const taken = this.s.players.find((o) => o.id !== id && o.color === color);
-    if (taken) taken.color = p.color;
-    p.color = color;
-    this.touch();
-  }
-
-  updateSettings(byId: string, patch: Partial<Settings>): void {
-    this.requireHost(byId);
-    this.requirePhase("lobby");
-    const next = { ...this.s.settings };
-    for (const key of Object.keys(SETTING_CHOICES) as (keyof Settings)[]) {
-      const v = patch[key];
-      if (v !== undefined && (SETTING_CHOICES[key] as readonly unknown[]).includes(v)) {
-        (next as Record<string, unknown>)[key] = v;
-      }
-    }
-    this.s.settings = next;
-    this.touch();
-  }
-
-  chat(id: string, raw: string): void {
-    const p = this.player(id);
-    const text = String(raw ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 200);
-    if (!p || !text) return;
-    this.logs.push({ at: this.io.now(), kind: "chat", from: p.name, color: p.color, text });
   }
 
   // ---------------------------------------------------------------- match flow
@@ -226,21 +128,14 @@ export class Game {
     this.startRound();
   }
 
-  backToLobby(byId: string): void {
-    this.requireHost(byId);
-    this.requirePhase("gameover");
+  protected resetForLobby(): void {
     const s = this.s;
-    s.phase = "lobby";
     s.round = 0;
     s.roundWinnerId = null;
     s.winnerId = null;
     s.phaseDeadline = null;
     s.timer = null;
     this.live = null;
-    for (const p of s.players) {
-      if (p.spectator && this.participants.length < MAX_PLAYERS) p.spectator = false;
-    }
-    this.touch();
   }
 
   /**
@@ -300,8 +195,14 @@ export class Game {
     return live.round.heads.every((h) => !h.alive || !!this.player(h.id)?.cpu);
   }
 
-  /** One step of the round. The room calls this on every tick while the phase is "playing". */
+  /** The room calls this on every tick while the phase is "playing". Once only CPUs are left, it plays at double speed. */
   tick(): void {
+    const steps = this.onlyCpusLeft ? FAST_FORWARD : 1;
+    for (let i = 0; i < steps; i++) this.step();
+  }
+
+  /** One step of the round. */
+  private step(): void {
     const live = this.live;
     if (this.s.phase !== "playing" || !live) return;
     const { round } = live;
@@ -387,6 +288,8 @@ export class Game {
   // ---------------------------------------------------------------- timers
 
   onTimer(): void {
+    // The room restarted mid-round and lost it: start it over first.
+    if (!this.live) this.recover();
     const s = this.s;
     const t = s.timer;
     if (!t || this.io.now() < t.at - 25) return;
@@ -426,48 +329,5 @@ export class Game {
       }
     }
     live.inputs.push([tick, slot, steer]);
-  }
-
-  private newPlayer(id: string, name: string, cpu: CpuLevel | null, spectator: boolean): PlayerState {
-    const used = new Set(this.s.players.map((p) => p.color));
-    const color = PLAYER_COLORS.find((c) => !used.has(c)) ?? PLAYER_COLORS[this.s.players.length % PLAYER_COLORS.length];
-    return { id, name, color, cpu, connected: true, spectator, score: 0, wins: 0 };
-  }
-
-  private removePlayer(id: string): void {
-    const s = this.s;
-    s.players = s.players.filter((p) => p.id !== id);
-    if (s.hostId === id) {
-      const next = s.players.find((p) => !p.cpu && p.connected) ?? s.players.find((p) => !p.cpu);
-      s.hostId = next?.id ?? "";
-    }
-    this.touch();
-  }
-
-  /** Host-only actions. If the host has dropped, whoever acts takes over. */
-  private requireHost(id: string): void {
-    const s = this.s;
-    if (s.hostId === id) return;
-    const host = this.player(s.hostId);
-    const me = this.player(id);
-    if (me && !me.cpu && (!host || !this.io.isConnected(host.id))) {
-      s.hostId = id;
-      this.event(`${me.name} is now the host`);
-      return;
-    }
-    throw new GameError("Only the host can do that");
-  }
-
-  private requirePhase(phase: GameState["phase"]): void {
-    if (this.s.phase !== phase) throw new GameError("Not right now");
-  }
-
-  private event(text: string): void {
-    this.logs.push({ at: this.io.now(), kind: "event", text });
-  }
-
-  private touch(): void {
-    this.dirty = true;
-    this.s.lastActive = this.io.now();
   }
 }

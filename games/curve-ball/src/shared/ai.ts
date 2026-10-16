@@ -1,7 +1,7 @@
 import { HEADINGS, SUBSTEPS } from "./constants";
 import { COS, SIN, wrapHeading } from "./headings";
 import type { CpuLevel } from "./protocol";
-import type { Rng } from "./rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 import type { Round, Steer } from "./sim";
 
 interface Style {

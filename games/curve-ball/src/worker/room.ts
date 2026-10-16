@@ -1,349 +1,62 @@
-import { DurableObject } from "cloudflare:workers";
+import { mulberry32, randomSeed } from "@warrick/kit/shared/rng";
+import type { GameIO } from "@warrick/kit/worker/lobby";
+import { Room } from "@warrick/kit/worker/room";
 import { TICK_MS } from "../shared/constants";
-import {
-  CLOSE_KICKED,
-  CLOSE_NOT_FOUND,
-  type ClientMsg,
-  type GameState,
-  type LogEntry,
-  type ServerMsg,
-} from "../shared/protocol";
-import { mulberry32, randomSeed } from "../shared/rng";
-import { Game, GameError, newGameState, snapshot, type Live } from "./game";
-
-interface Attachment {
-  pid: string | null;
-}
-
-/** Abandoned games are deleted after this long with nobody connected. */
-const GC_MS = 12 * 60 * 60 * 1000;
-const LOG_MAX = 80;
-const MAX_MSG_BYTES = 4096;
-/** Ticks per loop tick once only CPUs are left in a round. */
-const FAST_FORWARD = 2;
-
-export interface RoomInfo {
-  code: string;
-  phase: GameState["phase"];
-  players: number;
-}
+import type { ClientMsg, GameState, ServerMsg } from "../shared/protocol";
+import { Game, newGameState, snapshot, type Live } from "./game";
 
 /**
- * One Durable Object per game code. Holds the game state, the players' secret
- * tokens and the chat/event log, and talks to browsers over hibernatable
- * WebSockets. The countdown, the pause between rounds and cleanup run off a
- * single alarm. While a round is being played, a timer loop steps it 30 times
- * a second and broadcasts each tick. The loop keeps the object awake, so it
- * stops when the round ends or nobody is connected, letting idle games hibernate.
+ * One Durable Object per game code (the kit's Room does sockets, storage and cleanup). The
+ * countdown and the pause between rounds run off its alarm. While a round is being played, the
+ * tick loop steps it 30 times a second and broadcasts each tick. The loop keeps the object
+ * awake, so it stops when the round ends or nobody is connected, letting idle games hibernate.
  */
-export class GameRoom extends DurableObject<Env> {
-  private state: GameState | null = null;
-  private tokens: Record<string, string> = {};
-  private log: LogEntry[] = [];
-  /** The round in progress. Memory only; see `Game.recover()`. */
-  private live: Live | null = null;
+export class GameRoom extends Room<GameState, Game, Live> {
+  protected readonly tickMs = TICK_MS;
   private rng = mulberry32(randomSeed());
-  private loop: ReturnType<typeof setTimeout> | null = null;
-  private loopStart = 0;
-  private loopTicks = 0;
+  /** The socket whose message is being handled. */
+  private current: WebSocket | null = null;
 
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
-    ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get<unknown>(["state", "tokens", "log"]);
-      this.state = (stored.get("state") as GameState | undefined) ?? null;
-      this.tokens = (stored.get("tokens") as Record<string, string> | undefined) ?? {};
-      this.log = (stored.get("log") as LogEntry[] | undefined) ?? [];
-    });
+  protected newState(code: string, now: number): GameState {
+    return newGameState(code, now);
   }
 
-  /** Claim this code for a new game. Returns false if it's already taken. */
-  async init(code: string): Promise<boolean> {
-    if (this.state) return false;
-    this.state = newGameState(code, Date.now());
-    await this.save();
-    await this.reschedule();
-    return true;
+  protected makeGame(state: GameState, io: GameIO, live: Live | null): Game {
+    return new Game(state, io, live, this.rng);
   }
 
-  async info(): Promise<RoomInfo | null> {
-    const s = this.state;
-    if (!s) return null;
-    return { code: s.code, phase: s.phase, players: s.players.filter((p) => !p.spectator).length };
+  protected timerAt(state: GameState): number | null {
+    return state.timer?.at ?? null;
   }
 
-  async fetch(request: Request): Promise<Response> {
-    if (!this.state) return new Response("Game not found", { status: 404 });
-    if (request.headers.get("Upgrade") !== "websocket") {
-      return new Response("Expected a WebSocket", { status: 426 });
-    }
-    const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ pid: null } satisfies Attachment);
-    return new Response(null, { status: 101, webSocket: client });
+  protected wantsLoop(state: GameState): boolean {
+    return state.phase === "playing" && !!this.live;
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    if (!this.state) {
-      ws.close(CLOSE_NOT_FOUND, "Game not found");
-      return;
-    }
-    if (typeof raw !== "string" || raw.length > MAX_MSG_BYTES) return;
-    let msg: ClientMsg;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
+    this.current = ws;
+    await super.webSocketMessage(ws, raw);
+  }
 
-    const pid = (ws.deserializeAttachment() as Attachment | null)?.pid ?? null;
-    // Steering is by far the most common message: handle it without the bookkeeping below.
+  /**
+   * A round that stopped ticking (nobody else was here, or the room restarted) picks back up.
+   * One that's still ticking for the others carries on.
+   */
+  protected afterHello(game: Game): void {
+    const ticking = game.s.phase === "playing" && !!game.live && this.connectedIds(this.current ?? undefined).size > 0;
+    if (!ticking) game.recover();
+  }
+
+  protected welcome(game: Game): object {
+    return { round: game.live ? snapshot(game.live) : null };
+  }
+
+  protected handle(ws: WebSocket, game: Game, pid: string, raw: { t: string }): void {
+    const msg = raw as ClientMsg;
     if (msg.t === "steer") {
-      if (!pid) return;
-      const game = this.game();
       game.steer(pid, msg.s);
-      return;
-    }
-
-    const game = this.game();
-    try {
-      if (msg.t === "hello") {
-        this.hello(ws, game, msg.token, msg.name);
-      } else if (msg.t === "ping") {
-        // Besides measuring clock skew, this tops up the object's CPU allowance during long rounds.
-        send(ws, { t: "pong", now: Date.now() });
-      } else if (msg.t === "resync") {
-        if (this.live) send(ws, { t: "round", round: snapshot(this.live) });
-      } else if (pid && game.player(pid)) {
-        this.handle(ws, game, pid, msg);
-      }
-    } catch (err) {
-      if (!(err instanceof GameError)) throw err;
-      send(ws, { t: "error", message: err.message });
-    }
-    await this.flush(game);
-  }
-
-  async webSocketClose(ws: WebSocket): Promise<void> {
-    await this.dropSocket(ws);
-  }
-
-  async webSocketError(ws: WebSocket): Promise<void> {
-    await this.dropSocket(ws);
-  }
-
-  async alarm(): Promise<void> {
-    const s = this.state;
-    if (!s) return;
-    const now = Date.now();
-    if (this.connectedIds().size === 0) {
-      // Nobody is watching: pause the game, and eventually throw it away.
-      if (now >= s.lastActive + GC_MS - 1000) {
-        await this.ctx.storage.deleteAlarm();
-        await this.ctx.storage.deleteAll();
-        this.state = null;
-        this.tokens = {};
-        this.log = [];
-        this.live = null;
-        return;
-      }
-      await this.reschedule();
-      return;
-    }
-    const game = this.game();
-    if (!this.live) game.recover(); // the room restarted mid-round
-    game.onTimer();
-    await this.flush(game);
-    if (!game.dirty) await this.reschedule();
-  }
-
-  // ---------------------------------------------------------------- internals
-
-  private hello(ws: WebSocket, game: Game, rawToken: unknown, name: string): void {
-    const token = String(rawToken ?? "");
-    if (!/^[\w-]{8,64}$/.test(token)) throw new GameError("Bad player token");
-    let player = game.player(this.tokens[token] ?? "");
-    if (player) {
-      game.rename(player.id, name);
-    } else {
-      player = game.addHuman(name);
-      this.tokens[token] = player.id;
-    }
-    ws.serializeAttachment({ pid: player.id } satisfies Attachment);
-    game.setConnected(player.id, true);
-    // A round that stopped ticking (nobody was here, or the room restarted) picks back up.
-    if (!this.loop) game.recover();
-    send(ws, {
-      t: "welcome",
-      you: player.id,
-      state: game.s,
-      round: game.live ? snapshot(game.live) : null,
-      log: this.log,
-      now: Date.now(),
-    });
-  }
-
-  private handle(ws: WebSocket, game: Game, pid: string, msg: ClientMsg): void {
-    switch (msg.t) {
-      case "color":
-        return game.setColor(pid, msg.color);
-      case "settings":
-        return game.updateSettings(pid, msg.settings ?? {});
-      case "addCpu":
-        return game.addCpu(pid, msg.level);
-      case "kick":
-        if (game.kick(pid, msg.id)) this.disconnectPlayer(msg.id);
-        return;
-      case "start":
-        return game.start(pid);
-      case "chat":
-        return game.chat(pid, msg.text);
-      case "lobby":
-        return game.backToLobby(pid);
-      case "leave":
-        ws.serializeAttachment({ pid: null } satisfies Attachment);
-        game.leave(pid);
-        ws.close(1000, "Left the game");
-        return;
-    }
-  }
-
-  private async dropSocket(ws: WebSocket): Promise<void> {
-    const pid = (ws.deserializeAttachment() as Attachment | null)?.pid;
-    try {
-      ws.close(1000, "Closed");
-    } catch {
-      // Already closed.
-    }
-    if (!this.state) return;
-    if (!pid || this.connectedIds(ws).has(pid)) {
-      this.syncLoop(); // still open in another tab, or never joined
-      return;
-    }
-    const game = this.game();
-    game.setConnected(pid, false);
-    await this.flush(game);
-  }
-
-  private disconnectPlayer(pid: string): void {
-    for (const [token, id] of Object.entries(this.tokens)) {
-      if (id === pid) delete this.tokens[token];
-    }
-    for (const ws of this.ctx.getWebSockets()) {
-      if ((ws.deserializeAttachment() as Attachment | null)?.pid !== pid) continue;
-      ws.serializeAttachment({ pid: null } satisfies Attachment);
-      send(ws, { t: "kicked" });
-      ws.close(CLOSE_KICKED, "Removed by host");
-    }
-  }
-
-  private game(): Game {
-    return new Game(
-      this.state!,
-      {
-        now: () => Date.now(),
-        isConnected: (id) => this.connectedIds().has(id),
-      },
-      this.live,
-      this.rng,
-    );
-  }
-
-  private connectedIds(except?: WebSocket): Set<string> {
-    const ids = new Set<string>();
-    for (const ws of this.ctx.getWebSockets()) {
-      if (ws === except || ws.readyState !== WebSocket.OPEN) continue;
-      const pid = (ws.deserializeAttachment() as Attachment | null)?.pid;
-      if (pid) ids.add(pid);
-    }
-    return ids;
-  }
-
-  // ---------------------------------------------------------------- tick loop
-
-  /** Start or stop the tick loop to match the game: it runs while a round is live and someone is here. */
-  private syncLoop(): void {
-    const s = this.state;
-    const want = !!s && s.phase === "playing" && !!this.live && this.connectedIds().size > 0;
-    if (want && !this.loop) {
-      this.loopStart = Date.now();
-      this.loopTicks = 0;
-      this.scheduleTick();
-    } else if (!want && this.loop) {
-      clearTimeout(this.loop);
-      this.loop = null;
-    }
-  }
-
-  private scheduleTick(): void {
-    const now = Date.now();
-    let due = this.loopStart + (this.loopTicks + 1) * TICK_MS;
-    if (now - due > TICK_MS * 4) {
-      // Fell well behind (a slow save, say). Carry on from now rather than sprinting to catch up.
-      this.loopStart = now - this.loopTicks * TICK_MS;
-      due = now + TICK_MS;
-    }
-    this.loop = setTimeout(() => this.runTick(), Math.max(0, due - now));
-  }
-
-  private runTick(): void {
-    this.loop = null;
-    const s = this.state;
-    if (!s || s.phase !== "playing" || !this.live) return;
-    const game = this.game();
-    // Once only CPUs are left, play the rest of the round at double speed.
-    const steps = game.onlyCpusLeft ? FAST_FORWARD : 1;
-    for (let i = 0; i < steps; i++) game.tick();
-    this.loopTicks++;
-    if (s.phase === "playing") this.scheduleTick();
-    this.flush(game).catch((err) => console.error("tick flush failed", err));
-  }
-
-  /** Send whatever the game queued, persist, and re-arm the alarm and the tick loop. */
-  private async flush(game: Game): Promise<void> {
-    const now = Date.now();
-    this.live = game.live;
-    if (game.logs.length) {
-      this.log.push(...game.logs);
-      if (this.log.length > LOG_MAX) this.log.splice(0, this.log.length - LOG_MAX);
-      this.broadcast({ t: "log", entries: game.logs });
-    }
-    for (const msg of game.outbox) this.broadcast(msg);
-    if (game.dirty) this.broadcast({ t: "state", state: game.s, now });
-    this.syncLoop();
-    // The live round isn't part of the stored state, so this only writes at round
-    // boundaries, lobby changes and chat, never on an ordinary tick.
-    if (game.dirty || game.logs.length) {
-      await this.save();
-      await this.reschedule();
-    }
-  }
-
-  private broadcast(msg: ServerMsg): void {
-    const data = JSON.stringify(msg);
-    for (const ws of this.ctx.getWebSockets()) {
-      if (ws.readyState !== WebSocket.OPEN) continue;
-      if (!(ws.deserializeAttachment() as Attachment | null)?.pid) continue;
-      try {
-        ws.send(data);
-      } catch {
-        // Socket is going away; webSocketClose will clean up.
-      }
-    }
-  }
-
-  private async save(): Promise<void> {
-    await this.ctx.storage.put({ state: this.state, tokens: this.tokens, log: this.log });
-  }
-
-  private async reschedule(): Promise<void> {
-    const s = this.state;
-    if (!s) return;
-    if (s.timer && this.connectedIds().size > 0) {
-      await this.ctx.storage.setAlarm(Math.max(s.timer.at, Date.now() + 10));
-    } else {
-      await this.ctx.storage.setAlarm(Math.max(s.lastActive + GC_MS, Date.now() + 1000));
+    } else if (msg.t === "resync") {
+      if (game.live) send(ws, { t: "round", round: snapshot(game.live) });
     }
   }
 }

@@ -1,7 +1,8 @@
+import { DEFAULT_COLORS as PLAYER_COLORS } from "@warrick/kit/shared/constants";
+import { mulberry32, randomSeed } from "@warrick/kit/shared/rng";
 import { cpuSteer } from "../shared/ai";
-import { PLAYER_COLORS, TICK_MS } from "../shared/constants";
+import { TICK_MS } from "../shared/constants";
 import type { CpuLevel } from "../shared/protocol";
-import { mulberry32, randomSeed } from "../shared/rng";
 import { Round, configFor } from "../shared/sim";
 import { Renderer, type HeadStyle } from "./render";
 

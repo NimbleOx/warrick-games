@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { cpuSteer } from "../src/shared/ai";
 import { TICKS_PER_SEC } from "../src/shared/constants";
 import type { CpuLevel } from "../src/shared/protocol";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Round, configFor } from "../src/shared/sim";
 
 /** Run a round where head i is driven by levels[i] (null = never steers). */

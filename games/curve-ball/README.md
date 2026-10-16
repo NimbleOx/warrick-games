@@ -39,7 +39,7 @@ That creates a Worker called `curve-ball` with the `GameRoom` Durable Object (SQ
 
 It's served at **https://warrick.games/curve-ball/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/curve-ball*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
 
-Everything lives under the base path `/curve-ball/`. `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/curve-ball/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so a small plugin in `vite.config.ts` moves the client build into `dist/client/curve-ball/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
+Everything lives under the base path `/curve-ball/`. `vite.config.ts` is the kit's `gameConfig("curve-ball")`: it sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/curve-ball/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so `gameConfig` also moves the client build into `dist/client/curve-ball/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -67,10 +67,13 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 
 ```
 src/shared/    code used by both sides: constants, heading table, the round simulation, CPU steering, protocol types
-src/worker/    index.ts (routes), room.ts (Durable Object and tick loop), game.ts (rules)
-src/client/    main.ts (UI, networking and playback), render.ts (canvas), input.ts, net.ts, audio.ts, attract.ts (home-screen demo)
+src/worker/    index.ts (routes), room.ts (Durable Object: steering, resyncs, the tick loop and the timers), game.ts (rules)
+src/client/    main.ts (the game screen, playback and its hooks into the shell), render.ts (canvas), input.ts,
+               audio.ts (sounds), attract.ts (home-screen demo)
 test/          Vitest tests for the simulation, the CPUs and the game flow; test/live checks a running server
 ```
+
+The room, lobby rules, router, socket (with the heartbeat that keeps a round's room within its CPU budget), home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).
 
 ### Adding power-ups later
 

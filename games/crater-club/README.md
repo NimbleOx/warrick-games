@@ -9,6 +9,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 - **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/crater-club/g/K7Q2M`. Send either one to your friends.
 - The host picks the rounds, starting cash, wind, wall behavior and turn timer, and can add CPU opponents (easy, normal or hard).
 - On your turn, aim with the sliders, the arrow keys (hold Shift for bigger steps), or by dragging on the map. Press **Fire** or Space.
+- Wind bends every shot. The HUD gives its strength, and wisps of air blowing across the sky show which way it blows and how hard.
 - Damaged tanks can't fire at full power (the HUD shows your current max). Switch weapons with the Weapon menu or Tab. Tanks take damage when the ground under them is blown away.
 - Before the first round and between rounds there's a shop with Missiles, Nukes, MIRVs, Death's Heads, Funky Bombs, Leapfrogs, Rollers, Dirt Clods, Tracers, Shields and Parachutes. You earn cash for damage, kills, surviving and winning rounds.
 - Reloading the page puts you back in your seat. Anyone who joins mid-game watches until the next game.
@@ -49,8 +50,8 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 ```
 src/shared/    code used by both sides: constants, weapons, terrain, the shot simulation, protocol types
 src/worker/    index.ts (routes), room.ts (Durable Object: messages and the turn timer), game.ts (rules), ai.ts (CPU players)
-src/client/    main.ts (the game screen and its hooks into the shell), render.ts (canvas), audio.ts (sounds),
-               attract.ts (home-screen demo)
+src/client/    main.ts (the game screen and its hooks into the shell), render.ts (canvas), wind.ts (the wisps of
+               air in the sky), audio.ts (sounds), attract.ts (home-screen demo)
 test/          Vitest tests: the simulation, the game flow, the real room (with the kit's test harness)
                and, in test/client, when the map gets redrawn
 ```

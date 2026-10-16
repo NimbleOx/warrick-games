@@ -3,6 +3,7 @@
 import { mulberry32 } from "@warrick/kit/shared/rng";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Renderer, type DrawOpts, type TankInfo } from "../../src/client/render";
+import { WindStreaks } from "../../src/client/wind";
 import { World, launchFor } from "../../src/shared/sim";
 import { flattenPad, generateTerrain } from "../../src/shared/terrain";
 
@@ -16,7 +17,7 @@ function fakeCanvas() {
     get(target, key) {
       if (key in target) return target[key];
       if (key === "createImageData") return (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) });
-      if (key === "createRadialGradient") return () => ({ addColorStop() {} });
+      if (key === "createRadialGradient" || key === "createLinearGradient") return () => ({ addColorStop() {} });
       return () => {
         calls++;
       };
@@ -29,7 +30,7 @@ function fakeCanvas() {
   return { width: 300, height: 150, getContext: () => ctx, calls: () => calls };
 }
 
-function world(): World {
+function world(wind = 0): World {
   const heights = generateTerrain(mulberry32(1), "hills");
   const tanks = [300, 900].map((x, i) => ({
     id: `p${i + 1}`,
@@ -40,7 +41,7 @@ function world(): World {
     shield: 0,
     parachutes: 0,
   }));
-  return new World({ heights, tanks, wind: 0, walls: "open" });
+  return new World({ heights, tanks, wind, walls: "open" });
 }
 
 function opts(over: { active?: string; angle?: number } = {}): DrawOpts {
@@ -84,6 +85,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("the renderer", () => {
@@ -137,5 +139,58 @@ describe("the renderer", () => {
     expect(fading).toBeGreaterThan(30);
     expect(fading).toBeLessThan(50);
     expect(r.draw(w, opts(), now + 3000)).toBe(false);
+  });
+
+  it("redraws about 30 times a second while the wind blows streaks across the sky", () => {
+    const drawn = run(r, world(-10), opts(), 0, 60);
+    expect(drawn).toBeGreaterThan(25);
+    expect(drawn).toBeLessThan(35);
+  });
+
+  it("holds the wind streaks still for players who'd rather not see motion", () => {
+    vi.stubGlobal("window", { devicePixelRatio: 1, matchMedia: () => ({ matches: true }) });
+    r = new Renderer(canvas as unknown as HTMLCanvasElement);
+    const w = world(-10);
+    expect(r.draw(w, opts(), 0)).toBe(true);
+    expect(run(r, w, opts(), FRAME_MS, 60)).toBe(0);
+  });
+});
+
+describe("the wind streaks", () => {
+  /** Where a streak's head is after each frame. Math.random is pinned, so every streak is alike. */
+  function headAt(wind: number, times: number[]): number[] {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    let x = NaN;
+    const ctx = {
+      createLinearGradient: () => ({ addColorStop() {} }),
+      beginPath() {},
+      moveTo() {},
+      lineTo(lx: number) {
+        x = lx;
+      },
+      stroke() {},
+    } as unknown as CanvasRenderingContext2D;
+    const streaks = new WindStreaks();
+    return times.map((t) => {
+      streaks.draw(ctx, wind, t, 1);
+      return x;
+    });
+  }
+
+  it("blow the way the wind does, faster the harder it blows", () => {
+    const [a, b, c] = headAt(-10, [1000, 1100, 1200]);
+    expect(b).toBeLessThan(a);
+    expect(c).toBeLessThan(b);
+
+    const drift = (wind: number) => {
+      const [x0, x1] = headAt(wind, [1000, 1100]);
+      return x1 - x0;
+    };
+    expect(drift(5)).toBeGreaterThan(0);
+    expect(drift(20)).toBeGreaterThan(drift(5));
+  });
+
+  it("aren't there in calm air", () => {
+    expect(headAt(0, [1000, 1100])).toEqual([NaN, NaN]);
   });
 });

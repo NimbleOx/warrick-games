@@ -3,6 +3,7 @@ import { hexToRgb, mix, rgba } from "@warrick/kit/client/color";
 import { mulberry32 } from "@warrick/kit/shared/rng";
 import type { SimEvent, SimTank, World } from "../shared/sim";
 import { THEMES, gradientAt, type Theme } from "./themes";
+import { WindStreaks } from "./wind";
 
 export interface TankInfo {
   name: string;
@@ -57,6 +58,7 @@ export class Renderer {
   private floaters: Floater[] = [];
   private shake = 0;
   private flash = 0;
+  private windStreaks = new WindStreaks();
   /** World units per CSS pixel, so labels stay readable at any size. */
   private ui = 1;
   /** What the last frame drawn showed, so a frame that would look the same isn't drawn. */
@@ -143,6 +145,7 @@ export class Renderer {
       [...opts.tanks],
       opts,
       bob,
+      this.windStreaks.step(world.wind, now),
       this.canvas.width,
       this.canvas.height,
       this.ui,
@@ -179,6 +182,7 @@ export class Renderer {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.setTransform(k, 0, 0, k, ox * k, oy * k);
     ctx.drawImage(this.sky, 0, 0);
+    this.windStreaks.draw(ctx, world.wind, now, this.ui);
 
     for (const path of this.tracerPaths) this.drawTrail(path, 0.55, true);
 

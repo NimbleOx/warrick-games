@@ -38,7 +38,12 @@ export interface ShellOptions<S extends BaseState, M extends AnyMsg> {
   lobbyButtons?: string;
   colors?: readonly string[];
   maxPlayers?: number;
+  /** Players needed to start (default 2). With 1, a player on their own can start a solo game. */
   minPlayers?: number;
+  /** The start button while one player is in the lobby, with `minPlayers` 1 (default "Play solo"). */
+  soloLabel?: string;
+  /** The rules shown instead of `rules` while one player is in the lobby, with `minPlayers` 1. */
+  soloRules?: string[];
   /** Label and formatting for each setting, in the order they're shown. */
   settings: Record<string, SettingLabel>;
   /** The allowed values of each setting (the same table the server checks against). */
@@ -433,14 +438,23 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
       })
       .join("");
 
+    // On your own in a game that can be played alone: it starts as a solo game.
+    const solo = this.minPlayers <= 1 && participants.length === 1;
+    const soloRules = $("lobby-solo-rules");
+    const rules = $("lobby-rules");
+    if (soloRules) soloRules.hidden = !solo;
+    if (soloRules && rules) rules.hidden = solo;
     const start = $<HTMLButtonElement>("lobby-start");
     start.hidden = !host;
     start.disabled = participants.length < this.minPlayers;
+    start.textContent = solo ? (this.o.soloLabel ?? "Play solo") : "Start game";
     const hostName = this.player(s.hostId)?.name ?? "the host";
     $("lobby-wait").textContent = host
       ? participants.length < this.minPlayers
         ? "Invite a friend or add a CPU to start."
-        : ""
+        : solo
+          ? "Or invite a friend or add a CPU for a match."
+          : ""
       : `Waiting for ${hostName} to start the game…`;
   }
 
@@ -449,7 +463,11 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   /** Add the home and lobby screens (and the toast) to the page, ahead of the game's own screen. */
   private mount(): void {
     const o = this.o;
-    const rules = o.rules?.length ? `<ul class="rules">${o.rules.map((r) => `<li>${r}</li>`).join("")}</ul>` : "";
+    const list = (id: string, items: string[] | undefined, hidden = false) =>
+      items?.length
+        ? `<ul class="rules" id="${id}" ${hidden ? "hidden" : ""}>${items.map((r) => `<li>${r}</li>`).join("")}</ul>`
+        : "";
+    const rules = list("lobby-rules", o.rules) + (this.minPlayers <= 1 ? list("lobby-solo-rules", o.soloRules, true) : "");
     const cpu = CPU_LEVELS.map(
       (l) => `<button class="btn btn-small" data-cpu="${l}">${l[0].toUpperCase()}${l.slice(1)}</button>`,
     ).join("");

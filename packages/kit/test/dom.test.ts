@@ -1,6 +1,6 @@
-// The player's name, shared by every game on the site, in a fake localStorage.
+// The player's name, shared by every game on the site, and personal bests, in a fake localStorage.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { saveSharedName, setStorePrefix, sharedName, store } from "../src/client/dom";
+import { personalBest, saveSharedName, setStorePrefix, sharedName, store } from "../src/client/dom";
 
 let data: Map<string, string>;
 
@@ -53,5 +53,33 @@ describe("the player's name", () => {
     });
     expect(() => saveSharedName("Dee")).not.toThrow();
     expect(sharedName()).toBeNull();
+  });
+});
+
+describe("personal bests", () => {
+  it("keeps the best score under the game's prefix", () => {
+    setStorePrefix("sa");
+    expect(personalBest("best", "AAAAA:1", 500)).toEqual({ best: 500, prev: null, fresh: true });
+    expect(personalBest("best", "AAAAA:2", 300)).toEqual({ best: 500, prev: 500, fresh: false });
+    expect(personalBest("best", "AAAAA:3", 800)).toEqual({ best: 800, prev: 500, fresh: true });
+    expect(personalBest("best", "AAAAA:4", 800)).toEqual({ best: 800, prev: 800, fresh: false });
+    expect(data.has("sa.best")).toBe(true);
+    // Another game has its own.
+    setStorePrefix("dt");
+    expect(personalBest("best", "AAAAA:3", 10)).toEqual({ best: 10, prev: null, fresh: true });
+  });
+
+  it("counts a run once, however often its results are shown", () => {
+    setStorePrefix("pp");
+    personalBest("best", "BBBBB:1", 100);
+    expect(personalBest("best", "BBBBB:2", 400)).toEqual({ best: 400, prev: 100, fresh: true });
+    expect(personalBest("best", "BBBBB:2", 400)).toEqual({ best: 400, prev: 100, fresh: true });
+  });
+
+  it("takes negative scores, and starts again from something it can't read", () => {
+    setStorePrefix("cs");
+    store("best", "not json");
+    expect(personalBest("best", "CCCCC:1", -12)).toEqual({ best: -12, prev: null, fresh: true });
+    expect(personalBest("best", "CCCCC:2", -3)).toEqual({ best: -3, prev: -12, fresh: true });
   });
 });

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { CLOSE_FULL, CLOSE_KICKED, CLOSE_NOT_FOUND } from "../shared/constants";
+import { buildId } from "../shared/build";
+import { CLOSE_FULL, CLOSE_KICKED, CLOSE_NOT_FOUND, CLOSE_STALE } from "../shared/constants";
 import type { BaseState, LobbyMsg, LogEntry, RoomInfo } from "../shared/protocol";
 import { GameError, type GameIO, type Lobby } from "./lobby";
 
@@ -109,7 +110,7 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
   /** Messages beyond the lobby ones. */
   protected handle(_ws: WebSocket, _game: G, _pid: string, _msg: AnyMsg): void {}
   /** Runs when a player says hello, before the welcome (to restart a round lost to a restart, say). */
-  protected afterHello(_game: G): void {}
+  protected afterHello(_game: G, _pid: string): void {}
   /** Extra fields for the welcome message. */
   protected welcome(_game: G): object {
     return {};
@@ -121,6 +122,23 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
   /** Whether the tick loop should run (it also needs someone connected). */
   protected wantsLoop(_state: S): boolean {
     return false;
+  }
+  /**
+   * The room's own storage keys that changed since it last saved them, to go in the same write as
+   * the state, tokens and log, so a crash can't keep one without the other. Asked whenever the
+   * room might save; null (the default) when nothing changed. Load the keys in the room's own
+   * constructor, inside `ctx.blockConcurrencyWhile`.
+   */
+  protected changedKeys(): Record<string, unknown> | null {
+    return null;
+  }
+
+  /**
+   * Whether the tick loop is running. In `afterHello`, that's whether it was running before this
+   * hello: for others who are here, or not at all (nobody else is, or the room just restarted).
+   */
+  protected get looping(): boolean {
+    return this.loop !== null;
   }
 
   // ---------------------------------------------------------------- RPC and fetch
@@ -181,12 +199,14 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
       // ever marks gone (closing the socket only marks its latest player gone).
       if (msg.t === "hello" && !(pid && game.player(pid))) {
         const m = msg as Extract<LobbyMsg, { t: "hello" }>;
-        this.hello(ws, game, m.token, m.name);
+        this.hello(ws, game, m.token, m.name, m.build);
       } else {
         this.settle(game);
         if (msg.t === "ping") {
-          // A real message (not the auto-answered "ping" text): it also resets the object's CPU budget.
-          send(ws, { t: "pong", now: Date.now() });
+          // A real message (not the auto-answered "ping" text): it also resets the object's CPU
+          // budget. The sender's clock goes back with ours, so it can time the round trip.
+          const c = (msg as Extract<LobbyMsg, { t: "ping" }>).c;
+          send(ws, { t: "pong", now: Date.now(), c: typeof c === "number" ? c : undefined });
         } else if (msg.t !== "hello" && pid && game.player(pid)) {
           this.dispatch(ws, game, pid, msg);
         }
@@ -301,7 +321,15 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
     }
   }
 
-  private hello(ws: WebSocket, game: G, rawToken: unknown, name: string): void {
+  private hello(ws: WebSocket, game: G, rawToken: unknown, name: string, build: unknown): void {
+    const ours = buildId();
+    if (ours && build !== ours) {
+      // A page from before the last deploy (or one too old to send its build at all). The error
+      // is for pages too old to know the close code.
+      send(ws, { t: "error", message: "This game has been updated. Reload the page to keep playing." });
+      ws.close(CLOSE_STALE, "Reload for the new version");
+      return;
+    }
     const token = String(rawToken ?? "");
     if (!/^[\w-]{8,64}$/.test(token)) throw new GameError("Bad player token");
     let player = game.player(this.tokens[token] ?? "");
@@ -321,7 +349,7 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
     game.setConnected(player.id, true);
     // This player is back, so they aren't among those a restart took away.
     this.settle(game, { arriving: player.id });
-    this.afterHello(game);
+    this.afterHello(game, player.id);
     send(ws, { ...this.welcome(game), t: "welcome", you: player.id, state: game.s, log: this.log, now: Date.now() });
   }
 
@@ -425,10 +453,9 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
     for (const { pid, msg } of game.direct) this.sendTo(pid, msg);
     if (game.dirty && !carried) this.broadcast({ t: "state", state: game.s, now });
     this.syncLoop();
-    if (game.dirty || game.logs.length) {
-      await this.save();
-      await this.reschedule();
-    }
+    const keys = this.changedKeys();
+    if (game.dirty || game.logs.length || keys) await this.save(keys);
+    if (game.dirty || game.logs.length) await this.reschedule();
   }
 
   // ---------------------------------------------------------------- tick loop
@@ -478,8 +505,8 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
 
   // ---------------------------------------------------------------- storage
 
-  private async save(): Promise<void> {
-    await this.ctx.storage.put({ state: this.state, tokens: this.tokens, log: this.log });
+  private async save(keys: Record<string, unknown> | null = null): Promise<void> {
+    await this.ctx.storage.put({ ...keys, state: this.state, tokens: this.tokens, log: this.log });
   }
 
   private async reschedule(): Promise<void> {

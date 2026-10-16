@@ -21,7 +21,11 @@ export const DEFAULT_COLORS = [
 
 export const CPU_LEVELS = ["easy", "normal", "hard"] as const;
 
-/** WebSocket close codes: the game is gone, the host removed this player, or there's no room for anyone new. */
+/**
+ * WebSocket close codes: the game is gone, the host removed this player, there's no room for
+ * anyone new, or the page runs older code than the room and should reload.
+ */
 export const CLOSE_NOT_FOUND = 4404;
 export const CLOSE_KICKED = 4403;
 export const CLOSE_FULL = 4429;
+export const CLOSE_STALE = 4426;

@@ -1,8 +1,9 @@
+import { buildId } from "../shared/build";
 import { CODE_RE, CPU_LEVELS, DEFAULT_COLORS, MAX_PLAYERS } from "../shared/constants";
 import type { BaseState, CpuLevel, LogEntry } from "../shared/protocol";
 import { isMuted, setMuted, unlockAudio } from "./audio";
-import { $, $$, esc, playerToken, setStorePrefix, store, toast } from "./dom";
-import { Connection, type NetStatus } from "./net";
+import { $, $$, esc, playerToken, reloadOnce, setStorePrefix, store, toast } from "./dom";
+import { ClockSync, Connection, type NetStatus } from "./net";
 
 export type Screen = "home" | "lobby" | "game";
 
@@ -75,7 +76,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   me = "";
   state: S | null = null;
   log: LogEntry[] = [];
-  /** Server clock minus ours. */
+  /** Server clock minus ours (see `ClockSync`). */
   skew = 0;
   /** The app lives under Vite's `base` ("/<slug>/"). */
   readonly base: string = import.meta.env.BASE_URL;
@@ -83,6 +84,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   readonly maxPlayers: number;
   private readonly minPlayers: number;
   private readonly token: string;
+  private clock = new ClockSync();
 
   constructor(private o: ShellOptions<S, M>) {
     setStorePrefix(o.prefix);
@@ -277,9 +279,10 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     this.showScreen("lobby");
 
     this.conn = new Connection<C, M>(code, {
-      hello: () => ({ t: "hello", token: this.token, name: store("name") ?? name }) as unknown as C,
+      hello: () => ({ t: "hello", token: this.token, name: store("name") ?? name, build: buildId() ?? undefined }) as unknown as C,
       message: (msg) => this.onMessage(msg),
       status: (s) => this.onStatus(s),
+      stale: () => this.onStale(),
       fatal: (reason) => {
         store("lastGame", null);
         history.pushState(null, "", this.base);
@@ -303,12 +306,24 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     }
   }
 
+  /** The room runs newer code: reload, unless this tab only just did. */
+  private onStale(): void {
+    if (reloadOnce(`${this.o.prefix}.reloadedAt`)) return;
+    for (const el of $$(".conn")) el.textContent = "Reload the page for the new version";
+    toast("This game has been updated. Reload the page to keep playing.");
+  }
+
   private onMessage(msg: M): void {
-    const m = msg as AnyMsg & { now?: number; you?: string; log?: LogEntry[]; state?: S; entries?: LogEntry[]; message?: string };
-    if (typeof m.now === "number") this.skew = m.now - Date.now();
+    const m = msg as AnyMsg & { now?: number; c?: number; you?: string; log?: LogEntry[]; state?: S; entries?: LogEntry[]; message?: string };
+    // A new connection (perhaps after the computer slept): measure the clock afresh.
+    if (m.t === "welcome") this.clock.reset();
+    if (m.t === "pong" && typeof m.now === "number" && typeof m.c === "number") this.clock.pong(m.now, m.c);
+    else if (typeof m.now === "number") this.clock.message(m.now);
+    this.skew = this.clock.skew;
     if (this.o.intercept?.(msg)) return;
     switch (m.t) {
       case "welcome":
+        this.conn?.ping();
         this.me = m.you!;
         this.log = m.log ?? [];
         this.o.onWelcome?.(msg);

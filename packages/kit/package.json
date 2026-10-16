@@ -10,7 +10,8 @@
     "./vite": "./src/vite.ts",
     "./shared/*": "./src/shared/*.ts",
     "./worker/*": "./src/worker/*.ts",
-    "./client/*": "./src/client/*.ts"
+    "./client/*": "./src/client/*.ts",
+    "./testing/*": "./src/testing/*.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -1,8 +1,9 @@
 // The client's reconnecting socket, with a fake WebSocket and fake timers. A dead socket here is
 // one that says it's open but never hears anything again, and never fires `onclose` either.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLOSE_FULL } from "../src/shared/constants";
-import type { Connection as ConnectionType, NetStatus } from "../src/client/net";
+import { CLOSE_FULL, CLOSE_STALE } from "../src/shared/constants";
+import type { reloadOnce as ReloadOnce } from "../src/client/dom";
+import type { ClockSync as ClockSyncType, Connection as ConnectionType, NetHandlers, NetStatus } from "../src/client/net";
 
 class FakeWebSocket {
   static CONNECTING = 0;
@@ -43,12 +44,16 @@ class FakeWebSocket {
 }
 
 let Connection: typeof ConnectionType;
+let ClockSync: typeof ClockSyncType;
+let reloadOnce: typeof ReloadOnce;
+const reloads = { n: 0 };
 
 beforeAll(async () => {
-  vi.stubGlobal("location", { search: "", protocol: "http:", host: "localhost" });
+  vi.stubGlobal("location", { search: "", protocol: "http:", host: "localhost", reload: () => reloads.n++ });
   vi.stubGlobal("window", globalThis);
   vi.stubGlobal("WebSocket", FakeWebSocket);
-  ({ Connection } = await import("../src/client/net"));
+  ({ Connection, ClockSync } = await import("../src/client/net"));
+  ({ reloadOnce } = await import("../src/client/dom"));
 });
 
 beforeEach(() => {
@@ -59,7 +64,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function connect() {
+function connect(extra: Partial<NetHandlers<{ t: string }, { t: string }>> = {}) {
   const statuses: NetStatus[] = [];
   const messages: unknown[] = [];
   const fatal: string[] = [];
@@ -68,6 +73,7 @@ function connect() {
     message: (m) => messages.push(m),
     status: (s) => statuses.push(s),
     fatal: (r) => fatal.push(r),
+    ...extra,
   });
   const socket = (i: number) => FakeWebSocket.all[i];
   return { conn, statuses, messages, fatal, socket };
@@ -144,5 +150,82 @@ describe("connection", () => {
     await vi.advanceTimersByTimeAsync(30_000);
     expect(fatal).toEqual(["That game is full."]);
     expect(FakeWebSocket.all).toHaveLength(1);
+  });
+});
+
+describe("a new version", () => {
+  it("hands a stale page to the shell, and stops", async () => {
+    let stale = 0;
+    const { socket, fatal } = connect({ stale: () => stale++ });
+    socket(0).accept();
+    socket(0).shut(CLOSE_STALE);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(stale).toBe(1);
+    expect(fatal).toEqual([]);
+    expect(FakeWebSocket.all).toHaveLength(1);
+  });
+
+  it("is fatal without a handler", async () => {
+    const { socket, fatal } = connect();
+    socket(0).accept();
+    socket(0).shut(CLOSE_STALE);
+    expect(fatal).toEqual(["This game has been updated. Reload the page to keep playing."]);
+  });
+
+  it("reloads a tab once, not again straight after", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
+    reloads.n = 0;
+    expect(reloadOnce("x.reloadedAt")).toBe(true);
+    expect(reloadOnce("x.reloadedAt")).toBe(false);
+    vi.advanceTimersByTime(61_000);
+    expect(reloadOnce("x.reloadedAt")).toBe(true);
+    expect(reloads.n).toBe(2);
+  });
+
+  it("doesn't reload at all without session storage to stop a loop", () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+    });
+    reloads.n = 0;
+    expect(reloadOnce("x.reloadedAt")).toBe(false);
+    expect(reloads.n).toBe(0);
+  });
+});
+
+describe("clock sync", () => {
+  it("pings with our clock while a game is live", async () => {
+    const { conn, socket } = connect();
+    socket(0).accept();
+    socket(0).answering = true;
+    conn.heartbeat(true);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(socket(0).sent.map((m) => (m === "ping" ? m : JSON.parse(m)))).toContainEqual({ t: "ping", c: Date.now() });
+  });
+
+  it("takes the server's clock from the quickest round trip", () => {
+    vi.setSystemTime(1_000_000);
+    const clock = new ClockSync();
+    // Before any pong: the newest message, off by however long it took.
+    clock.message(1_005_000);
+    expect(clock.skew).toBe(5_000);
+    // A slow round trip (400 ms), then a quick one (40 ms): the server is 5 s ahead.
+    vi.setSystemTime(1_000_400);
+    clock.pong(1_005_200, 1_000_000);
+    expect(clock.skew).toBe(5_000);
+    vi.setSystemTime(1_001_040);
+    clock.pong(1_006_020, 1_001_000);
+    expect(clock.skew).toBe(5_000);
+    // A message no longer moves it; a jittery pong doesn't either.
+    clock.message(1_009_000);
+    vi.setSystemTime(1_002_500);
+    clock.pong(1_007_400, 1_002_000);
+    expect(clock.skew).toBe(5_000);
+    // Starting over, messages count again until a ping is back.
+    clock.reset();
+    clock.message(1_002_500);
+    expect(clock.skew).toBe(0);
   });
 });

@@ -6,8 +6,8 @@
     "lib": ["ES2022"],
     "types": ["vitest"]
   },
-  "include": ["src/shared", "src/worker/lobby.ts", "test"],
+  "include": ["src/shared", "src/worker/lobby.ts", "src/worker/turns.ts", "test"],
   // The room tests import the room, which needs the Workers runtime's types; the net test the
   // client's socket, which needs the DOM's.
-  "exclude": ["test/room.test.ts", "test/room-lifecycle.test.ts", "test/net.test.ts", "test/stubs"]
+  "exclude": ["test/room.test.ts", "test/room-lifecycle.test.ts", "test/net.test.ts"]
 }

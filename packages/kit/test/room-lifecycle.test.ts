@@ -1,14 +1,16 @@
-// The room's connection lifecycle: hellos, watchers, restarts, hibernation, the alarm and rate
-// limits. It runs the kit's Room with fake sockets and storage, and a small turn-based game
-// whose away timer works like Liar's Dice's: no turn timer, but a player who is away on their
-// turn is skipped after a grace.
+// The room's connection lifecycle: hellos, watchers, restarts, hibernation, the alarm, rate
+// limits, the turn clock and the hooks games build on. It runs the kit's Room through the kit's
+// own test harness (src/testing/room.ts), with small games: one whose away timer works like
+// Liar's Dice's (no turn timer, but a player who is away on their turn is skipped after a
+// grace), and one on the kit's turn clock.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLOSE_FULL, MAX_PLAYERS, MAX_SPECTATORS } from "../src/shared/constants";
-import type { BasePlayer, BaseState, LogEntry } from "../src/shared/protocol";
+import { CLOSE_FULL, CLOSE_STALE, MAX_PLAYERS, MAX_SPECTATORS } from "../src/shared/constants";
+import type { BasePlayer, BaseState } from "../src/shared/protocol";
+import { FakeSocket, type TestRoom, fakeStorage, internals, openRoom } from "../src/testing/room";
 import { Lobby, baseState, type GameIO } from "../src/worker/lobby";
 import { Room, type RateLimit } from "../src/worker/room";
+import { type ClockRules, type TurnClock, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "../src/worker/turns";
 
-type Json = Record<string, unknown>;
 interface State extends BaseState<BasePlayer> {
   turn: string | null;
   timer: number | null;
@@ -90,114 +92,28 @@ class CachingRoom extends TurnRoom {
   }
 }
 
-class FakeSocket {
-  readyState: number = WebSocket.OPEN;
-  closedWith: number | null = null;
-  received: Json[] = [];
-  /** How often the room read the attachment. */
-  reads = 0;
-  private attachment: unknown = null;
-  serializeAttachment(a: unknown) {
-    this.attachment = structuredClone(a);
-  }
-  deserializeAttachment() {
-    this.reads++;
-    return this.attachment;
-  }
-  send(raw: string) {
-    this.received.push(JSON.parse(raw));
-  }
-  close(code = 1000) {
-    if (this.readyState === WebSocket.OPEN) this.closedWith = code;
-    this.readyState = WebSocket.CLOSED;
-  }
-  last(t: string): Json | undefined {
-    return this.received.filter((m) => m.t === t).at(-1);
-  }
-}
-
-/** Durable Object storage in a Map, copying values in and out like the real thing. */
-function fakeStorage() {
-  const data = new Map<string, unknown>();
-  let alarm: number | null = null;
-  let puts = 0;
-  return {
-    data,
-    alarm: () => alarm,
-    puts: () => puts,
-    async get(keys: string | string[]) {
-      if (Array.isArray(keys)) return new Map(keys.filter((k) => data.has(k)).map((k) => [k, structuredClone(data.get(k))]));
-      return structuredClone(data.get(keys));
-    },
-    async put(a: string | Json, v?: unknown) {
-      puts++;
-      if (typeof a === "string") data.set(a, structuredClone(v));
-      else for (const [k, val] of Object.entries(a)) data.set(k, structuredClone(val));
-    },
-    async setAlarm(at: number) {
-      alarm = at;
-    },
-    async deleteAlarm() {
-      alarm = null;
-    },
-    async deleteAll() {
-      data.clear();
-    },
-  };
-}
-
-type Storage = ReturnType<typeof fakeStorage>;
-const internals = (room: Room<State, TurnGame>) => room as unknown as { state: State; tokens: Record<string, string>; log: LogEntry[] };
-
-/**
- * A room over `storage`: a new game, the same game after a restart (no sockets), or after
- * hibernation (pass the sockets, which survive it).
- */
-async function openRoom(storage: Storage = fakeStorage(), sockets: FakeSocket[] = [], Kind = TurnRoom) {
-  const pending: Promise<void>[] = [];
-  const ctx = {
-    setWebSocketAutoResponse: () => {},
-    // The runtime holds every event until the constructor's loading is done; so does this.
-    blockConcurrencyWhile: (fn: () => Promise<void>) => pending.push(fn()),
-    storage,
-    getWebSockets: () => sockets,
-  };
-  const room = new Kind(ctx as never, {});
-  await Promise.all(pending);
-  if (!storage.data.has("state")) await room.init("ABCDE");
-
-  const say = (ws: FakeSocket, msg: Json) => room.webSocketMessage(ws as never, JSON.stringify(msg));
-  const connect = async (name: string, token = `token-${name}`) => {
-    const ws = new FakeSocket();
-    sockets.push(ws);
-    await say(ws, { t: "hello", token, name });
-    return ws;
-  };
-  const drop = async (ws: FakeSocket) => {
-    ws.readyState = WebSocket.CLOSED;
-    await room.webSocketClose(ws as never);
-  };
-  const s = () => internals(room).state;
-  const id = (name: string) => s().players.find((p) => p.name === name)!.id;
-  return { room, storage, sockets, say, connect, drop, s, id };
+/** The room's state, and a player's id by name. */
+function peek<S extends BaseState = State>(r: { room: Parameters<typeof internals>[0] }) {
+  const s = () => internals<S>(r.room).state!;
+  return { s, id: (name: string) => s().players.find((p) => p.name === name)!.id };
 }
 
 /** Ann and Bo in a game, with Ann to play. */
 async function midGame() {
-  const r = await openRoom();
+  const r = await openRoom(TurnRoom);
   const ann = await r.connect("Ann");
   const bo = await r.connect("Bo");
   await r.say(ann, { t: "start" });
-  expect(r.s().turn).toBe(r.id("Ann"));
-  expect(r.s().timer).toBeNull();
+  const { s, id } = peek(r);
+  expect(s().turn).toBe(id("Ann"));
+  expect(s().timer).toBeNull();
   heard = [];
-  return { ...r, ann, bo };
+  return { ...r, ann, bo, s, id };
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(T0);
-  vi.stubGlobal("WebSocketRequestResponsePair", class {});
   heard = [];
   timersRun = 0;
   stuck = false;
@@ -209,35 +125,37 @@ afterEach(() => {
 
 describe("hello", () => {
   it("only counts once per socket: another hello can't leave a ghost behind", async () => {
-    const r = await openRoom();
+    const r = await openRoom(TurnRoom);
+    const { s } = peek(r);
     const ann = await r.connect("Ann");
     for (let i = 0; i < 50; i++) await r.say(ann, { t: "hello", token: `fresh-token-${i}`, name: `Ghost ${i}` });
-    expect(r.s().players.map((p) => p.name)).toEqual(["Ann"]);
+    expect(s().players.map((p) => p.name)).toEqual(["Ann"]);
     await r.drop(ann);
-    expect(r.s().players.filter((p) => p.connected)).toEqual([]);
+    expect(s().players.filter((p) => p.connected)).toEqual([]);
   });
 
   it("caps watchers: gone ones make space, and past that the socket is turned away", async () => {
-    const r = await openRoom();
+    const r = await openRoom(TurnRoom);
+    const { s, id } = peek(r);
     for (let i = 0; i < MAX_PLAYERS + MAX_SPECTATORS; i++) await r.connect(`P${i}`);
-    expect(r.s().players.filter((p) => p.spectator)).toHaveLength(MAX_SPECTATORS);
+    expect(s().players.filter((p) => p.spectator)).toHaveLength(MAX_SPECTATORS);
 
     const late = await r.connect("Late");
     expect(late.closedWith).toBe(CLOSE_FULL);
-    expect(r.s().players).toHaveLength(MAX_PLAYERS + MAX_SPECTATORS);
+    expect(s().players).toHaveLength(MAX_PLAYERS + MAX_SPECTATORS);
 
     // A watcher leaves: they're forgotten (and so is their token) to make space for the next.
-    const gone = r.id(`P${MAX_PLAYERS}`);
+    const gone = id(`P${MAX_PLAYERS}`);
     await r.drop(r.sockets[MAX_PLAYERS]);
     const next = await r.connect("Next");
     expect(next.closedWith).toBeNull();
-    expect(r.s().players.some((p) => p.id === gone)).toBe(false);
+    expect(s().players.some((p) => p.id === gone)).toBe(false);
     expect(Object.values(internals(r.room).tokens)).not.toContain(gone);
-    expect(r.s().players).toHaveLength(MAX_PLAYERS + MAX_SPECTATORS);
+    expect(s().players).toHaveLength(MAX_PLAYERS + MAX_SPECTATORS);
   });
 
   it("reads each socket's player from its attachment once", async () => {
-    const r = await openRoom();
+    const r = await openRoom(TurnRoom);
     const ann = await r.connect("Ann");
     const [reads, before] = [ann.reads, ann.received.length];
     for (let i = 0; i < 5; i++) await r.say(ann, { t: "chat", text: `hi ${i}` });
@@ -248,53 +166,54 @@ describe("hello", () => {
 
 describe("after a restart", () => {
   it("tells the game who went, so an away timer starts for whoever was to play", async () => {
-    const { storage } = await midGame();
+    const first = await midGame();
     // A deploy: a new instance over the same storage, and every socket gone.
-    const r = await openRoom(storage);
+    const r = await first.restart();
+    const { s, id } = peek(r);
     await r.connect("Bo");
     // Bo is back before the game hears about the others, so Bo was never away.
     expect(heard).toEqual(["Ann gone"]);
-    expect(r.s().timer).toBe(T0 + AWAY_MS);
-    expect(storage.alarm()).toBe(T0 + AWAY_MS);
-    expect(r.s().players.find((p) => p.name === "Bo")?.connected).toBe(true);
+    expect(s().timer).toBe(T0 + AWAY_MS);
+    expect(r.storage.alarm()).toBe(T0 + AWAY_MS);
+    expect(s().players.find((p) => p.name === "Bo")?.connected).toBe(true);
 
     vi.setSystemTime(T0 + AWAY_MS);
     await r.room.alarm();
-    expect(r.s().turn).toBe(r.id("Bo"));
+    expect(s().turn).toBe(id("Bo"));
   });
 
   it("also when the alarm comes first, without counting it as activity", async () => {
-    const { storage, s } = await midGame();
-    const lastActive = s().lastActive;
+    const first = await midGame();
+    const lastActive = first.s().lastActive;
     vi.setSystemTime(T0 + 60_000);
-    const r = await openRoom(storage);
+    const r = await first.restart();
+    const { s } = peek(r);
     await r.room.alarm();
     expect(heard).toEqual(["Ann gone", "Bo gone"]);
-    expect(r.s().timer).toBe(T0 + 60_000 + AWAY_MS);
-    expect(r.s().lastActive).toBe(lastActive);
+    expect(s().timer).toBe(T0 + 60_000 + AWAY_MS);
+    expect(s().lastActive).toBe(lastActive);
     // Nobody is here, so timers wait.
     expect(timersRun).toBe(0);
-    expect(storage.alarm()).toBe(lastActive + GC_MS);
+    expect(r.storage.alarm()).toBe(lastActive + GC_MS);
     await r.connect("Bo");
-    expect(storage.alarm()).toBe(T0 + 60_000 + AWAY_MS);
+    expect(r.storage.alarm()).toBe(T0 + 60_000 + AWAY_MS);
   });
 
   it("counts whoever says hello as back, even if the game's own socket cache hasn't caught up", async () => {
     const { storage } = await midGame();
-    const sockets: FakeSocket[] = [];
-    const r = await openRoom(storage, sockets, CachingRoom);
+    const r = await openRoom(CachingRoom, { storage });
     // Bo's new socket is seen before Bo says hello (by a broadcast, say), so the cache has no player for it.
     const bo = new FakeSocket();
-    sockets.push(bo);
+    r.sockets.push(bo);
     (r.room as unknown as { connectedIds(): Set<string> }).connectedIds();
-    await r.say(bo, { t: "hello", token: "token-Bo", name: "Bo" });
+    await r.say(bo, { t: "hello", token: "token-bo-0000", name: "Bo" });
     expect(heard).toEqual(["Ann gone"]);
-    expect(r.s().players.find((p) => p.name === "Bo")?.connected).toBe(true);
+    expect(peek(r).s().players.find((p) => p.name === "Bo")?.connected).toBe(true);
   });
 
   it("only tells the game once", async () => {
-    const { storage } = await midGame();
-    const r = await openRoom(storage);
+    const first = await midGame();
+    const r = await first.restart();
     const bo = await r.connect("Bo");
     await r.say(bo, { t: "chat", text: "anyone?" });
     await r.room.alarm();
@@ -304,14 +223,14 @@ describe("after a restart", () => {
 
 describe("waking from hibernation", () => {
   it("tells the game about a socket that closed while it slept", async () => {
-    const { storage, sockets, ann } = await midGame();
+    const first = await midGame();
     // Hibernation keeps the sockets; the instance is new. Ann's socket closing wakes it, so it's
     // already closed while the instance loads.
-    ann.readyState = WebSocket.CLOSED;
-    const r = await openRoom(storage, sockets);
-    await r.room.webSocketClose(ann as never);
+    first.ann.readyState = WebSocket.CLOSED;
+    const r = await first.wake();
+    await r.room.webSocketClose(first.ann as never);
     expect(heard).toEqual(["Ann gone"]);
-    expect(r.s().timer).toBe(T0 + AWAY_MS);
+    expect(peek(r).s().timer).toBe(T0 + AWAY_MS);
   });
 });
 
@@ -339,7 +258,7 @@ describe("alarm", () => {
 
 describe("rate limits", () => {
   it("limits each socket's chat, and says so", async () => {
-    const r = await openRoom();
+    const r = await openRoom(TurnRoom);
     const ann = await r.connect("Ann");
     const bo = await r.connect("Bo");
     for (let i = 0; i < 30; i++) await r.say(ann, { t: "chat", text: `spam ${i}` });
@@ -356,28 +275,28 @@ describe("rate limits", () => {
   });
 
   it("drops a socket's messages past its limit", async () => {
-    const r = await openRoom(fakeStorage(), [], TightRoom);
+    const r = await openRoom(TightRoom);
     const ann = await r.connect("Ann");
     for (let i = 0; i < 10; i++) await r.say(ann, { t: "ping" });
     // The hello took one.
-    expect(ann.received.filter((m) => m.t === "pong")).toHaveLength(4);
+    expect(ann.all("pong")).toHaveLength(4);
   });
 
   it("leaves plenty of room for real-time input by default", async () => {
-    const r = await openRoom();
+    const r = await openRoom(TurnRoom);
     const ann = await r.connect("Ann");
     // 100 messages a second, for five seconds.
     for (let i = 0; i < 500; i++) {
       vi.setSystemTime(T0 + i * 10);
       await r.say(ann, { t: "ping" });
     }
-    expect(ann.received.filter((m) => m.t === "pong")).toHaveLength(500);
+    expect(ann.all("pong")).toHaveLength(500);
   });
 
   it("picking the colour you have saves and sends nothing", async () => {
-    const r = await openRoom();
+    const r = await openRoom(TurnRoom);
     const ann = await r.connect("Ann");
-    const color = r.s().players[0].color;
+    const color = peek(r).s().players[0].color;
     const [puts, states] = [r.storage.puts(), ann.received.length];
     await r.say(ann, { t: "color", color });
     expect(r.storage.puts()).toBe(puts);
@@ -387,12 +306,238 @@ describe("rate limits", () => {
 
 describe("host", () => {
   it("tells everyone about a new host, even if what they did then fails", async () => {
-    const r = await openRoom();
+    const r = await openRoom(TurnRoom);
     const ann = await r.connect("Ann");
     const bo = await r.connect("Bo");
     await r.drop(ann);
     await r.say(bo, { t: "addCpu", level: "impossible" });
     expect(bo.last("error")).toEqual({ t: "error", message: "Unknown CPU level" });
-    expect((bo.last("state")?.state as State).hostId).toBe(r.id("Bo"));
+    expect((bo.last("state")?.state as State).hostId).toBe(peek(r).id("Bo"));
+  });
+});
+
+// ---------------------------------------------------------------- the turn clock, through the room
+
+interface ClockState extends BaseState<BasePlayer, { turnSeconds: number }>, TurnClock {
+  turn: string | null;
+}
+
+const CLOCK: ClockRules = { awayMs: 10_000 };
+
+/** A turn-based game on the kit's turn clock: no moves, the turn just passes when time is up. */
+class ClockGame extends Lobby<ClockState> {
+  protected readonly choices = { turnSeconds: [0, 30] };
+  protected createPlayer(base: BasePlayer): BasePlayer {
+    return base;
+  }
+  start(byId: string): void {
+    this.beginStart(byId);
+    this.s.phase = "playing";
+    this.beginTurn(this.participants[0].id);
+  }
+  setConnected(id: string, connected: boolean): void {
+    const p = this.player(id);
+    if (!p || p.cpu || p.connected === connected) return;
+    super.setConnected(id, connected);
+    if (this.s.phase !== "playing" || this.s.turn !== id) return;
+    if (connected) turnHolderBack(this.s, CLOCK, this.io.now());
+    else turnHolderLeft(this.s, CLOCK, this.io.now());
+    this.touch();
+  }
+  onTimer(): void {
+    const before = this.s.turnDeadline;
+    if (!turnTimeUp(this.s, CLOCK, this.io.now())) {
+      if (this.s.turnDeadline !== before) this.touch();
+      return;
+    }
+    const ids = this.participants.map((p) => p.id);
+    this.beginTurn(ids[(ids.indexOf(this.s.turn!) + 1) % ids.length]);
+  }
+  private beginTurn(id: string): void {
+    this.s.turn = id;
+    startTurnClock(this.s, CLOCK, this.io.now(), this.s.settings.turnSeconds * 1000, this.io.isConnected(id));
+    this.touch();
+  }
+}
+
+class ClockRoom extends Room<ClockState, ClockGame> {
+  protected newState(code: string, now: number): ClockState {
+    return { ...baseState(code, now, { turnSeconds: 0 }), turn: null, clockEnd: null, turnDeadline: null };
+  }
+  protected makeGame(state: ClockState, io: GameIO): ClockGame {
+    return new ClockGame(state, io);
+  }
+  protected timerAt(state: ClockState): number | null {
+    return state.phase === "playing" ? state.turnDeadline : null;
+  }
+}
+
+/** Ann and Bo playing, Ann's turn, the clock at `turnSeconds`. */
+async function clockGame(turnSeconds: number) {
+  const r = await openRoom(ClockRoom);
+  const ann = await r.connect("Ann");
+  const bo = await r.connect("Bo");
+  await r.say(ann, { t: "settings", settings: { turnSeconds } });
+  await r.say(ann, { t: "start" });
+  const { s, id } = peek<ClockState>(r);
+  expect(s().turn).toBe(id("Ann"));
+  return { r, ann, bo, s, id };
+}
+
+/** Let the clock reach the room's alarm, and run it. */
+async function fireAlarm(r: TestRoom<Room<ClockState, ClockGame>>) {
+  const at = r.storage.alarm()!;
+  if (Date.now() < at) vi.setSystemTime(at);
+  await r.room.alarm();
+}
+
+for (const turnSeconds of [0, 30]) {
+  const limit = turnSeconds ? T0 + turnSeconds * 1000 : null;
+  describe(`the turn clock, with ${turnSeconds ? `${turnSeconds} seconds a turn` : "no time limit"}`, () => {
+    it("doesn't start over when you reload on your own turn", async () => {
+      const { r, ann, s } = await clockGame(turnSeconds);
+      vi.setSystemTime(T0 + 20_000);
+      await r.drop(ann);
+      expect(s().turnDeadline).toBe(Math.min(limit ?? Infinity, T0 + 30_000));
+      vi.setSystemTime(T0 + 21_000);
+      await r.connect("Ann");
+      expect(s().turnDeadline).toBe(limit);
+    });
+
+    it("doesn't change for a second tab", async () => {
+      const { r, s } = await clockGame(turnSeconds);
+      vi.setSystemTime(T0 + 27_000);
+      const puts = r.storage.puts();
+      await r.connect("Ann");
+      expect(s().turnDeadline).toBe(limit);
+      expect(s().clockTopUp).toBe(false);
+      expect(r.storage.puts()).toBe(puts);
+    });
+
+    it("gives the player whose turn it is time to come back, when everyone was away past the deadline", async () => {
+      const { r, ann, bo, s, id } = await clockGame(turnSeconds);
+      vi.setSystemTime(T0 + 5_000);
+      await r.drop(ann);
+      await r.drop(bo);
+      // An hour later Bo is back, and the overdue timer fires.
+      const later = T0 + 3_600_000;
+      vi.setSystemTime(later);
+      await r.connect("Bo");
+      await fireAlarm(r);
+      expect(s().turn).toBe(id("Ann"));
+      expect(s().turnDeadline).toBe(later + 10 + CLOCK.awayMs);
+      // Ann is back in time: her clock ran out long ago, so she gets the top-up (with no limit, no deadline).
+      vi.setSystemTime(later + 3_000);
+      await r.connect("Ann");
+      expect(s().turnDeadline).toBe(limit === null ? null : later + 3_000 + 5_000);
+    });
+
+    it("moves on from the player whose turn it is if they don't come back after a restart", async () => {
+      const first = await clockGame(turnSeconds);
+      vi.setSystemTime(T0 + 25_000);
+      const r = await first.r.restart();
+      const { s, id } = peek<ClockState>(r);
+      await r.connect("Bo");
+      const deadline = Math.min(limit ?? Infinity, T0 + 25_000 + CLOCK.awayMs);
+      expect(s().turnDeadline).toBe(deadline);
+      expect(r.storage.alarm()).toBe(deadline);
+      await fireAlarm(r);
+      expect(s().turn).toBe(id("Bo"));
+    });
+  });
+}
+
+// ---------------------------------------------------------------- hooks
+
+/** Records what the room tells it. */
+class HookRoom extends TurnRoom {
+  protected readonly tickMs = 50;
+  hellos: { pid: string; looping: boolean }[] = [];
+  /** Kept under its own key, saved with the state. */
+  notes: string[] = [];
+  private notesSaved = 0;
+  protected wantsLoop(state: State): boolean {
+    return state.phase === "playing";
+  }
+  protected afterHello(_game: TurnGame, pid: string): void {
+    this.hellos.push({ pid, looping: this.looping });
+  }
+  protected changedKeys(): Record<string, unknown> | null {
+    if (this.notes.length === this.notesSaved) return null;
+    this.notesSaved = this.notes.length;
+    return { notes: [...this.notes] };
+  }
+}
+
+describe("room hooks", () => {
+  it("afterHello gets the player's id, and knows whether the tick loop was already running", async () => {
+    const r = await openRoom(HookRoom);
+    const ann = await r.connect("Ann");
+    await r.connect("Bo");
+    await r.say(ann, { t: "start" });
+    await r.connect("Cy");
+    const { id } = peek(r);
+    expect(r.room.hellos).toEqual([
+      { pid: id("Ann"), looping: false },
+      { pid: id("Bo"), looping: false },
+      { pid: id("Cy"), looping: true },
+    ]);
+  });
+
+  it("saves the room's own keys in the same write as the state, only when they changed", async () => {
+    const r = await openRoom(HookRoom);
+    const ann = await r.connect("Ann");
+    r.room.notes.push("first");
+    let puts = r.storage.puts();
+    await r.say(ann, { t: "chat", text: "hi" });
+    expect(r.storage.puts()).toBe(puts + 1);
+    expect(r.storage.data.get("notes")).toEqual(["first"]);
+
+    // Nothing else changed: still saved.
+    r.room.notes.push("second");
+    puts = r.storage.puts();
+    await r.say(ann, { t: "ping" });
+    expect(r.storage.puts()).toBe(puts + 1);
+    expect(r.storage.data.get("notes")).toEqual(["first", "second"]);
+
+    // Nothing at all changed: no write.
+    puts = r.storage.puts();
+    await r.say(ann, { t: "ping" });
+    expect(r.storage.puts()).toBe(puts);
+  });
+
+  it("sends the sender's clock back with the pong", async () => {
+    const r = await openRoom(TurnRoom);
+    const ann = await r.connect("Ann");
+    await r.say(ann, { t: "ping", c: 12345 });
+    expect(ann.last("pong")).toEqual({ t: "pong", now: T0, c: 12345 });
+    await r.say(ann, { t: "ping" });
+    expect(ann.last("pong")).toEqual({ t: "pong", now: T0 });
+  });
+});
+
+describe("builds", () => {
+  it("tells a page running other code (or too old to say) to reload", async () => {
+    vi.stubGlobal("__WARRICK_BUILD__", "new");
+    const r = await openRoom(TurnRoom);
+    for (const build of ["old", undefined]) {
+      const ws = new FakeSocket();
+      r.sockets.push(ws);
+      await r.say(ws, { t: "hello", token: "token-ann-0000", name: "Ann", build });
+      expect(ws.closedWith).toBe(CLOSE_STALE);
+      expect(ws.last("error")?.message).toMatch(/Reload the page/);
+    }
+    expect(peek(r).s().players).toEqual([]);
+    const ws = new FakeSocket();
+    r.sockets.push(ws);
+    await r.say(ws, { t: "hello", token: "token-ann-0000", name: "Ann", build: "new" });
+    expect(ws.closedWith).toBeNull();
+    expect(ws.last("welcome")).toBeDefined();
+  });
+
+  it("lets everyone in when the room has no build id (tests, or an older room)", async () => {
+    const r = await openRoom(TurnRoom, { storage: fakeStorage() });
+    const ann = await r.connect("Ann");
+    expect(ann.you).toBe(peek(r).id("Ann"));
   });
 });

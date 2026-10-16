@@ -201,15 +201,18 @@ export class Round {
     const k = parseEntries(keys);
     const g = parseEntries(drops);
     let ok = Number.isInteger(n) && (n as number) >= b.tick && !!k && !!g;
+    // Every input falls between the last one we have and the tick the browser says it reached.
     let last = L.lane.keys.at(-1)?.[0] ?? b.tick;
     for (const [t] of k ?? []) {
-      if (t < last) ok = false;
+      if (t < last || t > (n as number)) ok = false;
       last = t;
     }
+    // And an attack lands no later than it's due, or a browser could put it off forever.
     last = L.lane.drops.at(-1)?.[0] ?? b.tick;
     const ids = new Set<number>();
     for (const [t, id] of g ?? []) {
-      if (t < last || ids.has(id) || !L.due.some((d) => d.g.id === id)) ok = false;
+      const due = L.due.find((d) => d.g.id === id);
+      if (t < last || t > (n as number) || !due || t > due.by || ids.has(id)) ok = false;
       ids.add(id);
       last = t;
     }

@@ -179,12 +179,6 @@ export class Bottle {
     return y;
   }
 
-  pendingPieces(): number {
-    let n = 0;
-    for (const g of this.pending) n += g.p.length;
-    return n;
-  }
-
   // ---------------------------------------------------------------- stepping
 
   /** Queue an attack. It drops in once the current capsule has landed and settled. */

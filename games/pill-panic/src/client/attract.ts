@@ -30,8 +30,10 @@ export class Attract {
   }
 
   frame(now: number): void {
-    if (!this.last) this.last = now;
-    const ticks = Math.min(30, Math.floor((now - this.last) / TICK_MS));
+    // Back on the home screen after a match (or from a background tab): carry on from here,
+    // rather than racing through everything that would have happened meanwhile.
+    this.last = this.last ? Math.max(this.last, now - 250) : now;
+    const ticks = Math.floor((now - this.last) / TICK_MS);
     this.last += ticks * TICK_MS;
     for (let i = 0; i < ticks; i++) {
       this.pair.forEach(({ b, brain }, k) => {

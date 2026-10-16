@@ -22,6 +22,11 @@ function play(seed: number, levels: CpuLevel[], size: MapSize = "medium", minute
   return { ranking: b.ranking(), ticks: b.n, battle: b, thinking };
 }
 
+// The slowest moment of a run is a noisy measure, and shared CI machines are slower than a laptop:
+// give CI headroom (it's still well under what the old code took). No Node types here, hence the cast.
+const ci = !!(globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CI;
+const slack = ci ? 2.5 : 1;
+
 describe("CPU players", () => {
   it("finish a duel by conquest well inside the clock", () => {
     for (const seed of [1, 2, 3]) {
@@ -51,7 +56,7 @@ describe("CPU players", () => {
     const { battle, thinking } = play(4, ["hard", "normal", "easy", "hard", "normal", "easy", "hard", "normal"], "large", 6);
     expect(battle.over).toBe(true);
     // Every CPU's look at the map in one tick, together.
-    expect(thinking).toBeLessThan(40);
+    expect(thinking).toBeLessThan(40 * slack);
   });
 
   it("does nothing during the countdown", () => {

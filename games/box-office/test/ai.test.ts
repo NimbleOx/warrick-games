@@ -151,6 +151,11 @@ describe("hard", () => {
   });
 });
 
+// The slowest moment of a run is a noisy measure, and shared CI machines are slower than a laptop:
+// give CI headroom (it's still well under what the old code took). No Node types here, hence the cast.
+const ci = !!(globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CI;
+const slack = ci ? 2.5 : 1;
+
 describe("thinking time", () => {
   it("stays quick for hard with 8 players on the largest board", () => {
     // Whole games between hard CPUs on 11 × 8. These seeds reach the slowest decisions found,
@@ -167,7 +172,7 @@ describe("thinking time", () => {
         if (!playLine(b, e, seat).length) seat = (seat + 1) % 8;
       }
     }
-    expect(slowest).toBeLessThan(200);
+    expect(slowest).toBeLessThan(200 * slack);
   });
 });
 

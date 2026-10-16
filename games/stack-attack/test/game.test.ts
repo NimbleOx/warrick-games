@@ -40,6 +40,59 @@ function setup() {
 
 const ops = (msgs: ServerMsg[]): Op[] => msgs.filter((m): m is Frame => m.t === "f").flatMap((m) => m.o);
 
+/** Send garbage from one slot to another, as if they'd cleared lines just now. */
+function attack(t: ReturnType<typeof setup>, from: number, to: number, lines: number): void {
+  const round = t.live!.round as unknown as { attack(from: number, to: unknown, lines: number, now: number): void };
+  round.attack(from, t.live!.round.seat(to), lines, t.now);
+}
+
+/**
+ * A player's browser: its own lane, taking in garbage and fixes the way the client does, and
+ * sending every piece it locks. `report` picks the garbage id each lock claims to have seen.
+ */
+function browser(t: ReturnType<typeof setup>, pid: string, report?: (lane: Lane) => number) {
+  const snap = t.act((g) => g.snapshot())!;
+  const slot = snap.who.indexOf(pid);
+  let lane = Lane.fromSnap(snap.seats[slot]!);
+  let known = snap.seats[slot]!.g;
+  let epoch = snap.seats[slot]!.e;
+  let sent = t.sent.length;
+  let direct = t.direct.length;
+  const rng = mulberry32(5);
+  return {
+    slot,
+    get lane() {
+      return lane;
+    },
+    read() {
+      for (const d of t.direct.slice(direct)) {
+        if (d.pid !== pid || d.msg.t !== "fix") continue;
+        lane = Lane.fromSnap(d.msg.seat);
+        epoch = d.msg.seat.e;
+        known = d.msg.seat.g;
+      }
+      direct = t.direct.length;
+      for (const op of ops(t.sent.slice(sent))) {
+        if (op.k === "g" && op.to === slot && op.id > known) {
+          lane.queue.push({ id: op.id, lines: op.lines, hole: op.hole, from: op.from });
+          known = op.id;
+        }
+      }
+      sent = t.sent.length;
+    },
+    lock() {
+      this.read();
+      const g = report ? report(lane) : known;
+      const pl = choose(lane, "hard", rng, g);
+      if (!pl) return null;
+      const k = lane.pc;
+      const res = lane.lock(pl, g);
+      t.act((game) => game.lock(pid, { e: epoch, k, pl, g, ck: lane.checksum() }));
+      return res;
+    },
+  };
+}
+
 describe("speed", () => {
   it("speeds up, then multiplies garbage", () => {
     expect(levelAt("normal", 0)).toBe(3);
@@ -102,26 +155,74 @@ describe("rounds", () => {
     expect(all.filter((o) => o.k === "ko")).toHaveLength(3);
   });
 
-  it("replays a player's locks and routes their garbage", () => {
+  it("replays a player's locks and routes their garbage, both ways", () => {
+    const t = setup();
+    const host = t.act((g) => g.addHuman("Ann"));
+    t.connect(host.id);
+    t.act((g) => g.addCpu(host.id, "hard"));
+    t.act((g) => g.start(host.id));
+    t.advance(COUNTDOWN_MS);
+    const me = browser(t, host.id);
+    let rose = 0;
+    // Well inside the first 90 seconds, so garbage goes out unmultiplied.
+    for (let i = 0; i < 160 && t.state.phase === "playing"; i++) {
+      if (i % 10 === 5) attack(t, 1, me.slot, 1);
+      const res = me.lock();
+      if (!res) break;
+      rose += res.inserted;
+      t.advance(250);
+      t.act((g) => g.tick());
+    }
+    expect(t.direct).toHaveLength(0); // never overruled
+    // Garbage reached us too, and rose in where the browser said it would.
+    expect(rose).toBeGreaterThan(0);
+    if (t.live) expect(t.live.round.seat(me.slot)!.lane.checksum()).toBe(me.lane.checksum());
+    const all = ops(t.sent);
+    const sentTo = all.filter((o) => o.k === "g" && o.from === me.slot);
+    expect(sentTo.reduce((n, o) => n + (o.k === "g" ? o.lines : 0), 0)).toBe(me.lane.sent);
+  });
+
+  it("lands garbage on a browser that never reports it", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    const bo = t.act((g) => g.addHuman("Bo"));
+    t.connect(ann.id);
+    t.connect(bo.id);
+    t.act((g) => g.start(ann.id));
+    t.advance(COUNTDOWN_MS);
+    // Ann's browser ignores incoming garbage and claims the oldest id the server will take.
+    const me = browser(t, ann.id, (lane) => lane.ack);
+    const round = t.live!.round;
+    const boSlot = 1 - me.slot;
+    let rose = 0;
+    let seen = 0;
+    for (let i = 0; i < 64 && t.state.phase === "playing"; i++) {
+      if (i % 8 === 0) attack(t, boSlot, me.slot, 2);
+      if (!me.lock()) break;
+      for (const op of ops(t.sent.slice(seen))) if (op.k === "l" && op.s === me.slot) rose += op.ins;
+      seen = t.sent.length;
+      t.advance(500);
+    }
+    // It rose in (or clears cancelled it). Unless Ann topped out, only the last attack or so is
+    // still on its way.
+    const lane = round.seat(me.slot)!.lane;
+    expect(rose).toBeGreaterThan(0);
+    expect(lane.out || lane.pending() <= 4).toBe(true);
+    expect(t.direct.some((d) => d.pid === ann.id)).toBe(true);
+  });
+
+  it("overrules a browser that locks pieces faster than anyone could", () => {
     const t = setup();
     const host = t.act((g) => g.addHuman("Ann"));
     t.connect(host.id);
     t.act((g) => g.addCpu(host.id, "easy"));
     t.act((g) => g.start(host.id));
     t.advance(COUNTDOWN_MS);
-    const snap = t.live!.round.snapshot(1, []);
-    const mine = Lane.fromSnap(snap.seats[0]!);
-    const rng = mulberry32(5);
-    for (let i = 0; i < 40; i++) {
-      const pl = choose(mine, "hard", rng, 0)!;
-      mine.lock(pl, 0);
-      t.act((g) => g.lock(host.id, { e: 0, k: i, pl, g: 0, ck: mine.checksum() }));
-      t.advance(100);
-    }
-    expect(t.direct).toHaveLength(0); // never overruled
-    expect(t.live!.round.seat(0)!.lane.checksum()).toBe(mine.checksum());
-    const sentTo = ops(t.sent).filter((o) => o.k === "g" && o.from === 0);
-    expect(sentTo.reduce((n, o) => n + (o.k === "g" ? o.lines : 0), 0)).toBe(mine.sent);
+    const me = browser(t, host.id);
+    // Thirty pieces in the same instant.
+    for (let i = 0; i < 30; i++) me.lock();
+    expect(t.direct.length).toBeGreaterThan(0);
+    expect(t.live!.round.seat(0)!.lane.pc).toBeLessThan(30);
   });
 
   it("overrules an impossible placement and ignores locks from before", () => {
@@ -184,6 +285,7 @@ describe("rounds", () => {
       const bpl = choose(bos, "hard", rng, 0)!;
       bos.lock(bpl, 0);
       t.act((g) => g.lock(bo.id, { e: 0, k, pl: bpl, g: 0, ck: bos.checksum() }));
+      t.advance(150);
     }
     t.act((g) => g.lock(ann.id, first));
     expect(t.direct).toHaveLength(0);

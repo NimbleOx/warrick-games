@@ -9,6 +9,15 @@ import { shuffle, type Rng } from "@warrick/kit/shared/rng";
 /** A disconnected player gets this long to come back before the autopilot takes their board. */
 const AWAY_GRACE_MS = 2500;
 const AUTOPILOT_MS = 1100;
+/**
+ * Garbage sent to a board this long before one of its locks arrives counts as seen, whatever the
+ * lock says. A browser that never reports garbage can't keep it out; an honest one reports it a
+ * round trip after it's sent.
+ */
+const SEEN_AFTER_MS = 2000;
+/** Locks a browser can make: bursts of up to this many, refilling at LOCK_RATE a second. Far beyond any human. */
+const LOCK_BURST = 20;
+const LOCK_RATE = 10;
 
 interface Seat {
   slot: number;
@@ -17,6 +26,11 @@ interface Seat {
   e: number;
   /** The newest garbage id sent to this board. */
   g: number;
+  /** When each garbage id this board hasn't yet reported was sent. */
+  inbound: { id: number; at: number }[];
+  /** Locks the browser can make right now, and when that was worked out. */
+  locks: number;
+  locksAt: number;
   kos: number;
   /** Garbage sent, after the multiplier. */
   atk: number;
@@ -79,6 +93,9 @@ export class Round {
         lane: new Lane(o.seed),
         e: 0,
         g: 0,
+        inbound: [],
+        locks: LOCK_BURST,
+        locksAt: o.goAt,
         kos: 0,
         atk: 0,
         place: 0,
@@ -112,21 +129,25 @@ export class Round {
     const lane = seat.lane;
     const pl = cleanPlacement(m.pl);
     const g = Number(m.g);
+    // Garbage the browser has had plenty of time to hear about counts as seen even if it says
+    // otherwise; the lock is then overruled, so the browser takes the server's board.
+    const known = Math.max(g, this.due(seat, now));
     const piece = pl && (pl.hold ? lane.swapped : lane.current);
     const ok =
+      this.spend(seat, now) &&
       pl &&
       Number.isInteger(g) &&
       g >= lane.ack &&
       g <= seat.g &&
       pl.piece === piece &&
       reachable(lane.board, pl.piece, pl);
-    const res = ok ? lane.lock(pl, g) : null;
+    const res = ok ? lane.lock(pl, known) : null;
     if (!res) {
       this.overrule(seat, now);
       return;
     }
     this.landed(seat, res, now);
-    if (lane.checksum() !== m.ck) this.overrule(seat, now);
+    if (known !== g || lane.checksum() !== m.ck) this.overrule(seat, now);
   }
 
   /** Server-side moves: CPUs, the autopilot for players who've dropped, and pieces left hanging. */
@@ -194,6 +215,34 @@ export class Round {
 
   // ---------------------------------------------------------------- internals
 
+  /** The newest garbage id sent to this board at least SEEN_AFTER_MS ago, or 0. */
+  private due(seat: Seat, now: number): number {
+    this.prune(seat);
+    let id = 0;
+    for (const x of seat.inbound) {
+      if (now - x.at < SEEN_AFTER_MS) break;
+      id = x.id;
+    }
+    return id;
+  }
+
+  /** Forget send times for garbage the board has already reported. */
+  private prune(seat: Seat): void {
+    const sent = seat.inbound;
+    while (sent.length && sent[0].id <= seat.lane.ack) sent.shift();
+  }
+
+  /** Take one lock from the browser's allowance. False if it's locking faster than anyone can. */
+  private spend(seat: Seat, now: number): boolean {
+    if (now > seat.locksAt) {
+      seat.locks = Math.min(LOCK_BURST, seat.locks + ((now - seat.locksAt) * LOCK_RATE) / 1000);
+      seat.locksAt = now;
+    }
+    if (seat.locks < 1) return false;
+    seat.locks--;
+    return true;
+  }
+
   /** How long a piece can hang before the server drops it: a fall from the top plus every lock reset, and then some. */
   private deadline(now: number): number {
     return 22 * gravityMs(this.level(now)) + MAX_LOCK_RESETS * LOCK_DELAY_MS + 5000;
@@ -236,15 +285,17 @@ export class Round {
       pcl: res.pc,
       ins: res.inserted,
     });
-    if (target) this.attack(seat.slot, target, out);
+    if (target) this.attack(seat.slot, target, out, now);
     if (res.out) this.knockOut(seat, now, true);
   }
 
-  private attack(from: number, target: Seat, lines: number): void {
+  private attack(from: number, target: Seat, lines: number, now: number): void {
     const id = ++this.garbageId;
     const hole = Math.floor(this.rng() * COLS);
     target.lane.queue.push({ id, lines, hole, from });
     target.g = id;
+    this.prune(target);
+    target.inbound.push({ id, at: now });
     this.ops.push({ k: "g", id, from, to: target.slot, lines, hole });
   }
 

@@ -1,8 +1,11 @@
+import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
 import type { ArenaSnap } from "./arena";
 import type { Dir } from "./movement";
 
+export type { CpuLevel } from "@warrick/kit/shared/protocol";
+export type { LogEntry };
+
 export type Phase = "lobby" | "playing" | "roundover" | "gameover";
-export type CpuLevel = "easy" | "normal" | "hard";
 export type Density = "sparse" | "normal" | "packed";
 export type Richness = "few" | "normal" | "lots";
 
@@ -35,13 +38,7 @@ export const SETTING_CHOICES = {
 export const CRATE_DENSITY: Record<Density, number> = { sparse: 0.5, normal: 0.72, packed: 0.9 };
 export const ITEM_RATE: Record<Richness, number> = { few: 0.25, normal: 0.4, lots: 0.6 };
 
-export interface PlayerState {
-  id: string;
-  name: string;
-  color: string;
-  cpu: CpuLevel | null;
-  connected: boolean;
-  spectator: boolean;
+export interface PlayerState extends BasePlayer {
   wins: number;
   kills: number;
   deaths: number;
@@ -55,56 +52,25 @@ export interface Timer {
   kind: "roundover";
 }
 
-export interface GameState {
-  code: string;
-  createdAt: number;
-  lastActive: number;
+export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
-  hostId: string;
-  settings: Settings;
-  players: PlayerState[];
   round: number;
   roundWinnerId: string | null;
   phaseDeadline: number | null;
   timer: Timer | null;
-  nextPlayerNum: number;
-}
-
-export interface LogEntry {
-  at: number;
-  kind: "chat" | "event";
-  from?: string;
-  color?: string;
-  text: string;
 }
 
 export type ClientMsg =
-  | { t: "hello"; token: string; name: string }
-  | { t: "color"; color: string }
-  | { t: "settings"; settings: Partial<Settings> }
-  | { t: "addCpu"; level: CpuLevel }
-  | { t: "kick"; id: string }
-  | { t: "start" }
+  | LobbyMsg
   | { t: "move"; x: number; y: number; d: Dir }
-  | { t: "bomb"; x: number; y: number; d: Dir }
-  | { t: "chat"; text: string }
-  | { t: "lobby" }
-  | { t: "leave" }
-  | { t: "ping" };
+  | { t: "bomb"; x: number; y: number; d: Dir };
 
 export type ServerMsg =
+  | Exclude<RoomMsg<GameState>, { t: "welcome" }>
   | { t: "welcome"; you: string; state: GameState; log: LogEntry[]; frame: ArenaSnap | null; now: number }
-  | { t: "state"; state: GameState; now: number }
-  | { t: "frame"; f: ArenaSnap }
-  | { t: "log"; entries: LogEntry[] }
-  | { t: "error"; message: string }
-  | { t: "kicked" }
-  | { t: "pong"; now: number };
+  | { t: "frame"; f: ArenaSnap };
 
 /** Final standings order. */
 export function rankPlayers(a: PlayerState, b: PlayerState): number {
   return b.wins - a.wins || b.kills - a.kills || a.deaths - b.deaths;
 }
-
-export const CLOSE_NOT_FOUND = 4404;
-export const CLOSE_KICKED = 4403;

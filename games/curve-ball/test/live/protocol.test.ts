@@ -180,3 +180,24 @@ it("plays a round over the network, and every client agrees with the server", as
   back.send({ t: "leave" });
   late.close();
 });
+
+it("sends each socket at most one resync snapshot a second", async () => {
+  const res = await fetch(`${BASE}/api/games`, { method: "POST" });
+  const { code } = (await res.json()) as { code: string };
+  const host = new Bot(code, `host-${crypto.randomUUID()}`, "Host");
+  await host.connect();
+  host.send({ t: "addCpu", level: "easy" });
+  await host.until(() => host.state!.players.length === 2);
+  host.send({ t: "start" });
+  // The countdown's snapshot comes with it; nothing else sends one for the next 3 seconds.
+  await host.until(() => host.state!.phase === "countdown" && host.snapshots === 1);
+
+  for (let i = 0; i < 5; i++) host.send({ t: "resync" });
+  await sleep(600);
+  expect(host.snapshots).toBe(2);
+  // Once the second is up, the next request is answered.
+  await sleep(600);
+  host.send({ t: "resync" });
+  await host.until(() => host.snapshots === 3, 1000);
+  host.send({ t: "leave" });
+});

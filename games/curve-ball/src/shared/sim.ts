@@ -149,8 +149,11 @@ export class Round {
     this.painted = this.heads.map(() => false);
   }
 
-  /** Rebuild a round as it stood after `tick` ticks, with the inputs for that tick already applied. */
-  static replay(setup: RoundSetup, inputs: readonly Input[], tick: number): Round {
+  /**
+   * Rebuild a round as it stood after `tick` ticks, with the inputs for that tick already applied.
+   * `onStep` runs after every step (clients draw the trails with it).
+   */
+  static replay(setup: RoundSetup, inputs: readonly Input[], tick: number, onStep?: (round: Round) => void): Round {
     const round = new Round(setup);
     let k = 0;
     for (;;) {
@@ -160,6 +163,7 @@ export class Round {
       }
       if (round.tick >= tick || round.over) return round;
       round.step();
+      onStep?.(round);
     }
   }
 

@@ -1,7 +1,7 @@
 import { mulberry32, randomSeed } from "@warrick/kit/shared/rng";
 import type { GameIO } from "@warrick/kit/worker/lobby";
 import { Room } from "@warrick/kit/worker/room";
-import { TICK_MS } from "../shared/constants";
+import { RESYNC_EVERY_MS, TICK_MS } from "../shared/constants";
 import type { ClientMsg, GameState, ServerMsg } from "../shared/protocol";
 import { Game, newGameState, snapshot, type Live } from "./game";
 
@@ -16,6 +16,8 @@ export class GameRoom extends Room<GameState, Game, Live> {
   private rng = mulberry32(randomSeed());
   /** The socket whose message is being handled. */
   private current: WebSocket | null = null;
+  /** When each socket was last sent a snapshot for a resync. */
+  private resyncAt = new WeakMap<WebSocket, number>();
 
   protected newState(code: string, now: number): GameState {
     return newGameState(code, now);
@@ -56,8 +58,22 @@ export class GameRoom extends Room<GameState, Game, Live> {
     if (msg.t === "steer") {
       game.steer(pid, msg.s);
     } else if (msg.t === "resync") {
-      if (game.live) send(ws, { t: "round", round: snapshot(game.live) });
+      this.resync(ws, game);
     }
+  }
+
+  /**
+   * Send a fresh snapshot to a client that lost track of the round. It holds the whole input log
+   * and is encoded on the same thread as the tick, so each socket gets one per RESYNC_EVERY_MS at
+   * most. The rest are dropped; a client still waiting asks again.
+   */
+  private resync(ws: WebSocket, game: Game): void {
+    if (!game.live) return;
+    const now = Date.now();
+    const last = this.resyncAt.get(ws);
+    if (last !== undefined && now - last < RESYNC_EVERY_MS) return;
+    this.resyncAt.set(ws, now);
+    send(ws, { t: "round", round: snapshot(game.live) });
   }
 }
 

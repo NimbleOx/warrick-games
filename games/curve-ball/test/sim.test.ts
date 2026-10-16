@@ -275,6 +275,34 @@ describe("determinism", () => {
     expect(b.checksum()).toBe(a.checksum());
   });
 
+  it("calls onStep after every step of a replay, with the round as it was live", () => {
+    const { setup, inputs } = scripted(11);
+    const before = inputs.filter((i) => i[0] < 200);
+    // The live round, stepped alongside.
+    const a = new Round(setup);
+    let k = 0;
+    const ticks: number[] = [];
+    const b = Round.replay(setup, before, 200, (r) => {
+      while (k < inputs.length && inputs[k][0] === a.tick) {
+        a.setSteer(inputs[k][1], inputs[k][2]);
+        k++;
+      }
+      a.step();
+      ticks.push(r.tick);
+      // What a client draws from after each step.
+      expect(r.checksum()).toBe(a.checksum());
+      expect([...r.prevX, ...r.prevY]).toEqual([...a.prevX, ...a.prevY]);
+      expect(r.painted).toEqual(a.painted);
+      expect(r.deaths).toEqual(a.deaths);
+    });
+    expect(b.tick).toBe(200);
+    expect(ticks).toEqual(Array.from({ length: 200 }, (_, i) => i + 1));
+    // Watching doesn't change the outcome.
+    const plain = Round.replay(setup, before, 200);
+    expect(b.checksum()).toBe(plain.checksum());
+    expect(hash(b.grid)).toBe(hash(plain.grid));
+  });
+
   it("is a different round with a different seed", () => {
     const a = new Round({ cfg: configFor("classic"), seed: 1, ids: ["a", "b"] });
     const b = new Round({ cfg: configFor("classic"), seed: 2, ids: ["a", "b"] });

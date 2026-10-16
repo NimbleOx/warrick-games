@@ -16,24 +16,22 @@ A browser multiplayer take on *Achtung, die Kurve* (also known as *Curve Fever*)
 - Collision: keep trails in an occupancy bitmap of the arena. Each tick, test the pixels just ahead of each head, ignoring the player's own most recent pixels.
 - Trails are a pure function of inputs and tick numbers, so the network traffic can stay tiny: clients send steering changes, the server broadcasts head positions (or input changes) per tick, plus a full snapshot on join or reconnect.
 
-## How to build it
+## How it's built
 
-Copy the architecture of Crater Club, the turn-based artillery game in `../crater-club`. Read its README first. Sibling projects `../light-cycles` and `../boom-room` are being built the same way by other sessions — read them for ideas if useful, but don't modify them.
+Built on `@warrick/kit` (`../../packages/kit`), like every game here; its README lists what each import gives you. Reach for the kit before copying code from another game, and don't edit the kit or other games from a Curve Ball session. Turf War (`../turf-war`) is the nearest real-time sibling.
 
-- Cloudflare Worker + Vite (`@cloudflare/vite-plugin`), TypeScript, no client framework, canvas rendering.
-- One Durable Object per 5-character room code. `POST /api/games` creates a room, `/g/CODE` is the invite link, `/api/games/CODE/ws` is the WebSocket.
-- No accounts: a random token in `localStorage` maps to a player slot, so a reload puts you back in your seat.
-- Lobby: the host picks settings, can add CPU players, and starts the match. Up to 8 players.
-- Reuse and adapt from Crater Club: `src/client/net.ts` (reconnecting socket), `src/worker/index.ts` (routing, code allocation), `src/worker/room.ts` (Durable Object, sockets, persistence, alarm), the lobby markup and styles in `index.html` and `src/client/style.css`, and the Vite / wrangler / tsconfig / Vitest setup.
+- Cloudflare Worker + Vite, TypeScript, no client framework, canvas rendering. `vite.config.ts` is the kit's `gameConfig("curve-ball")`, and `src/worker/index.ts` is `gameWorker("curve-ball")` (routes and room codes).
+- `src/worker/room.ts`: `GameRoom` extends the kit's `Room`, which owns the sockets, tokens, storage, alarm, cleanup and tick loop. It adds the tick (`tickMs`, `wantsLoop`), the round timers (`timerAt`), the round snapshot in the welcome, and the `steer` and `resync` messages.
+- `src/worker/game.ts`: `Game` extends the kit's `Lobby` (joining, host, CPUs, colours, settings, kick, chat) with the rounds, steering, scoring and timers.
+- `src/client/main.ts` creates the kit's `Shell` (home, lobby, chat and the reconnecting socket) and adds the game screen. `localStorage` keys use the prefix `cb`. Dev port 5175 (`../../.claude/launch.json`); `?lag=150` adds latency and `?predict=0` turns off prediction.
 
-### Real-time, unlike Crater Club
+### Real-time
 
-Crater Club is turn-based. This game is real-time:
-
-- During a round, the Durable Object runs the authoritative simulation on a fixed tick (start at 30 Hz) with `setInterval`. Stop the loop between rounds so the object can hibernate.
-- Clients send only input changes. The server broadcasts compact updates; clients render smoothly between them and may predict their own movement.
-- Keep the simulation in `src/shared/` as pure functions, so Vitest can test it and clients can run it for prediction.
-- Persist room state at round boundaries, not every tick.
+- During a round the kit's tick loop steps the simulation every `TICK_MS` (30 Hz), with `setTimeout`s scheduled from the loop's start so it doesn't drift. It runs only while `wantsLoop` says "playing" and someone is connected, so idle games hibernate. The countdown and the pause between rounds run off the alarm (`timerAt` / `onTimer`).
+- Clients send only steering changes. The server broadcasts one small frame per tick; clients play them back slightly behind and predict their own head.
+- The simulation in `src/shared/sim.ts` is pure and deterministic, so Vitest can test it and clients can run it. A round is its seed plus its steering log; `Round.replay` rebuilds it (the client passes `onStep` to draw trails as it goes). Keep it free of `Math.sin` and other engine-dependent maths.
+- A client that misses a frame or fails a checksum asks for a `resync`. The room answers each socket at most once per `RESYNC_EVERY_MS`, since a snapshot carries the whole input log; the client asks again while it's still waiting.
+- Room state is saved at round boundaries, not every tick. The live round is memory only.
 
 ## Lessons from Crater Club
 
@@ -44,12 +42,6 @@ Crater Club is turn-based. This game is real-time:
 
 ## Deploying
 
-Cloudflare, same account as Crater Club. The game is served at `https://warrick.games/curve-ball/`: a path on one shared site, not a subdomain. The hub page at the root is its own Worker in `../../hub`, with `warrick.games` as a Custom Domain. This game gets its own Worker with a zone route on the same hostname, and routes take precedence over a Custom Domain. Each game is its own folder under `games/` in this repo and its own Worker, and deploys on its own. Crater Club already works this way; copy its setup.
-
-- `wrangler.jsonc`: `"routes": [{ "pattern": "warrick.games/curve-ball*", "zone_name": "warrick.games" }]` (a zone route, not a custom domain), `workers_dev: false`, `preview_urls: false`, and `run_worker_first: ["/curve-ball/api/*"]`.
-- Vite `base: "/curve-ball/"`. Build every client URL from `import.meta.env.BASE_URL`: fetches, the WebSocket, invite links (`/curve-ball/g/CODE`) and the router's `history` paths. The Worker's API lives under `/curve-ball/api/...`. Locally the game is at `http://localhost:<port>/curve-ball/`.
-- Static assets gotcha: Workers static assets are looked up by request path and ignore Vite's `base`. Vite writes `dist/client/assets/...`, but the page asks for `/curve-ball/assets/...`, so every asset 404s in production while `npm run dev` looks fine. Copy the `nestClientUnderBase` plugin from Crater Club's `vite.config.ts`. It moves the client build into `dist/client/curve-ball/` and leaves `index.html` at the root, because the single-page-application fallback always serves `/index.html`. Check with `npm run build && npx vite preview` before deploying.
-- All the games share one origin, so prefix `localStorage` keys with the game (for example `cb.name`). Crater Club uses `cc.`, Light Cycles `lc.`, Boom Room `br.`.
-- After the first deploy, turn the game's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
+Live at `https://warrick.games/curve-ball/`, with a card on the hub (`../../hub/public/`). Like the other games: a zone route `warrick.games/curve-ball*` in `wrangler.jsonc`, `workers_dev: false`, `preview_urls: false`, `run_worker_first: ["/curve-ball/api/*"]`. The kit's `gameConfig` sets Vite's base path and nests the client build under `dist/client/curve-ball/`. Build every client URL from `import.meta.env.BASE_URL`. Check a build with `npm run build && npx vite preview` before deploying.
 
 Ask before deploying, committing or pushing.

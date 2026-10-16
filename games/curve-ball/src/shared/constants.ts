@@ -36,3 +36,6 @@ export const ROUNDOVER_MS = 3000;
 
 /** The match ends once the leader has the target and is this far ahead. */
 export const WIN_LEAD = 2;
+
+/** The server sends each socket at most one snapshot per this long when it asks for a resync. */
+export const RESYNC_EVERY_MS = 1000;

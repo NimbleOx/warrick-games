@@ -84,8 +84,15 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   /** Seats, clockwise. Fixed when the game starts. */
   order: string[];
   turnId: string | null;
-  /** The turn clock players see (null: no limit). The timer can fire sooner for a missing player. */
+  /** The turn's clock (null: no limit). Missing in a game saved before it had one. */
+  clockEnd?: number | null;
+  /**
+   * When the turn ends by itself, as players see it: the clock, or sooner while the player whose
+   * turn it is isn't here (null: it doesn't).
+   */
   turnDeadline: number | null;
+  /** This turn's top-up (time to come back to a clock that has nearly run out, once a turn) is used. */
+  clockTopUp?: boolean;
   /** This round's bids, oldest first. */
   bids: BidEntry[];
   /** The last call. Kept into the next round so players can look back at it. */

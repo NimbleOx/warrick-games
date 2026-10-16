@@ -3,12 +3,13 @@
 // restart (a deploy) and players being knocked out. Every message every socket receives is then
 // checked: the only dice in it may be the player's own cup, or a round that a call has revealed.
 import { mulberry32, randInt } from "@warrick/kit/shared/rng";
+import { FakeSocket, type Json, type TestRoom, internals, openRoom } from "@warrick/kit/testing/room";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameState, Hands } from "../src/shared/protocol";
 import { legalBids } from "../src/shared/rules";
 import { GameRoom } from "../src/worker/room";
 
-type Json = Record<string, unknown>;
+type Env = TestRoom<GameRoom>;
 
 interface Received {
   msg: Json;
@@ -18,82 +19,11 @@ interface Received {
   round: number;
 }
 
-interface Env {
-  room: GameRoom;
-  sockets: FakeSocket[];
-  storage: ReturnType<typeof fakeStorage>;
-}
-
-const internals = (room: GameRoom) => room as unknown as { state: GameState | null; live: Hands | null };
-
-class FakeSocket {
-  readyState: number = WebSocket.OPEN;
-  private attachment: unknown = null;
-  received: Received[] = [];
-  constructor(private env: Env) {}
-  serializeAttachment(a: unknown) {
-    this.attachment = structuredClone(a);
-  }
-  deserializeAttachment() {
-    return this.attachment;
-  }
-  send(raw: string) {
-    const { state, live } = internals(this.env.room);
-    this.received.push({ msg: JSON.parse(raw), live: structuredClone(live), phase: state?.phase ?? "", round: state?.round ?? 0 });
-  }
-  close() {
-    this.readyState = WebSocket.CLOSED;
-  }
-}
-
-/** Durable Object storage in a Map, copying values in and out like the real thing. */
-function fakeStorage() {
-  const data = new Map<string, unknown>();
-  let alarm: number | null = null;
-  return {
-    data,
-    alarm: () => alarm,
-    async get(keys: string | string[]) {
-      if (Array.isArray(keys)) return new Map(keys.filter((k) => data.has(k)).map((k) => [k, structuredClone(data.get(k))]));
-      return structuredClone(data.get(keys));
-    },
-    async put(a: string | Json, v?: unknown) {
-      if (typeof a === "string") data.set(a, structuredClone(v));
-      else for (const [k, val] of Object.entries(a)) data.set(k, structuredClone(val));
-    },
-    async delete(k: string) {
-      return data.delete(k);
-    },
-    async setAlarm(at: number) {
-      alarm = at;
-    },
-    async deleteAlarm() {
-      alarm = null;
-    },
-    async deleteAll() {
-      data.clear();
-    },
-  };
-}
-
-/** A room over `storage`: a fresh one, or the same game after a restart. */
-async function openRoom(storage: ReturnType<typeof fakeStorage>): Promise<Env> {
-  const pending: Promise<void>[] = [];
-  const env = { sockets: [] as FakeSocket[], storage } as Env;
-  const ctx = {
-    setWebSocketAutoResponse: () => {},
-    blockConcurrencyWhile: (fn: () => Promise<void>) => pending.push(fn()),
-    storage,
-    getWebSockets: () => env.sockets,
-  };
-  env.room = new GameRoom(ctx as never, {});
-  await Promise.all(pending);
-  return env;
-}
-
 class Client {
   pid = "";
   sockets: FakeSocket[] = [];
+  /** Every message this player was sent, on any socket, with what the server knew then. */
+  seen: Received[] = [];
   constructor(
     readonly name: string,
     readonly token: string,
@@ -105,28 +35,29 @@ class Client {
     return this.ws?.readyState === WebSocket.OPEN;
   }
   async connect(env: Env): Promise<void> {
-    const ws = new FakeSocket(env);
+    const ws = new FakeSocket();
+    ws.onSend = (msg) => {
+      const { state, live } = internals<GameState, Hands>(env.room);
+      this.seen.push({ msg, live: structuredClone(live), phase: state?.phase ?? "", round: state?.round ?? 0 });
+    };
     this.sockets.push(ws);
     env.sockets.push(ws);
-    await this.say(env, { t: "hello", token: this.token, name: this.name });
-    const welcome = ws.received.find((r) => r.msg.t === "welcome");
-    this.pid = String(welcome?.msg.you ?? "");
+    await env.say(ws, { t: "hello", token: this.token, name: this.name });
+    this.pid = ws.you;
   }
   async say(env: Env, msg: Json): Promise<void> {
-    await env.room.webSocketMessage(this.ws as never, JSON.stringify(msg));
+    await env.say(this.ws, msg);
   }
   async drop(env: Env): Promise<void> {
-    this.ws.readyState = WebSocket.CLOSED;
-    await env.room.webSocketClose(this.ws as never);
+    await env.drop(this.ws);
   }
   /** The last cup this player was sent, on any socket. */
   lastHand(): { round: number; dice: number[] } | null {
-    const all = this.sockets.flatMap((s) => s.received).filter((r) => r.msg.t === "hand");
-    const h = all.at(-1)?.msg as { round: number; dice: number[] } | undefined;
+    const h = this.seen.filter((r) => r.msg.t === "hand").at(-1)?.msg as { round: number; dice: number[] } | undefined;
     return h ?? null;
   }
   received(): Received[] {
-    return this.sockets.flatMap((s) => s.received);
+    return this.seen;
   }
 }
 
@@ -179,11 +110,9 @@ describe("hidden dice", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(1_700_000_000_000);
-    vi.stubGlobal("WebSocketRequestResponsePair", class {});
   });
   afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllGlobals();
   });
 
   for (const [wild, spotOn] of [
@@ -191,9 +120,8 @@ describe("hidden dice", () => {
     [false, false],
   ]) {
     it(`never reach another seat until a call reveals them (wild ${wild}, spot on ${spotOn})`, async () => {
-      const storage = fakeStorage();
-      let env = await openRoom(storage);
-      await env.room.init("ABCDE");
+      let env = await openRoom(GameRoom);
+      const storage = env.storage;
       const ann = new Client("Ann", "token-ann-0001");
       const bob = new Client("Bob", "token-bob-0002");
       const cat = new Client("Cat", "token-cat-0003");
@@ -204,7 +132,7 @@ describe("hidden dice", () => {
       await ann.say(env, { t: "addCpu", level: "normal" });
       await ann.say(env, { t: "addCpu", level: "hard" });
       await ann.say(env, { t: "start" });
-      const s = () => internals(env.room).state!;
+      const s = () => internals<GameState>(env.room).state!;
       expect(s().phase).toBe("playing");
 
       const rng = mulberry32(wild ? 1 : 2);
@@ -220,7 +148,7 @@ describe("hidden dice", () => {
           const before = bob.lastHand();
           await bob.drop(env);
           await bob.connect(env);
-          expect(bob.ws.received.map((r) => r.msg.t)).toContain("hand");
+          expect(bob.ws.received.map((m) => m.t)).toContain("hand");
           expect(bob.lastHand()).toEqual(before);
         }
 
@@ -228,9 +156,8 @@ describe("hidden dice", () => {
         if (!restarted && step > 40 && st.phase === "playing" && st.bids.length > 0) {
           restarted = true;
           const before = new Map(clients.map((c) => [c, c.lastHand()]));
-          for (const ws of env.sockets) ws.readyState = WebSocket.CLOSED;
-          env = await openRoom(storage);
-          expect(internals(env.room).state!.round).toBe(st.round);
+          env = await env.restart();
+          expect(internals<GameState>(env.room).state!.round).toBe(st.round);
           for (const c of clients) await c.connect(env);
           for (const c of clients) {
             const had = before.get(c);

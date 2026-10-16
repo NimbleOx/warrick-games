@@ -185,6 +185,23 @@ a:focus-visible {
   text-align: center;
 }
 
+.hub-foot p {
+  margin: 0;
+}
+
+.hub-foot p + p {
+  margin-top: 8px;
+}
+
+.hub-foot a {
+  color: var(--text);
+  text-underline-offset: 3px;
+}
+
+.hub-foot a:hover {
+  color: var(--accent-2);
+}
+
 /* ------------------------------------------------------------ 404 */
 
 .hub-404 {

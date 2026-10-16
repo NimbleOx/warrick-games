@@ -53,13 +53,7 @@ describe("CPU players", () => {
   });
 
   describe("tactics", () => {
-    const M = testMap([
-      "H1. . . . . . . ",
-      ". . . . . . . . ",
-      ". . . . . C-. . ",
-      ". . . . . . . . ",
-      "F1. . . . . F2H2",
-    ]);
+    const M = testMap(["H1. . . . . . . ", ". . . . . . . . ", ". . . . . C-. . ", ". . . . . . . . ", "F1. . . . . F2H2"]);
 
     it("attack what they can reach", () => {
       for (const level of LEVELS) {

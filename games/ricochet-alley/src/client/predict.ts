@@ -74,7 +74,7 @@ export class BulletField {
 
   /** Fly every bullet forward to `tick`. Reports bounce points (for sparks and sounds) as it goes. */
   advance(tick: number, onBounce?: (x: number, y: number) => void): void {
-    for (let i = 0; i < this.list.length; ) {
+    for (let i = 0; i < this.list.length;) {
       const f = this.list[i];
       let gone = false;
       // Don't replay more than a few seconds (a tab that was asleep): a bullet that old is gone anyway.

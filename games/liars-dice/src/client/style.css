@@ -46,8 +46,7 @@
 .die-hidden {
   border-radius: 22%;
   background:
-    radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.14), transparent 55%),
-    linear-gradient(160deg, #2b3a73, #18214a);
+    radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.14), transparent 55%), linear-gradient(160deg, #2b3a73, #18214a);
   border: 2px solid #3a4c8f;
 }
 
@@ -167,7 +166,9 @@
 
 .seat.turn {
   border-color: var(--pc);
-  box-shadow: 0 0 0 1px var(--pc), 0 0 18px -4px var(--pc);
+  box-shadow:
+    0 0 0 1px var(--pc),
+    0 0 18px -4px var(--pc);
 }
 
 .seat.out {
@@ -334,9 +335,7 @@
   padding: 14px;
   border: 2px solid var(--line);
   border-radius: 8px;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgb(108 155 255 / 0.16), transparent 70%),
-    var(--panel);
+  background: radial-gradient(ellipse at 50% 0%, rgb(108 155 255 / 0.16), transparent 70%), var(--panel);
 }
 
 .bidbox .chip {

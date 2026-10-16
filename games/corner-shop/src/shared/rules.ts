@@ -1,16 +1,7 @@
 // The rules as pure functions: board layouts, legal placements, move generation and scoring.
 // The server checks moves and runs the CPUs with these; the client draws the ghost, the open
 // corners and the home-screen demo with them.
-import {
-  MONOMINO,
-  PIECE_COUNT,
-  PIECE_IDS,
-  TOTAL_SQUARES,
-  orientations,
-  pieceIndex,
-  pieceSize,
-  type PieceId,
-} from "./pieces";
+import { MONOMINO, PIECE_COUNT, PIECE_IDS, TOTAL_SQUARES, orientations, pieceIndex, pieceSize, type PieceId } from "./pieces";
 
 export const EMPTY = -1;
 

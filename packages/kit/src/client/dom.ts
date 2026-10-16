@@ -45,7 +45,9 @@ export function store(key: string, value?: string | null): string | null {
 export function playerToken(): string {
   let t = store("token");
   if (!t || !/^[\w-]{8,64}$/.test(t)) {
-    t = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+    t =
+      crypto.randomUUID?.() ??
+      Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
     store("token", t);
   }
   return t;

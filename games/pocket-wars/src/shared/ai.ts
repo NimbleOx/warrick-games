@@ -218,7 +218,13 @@ class Planner {
       const bi = this.assignments().get(u.id);
       if (bi !== undefined) return buildingField(m, bi, mt);
     }
-    if (this.enemies.length) return this.field(`enemy:${mt}`, mt, this.enemies.map((e) => unitTile(m, e)), true);
+    if (this.enemies.length)
+      return this.field(
+        `enemy:${mt}`,
+        mt,
+        this.enemies.map((e) => unitTile(m, e)),
+        true,
+      );
     const theirs: number[] = [];
     m.buildings.forEach((bd, i) => b.owners[i] !== this.seat && theirs.push(tileOf(m, bd.x, bd.y)));
     return theirs.length ? this.field(`theirs:${mt}`, mt, theirs) : null;
@@ -331,7 +337,14 @@ class Planner {
     const affordable = UNIT_TYPES.filter((t) => UNITS[t].cost <= funds);
     if (!affordable.length) return null;
     // Build nearest the enemy first.
-    const front = this.enemies.length ? this.field("front:treads", "treads", this.enemies.map((e) => unitTile(m, e)), true) : null;
+    const front = this.enemies.length
+      ? this.field(
+          "front:treads",
+          "treads",
+          this.enemies.map((e) => unitTile(m, e)),
+          true,
+        )
+      : null;
     factories.sort((a, c) => (front ? front[a.t] - front[c.t] : 0) || a.i - c.i);
     const at = factories[0].t;
     if (this.level === "easy") return { kind: "build", at, unit: affordable[Math.floor(this.rng() * affordable.length)] };

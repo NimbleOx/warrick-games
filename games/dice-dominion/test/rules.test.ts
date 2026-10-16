@@ -21,7 +21,10 @@ const adj = [[1], [0, 2, 6], [1, 3], [2, 4, 6], [3, 5], [4], [1, 3]];
 describe("groups", () => {
   it("finds connected groups and the largest", () => {
     const owner = [0, 0, 1, 0, 0, 0, 1];
-    expect(groupsOf(adj, owner, 0).map((g) => g.sort())).toEqual([[0, 1], [3, 4, 5]]);
+    expect(groupsOf(adj, owner, 0).map((g) => g.sort())).toEqual([
+      [0, 1],
+      [3, 4, 5],
+    ]);
     expect(largestGroup(adj, owner, 0)).toBe(3);
     expect(largestGroup(adj, owner, 1)).toBe(1); // 2 and 6 don't touch
     expect(largestGroup(adj, owner, 2)).toBe(0);
@@ -51,8 +54,18 @@ describe("attacking", () => {
   it("lists the legal attacks", () => {
     expect(targetsOf(adj, owner, dice, 1)).toEqual([2, 6]);
     expect(targetsOf(adj, owner, dice, 0)).toEqual([]);
-    expect(legalAttacks(adj, owner, dice, 0)).toEqual([[1, 2], [1, 6], [3, 2], [3, 6]]);
-    expect(legalAttacks(adj, owner, dice, 1)).toEqual([[2, 1], [2, 3], [6, 1], [6, 3]]);
+    expect(legalAttacks(adj, owner, dice, 0)).toEqual([
+      [1, 2],
+      [1, 6],
+      [3, 2],
+      [3, 6],
+    ]);
+    expect(legalAttacks(adj, owner, dice, 1)).toEqual([
+      [2, 1],
+      [2, 3],
+      [6, 1],
+      [6, 3],
+    ]);
   });
 
   it("a win moves all but one die into the captured territory", () => {
@@ -146,11 +159,12 @@ describe("setup and winning", () => {
     expect(seatBonus(2, 4)).toEqual([0, 2]);
     expect(seatBonus(4, 6)).toEqual([0, 1, 1, 2]);
     expect(seatBonus(8, 6)).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
-    for (const n of [2, 3, 4, 5, 6, 7, 8]) for (const size of [4, 6, 8]) {
-      const b = seatBonus(n, size);
-      expect(b[0]).toBe(0);
-      expect(b.every((x, i) => i === 0 || x >= b[i - 1])).toBe(true);
-    }
+    for (const n of [2, 3, 4, 5, 6, 7, 8])
+      for (const size of [4, 6, 8]) {
+        const b = seatBonus(n, size);
+        expect(b[0]).toBe(0);
+        expect(b.every((x, i) => i === 0 || x >= b[i - 1])).toBe(true);
+      }
   });
 
   it("someone wins when they hold every territory", () => {

@@ -92,7 +92,9 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   onReset,
   confirmLeave: (s): string | null => {
     const p = me(s);
-    return s.phase === "playing" && p && p.seat >= 0 && !p.out ? "Leave this game? You'll be out, and your pieces stay on the board." : null;
+    return s.phase === "playing" && p && p.seat >= 0 && !p.out
+      ? "Leave this game? You'll be out, and your pieces stay on the board."
+      : null;
   },
 });
 const board = new BoardView($<HTMLCanvasElement>("board"));
@@ -449,7 +451,10 @@ function renderHud(s: GameState): void {
   const turn = shell.player(s.turnPlayerId);
   let who = "";
   if (s.phase === "playing" && turn) {
-    const label = turn.id === shell.me ? "Your turn" : `${esc(turn.name)}'s turn${turn.cpu ? " (thinking…)" : !turn.connected ? " (away)" : ""}`;
+    const label =
+      turn.id === shell.me
+        ? "Your turn"
+        : `${esc(turn.name)}'s turn${turn.cpu ? " (thinking…)" : !turn.connected ? " (away)" : ""}`;
     who = `<span class="chip" style="background:${turn.color}"></span><span class="who">${label}</span><span class="clock"></span>`;
   } else if (s.phase === "gameover") {
     who = `<span class="who">Game over</span><button class="btn btn-small" id="show-results">Scores</button>`;
@@ -535,7 +540,11 @@ const OUT_TAG: Record<string, string> = { stuck: "out of moves", done: "all plac
 
 function renderPlayers(s: GameState): void {
   const rows = seated(s).map((p) => {
-    const cls = [s.turnPlayerId === p.id && s.phase === "playing" ? "turn" : "", p.out ? "out" : "", !p.cpu && !p.connected ? "offline" : ""].join(" ");
+    const cls = [
+      s.turnPlayerId === p.id && s.phase === "playing" ? "turn" : "",
+      p.out ? "out" : "",
+      !p.cpu && !p.connected ? "offline" : "",
+    ].join(" ");
     const tags = [
       p.id === shell.me ? `<span class="tag tag-you">you</span>` : "",
       p.cpu ? `<span class="tag">CPU · ${p.cpu}</span>` : "",
@@ -582,7 +591,7 @@ function renderGameOver(s: GameState): void {
   setHtml(
     $("gameover-winner"),
     winners.length
-    ? `${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} share the win` : `${names[0]} wins`} with ${winners[0].score} point${Math.abs(winners[0].score) === 1 ? "" : "s"}.`
+      ? `${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} share the win` : `${names[0]} wins`} with ${winners[0].score} point${Math.abs(winners[0].score) === 1 ? "" : "s"}.`
       : "",
   );
   let place = 0;
@@ -590,7 +599,9 @@ function renderGameOver(s: GameState): void {
     .map((p, i) => {
       if (i === 0 || p.score !== ranked[i - 1].score) place = i + 1;
       const tie = ranked.filter((o) => o.score === p.score).length > 1;
-      const bonus = !p.tray.length ? ` <span class="muted small" title="Placed every piece${p.lastPiece === "1" ? ", monomino last" : ""}">${p.lastPiece === "1" ? "★★" : "★"}</span>` : "";
+      const bonus = !p.tray.length
+        ? ` <span class="muted small" title="Placed every piece${p.lastPiece === "1" ? ", monomino last" : ""}">${p.lastPiece === "1" ? "★★" : "★"}</span>`
+        : "";
       return `<tr class="${s.winners.includes(p.id) ? "winner" : ""}">
         <td>${place}${tie ? "=" : ""}</td>
         <td><span class="pcell"><span class="chip" style="background:${p.color}"></span>${esc(p.name)}</span></td>
@@ -675,7 +686,17 @@ function wire(): void {
     }
     if (app.held !== id) return;
     capture(btn, e.pointerId);
-    app.drag = { kind: "tray", pointerId: e.pointerId, touch: e.pointerType !== "mouse", x0: e.clientX, y0: e.clientY, gx: 0, gy: 0, moved: false, wasHeld };
+    app.drag = {
+      kind: "tray",
+      pointerId: e.pointerId,
+      touch: e.pointerType !== "mouse",
+      x0: e.clientX,
+      y0: e.clientY,
+      gx: 0,
+      gy: 0,
+      moved: false,
+      wasHeld,
+    };
     e.preventDefault();
   });
   tray.addEventListener("pointermove", (e) => {
@@ -737,7 +758,17 @@ function wire(): void {
   canvas.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" || !app.held || !app.ghost) return;
     capture(canvas, e.pointerId);
-    app.drag = { kind: "board", pointerId: e.pointerId, touch: true, x0: e.clientX, y0: e.clientY, gx: app.ghost.x, gy: app.ghost.y, moved: false, wasHeld: true };
+    app.drag = {
+      kind: "board",
+      pointerId: e.pointerId,
+      touch: true,
+      x0: e.clientX,
+      y0: e.clientY,
+      gx: app.ghost.x,
+      gy: app.ghost.y,
+      moved: false,
+      wasHeld: true,
+    };
   });
   canvas.addEventListener("pointerup", (e) => {
     if (e.pointerType === "mouse") {
@@ -795,7 +826,8 @@ function wire(): void {
     render();
   });
   tool("tool-place", place);
-  for (const id of ["tool-rotate", "tool-flip", "tool-cancel", "tool-place"]) $(id).addEventListener("mousedown", (e) => e.preventDefault());
+  for (const id of ["tool-rotate", "tool-flip", "tool-cancel", "tool-place"])
+    $(id).addEventListener("mousedown", (e) => e.preventDefault());
 
   window.addEventListener("keydown", (e) => {
     if (shell.screen !== "game" || e.metaKey || e.ctrlKey || e.altKey) return;

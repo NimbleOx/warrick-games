@@ -137,7 +137,16 @@ export class Renderer {
     // The arrow over the tank whose turn it is bobs a whole pixel at a time, so a turn spent
     // thinking redraws a few times a second, not every frame.
     const bob = [...opts.tanks.values()].some((t) => t.active) ? Math.round(Math.sin(now / 180) * 3) : 0;
-    const key = JSON.stringify([world.tick, world.terrainVersion, [...opts.tanks], opts, bob, this.canvas.width, this.canvas.height, this.ui]);
+    const key = JSON.stringify([
+      world.tick,
+      world.terrainVersion,
+      [...opts.tanks],
+      opts,
+      bob,
+      this.canvas.width,
+      this.canvas.height,
+      this.ui,
+    ]);
     if (!this.moving && world === this.shownWorld && key === this.shown) return false;
     this.shownWorld = world;
     this.shown = key;
@@ -301,7 +310,7 @@ export class Renderer {
     const ctx = this.ctx;
     const x = t.x;
     const base = WORLD_H - t.y;
-    const color = t.alive ? info?.color ?? "#cccccc" : "#5d5d6b";
+    const color = t.alive ? (info?.color ?? "#cccccc") : "#5d5d6b";
 
     if (t.alive && info) {
       const a = (info.angle * Math.PI) / 180;

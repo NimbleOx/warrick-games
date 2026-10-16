@@ -218,7 +218,8 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
 
     const names = winners.map((p) => p.name).join(" and ");
     if (!winners.length) this.event(`Round ${r.n} is a draw`);
-    else if (o.how === "cleared") this.event(`${names} cleared the bottle first and ${winners.length > 1 ? "share" : "takes"} round ${r.n}`);
+    else if (o.how === "cleared")
+      this.event(`${names} cleared the bottle first and ${winners.length > 1 ? "share" : "takes"} round ${r.n}`);
     else this.event(`${names} is the last one standing and takes round ${r.n}`);
 
     // The match goes to the first to the target, as long as nobody is level with them.

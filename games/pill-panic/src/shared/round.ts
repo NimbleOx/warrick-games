@@ -1,14 +1,7 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { newBrain, think, type Brain, type CpuLevel } from "./ai";
 import { B_QUIT, Bottle, PLAYER_BUTTONS, virusLayout, type BottleEvent, type Garbage } from "./bottle";
-import {
-  COLS,
-  GARBAGE_GRACE_TICKS,
-  MAX_LAG_OFFLINE,
-  MAX_LAG_TICKS,
-  MAX_LEAD_TICKS,
-  START_SPEED,
-} from "./constants";
+import { COLS, GARBAGE_GRACE_TICKS, MAX_LAG_OFFLINE, MAX_LAG_TICKS, MAX_LEAD_TICKS, START_SPEED } from "./constants";
 import type { Aim, Attack, DropEntry, Frame, KeyEntry, LaneSnap, RoundSnap, Segment, Speed } from "./protocol";
 import { randInt, shuffle, type Rng } from "@warrick/kit/shared/rng";
 
@@ -432,11 +425,9 @@ export class Round {
     const lanes = this.live;
     const playing = lanes.filter((L) => L.doneAt === null);
     const horizon = playing.length ? Math.min(...playing.map((L) => L.lane.bottle.tick)) : Infinity;
-    const done = lanes
-      .filter((L) => L.doneAt !== null && L.doneAt <= horizon)
-      .sort((a, b) => a.doneAt! - b.doneAt!);
+    const done = lanes.filter((L) => L.doneAt !== null && L.doneAt <= horizon).sort((a, b) => a.doneAt! - b.doneAt!);
     const out = new Set<ServerLane>();
-    for (let i = 0; i < done.length; ) {
+    for (let i = 0; i < done.length;) {
       const tick = done[i].doneAt!;
       const group: ServerLane[] = [];
       while (i < done.length && done[i].doneAt === tick) group.push(done[i++]);

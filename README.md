@@ -44,6 +44,7 @@ npm install                            # once, at the root
 npm run dev -w games/crater-club       # one game (or `npm run dev` inside its folder)
 npm test                               # every workspace, the kit included
 npm run typecheck
+npm run format                         # Prettier; `npm run format:check` only checks
 npm run deploy -w games/crater-club    # deploy one game
 npm run deploy -w hub
 ```

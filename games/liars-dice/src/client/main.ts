@@ -148,7 +148,9 @@ function onState(s: GameState, prev: GameState | null): void {
     app.turnKey = key;
     const last = s.bids.at(-1) ?? null;
     const total = tableDice(s);
-    app.qty = last ? (minQty(last, last.face, rulesOf(s), total) ?? Math.min(total, last.qty)) : Math.max(1, Math.round(total / 6));
+    app.qty = last
+      ? (minQty(last, last.face, rulesOf(s), total) ?? Math.min(total, last.qty))
+      : Math.max(1, Math.round(total / 6));
     app.face = null;
     sfx.turn();
   }
@@ -217,15 +219,19 @@ function renderSeats(s: GameState): void {
           })
           .join("");
       } else if (you && myDice(s)) {
-        dice = myDice(s)!.map((d) => dieSvg(d, "mine")).join("");
+        dice = myDice(s)!
+          .map((d) => dieSvg(d, "mine"))
+          .join("");
       } else {
         dice = Array.from({ length: p.dice }, () => hiddenDie()).join("");
       }
       let note = "";
-      if (r && id === r.callerId) note = r.kind === "liar" ? `<span class="call">Liar!</span>` : `<span class="call spot">Spot on!</span>`;
+      if (r && id === r.callerId)
+        note = r.kind === "liar" ? `<span class="call">Liar!</span>` : `<span class="call spot">Spot on!</span>`;
       else if (lastBid.has(id) && s.phase !== "gameover") note = bidHtml(lastBid.get(id)!, "small");
       else if (turn) note = `<span class="muted">${p.cpu ? "thinking…" : you ? "your turn" : "deciding…"}</span>`;
-      if (p.out && !(r && r.hands.some((h) => h.id === id))) note = `<span class="muted">${p.place === null ? "out" : `out · #${p.place}`}</span>`;
+      if (p.out && !(r && r.hands.some((h) => h.id === id)))
+        note = `<span class="muted">${p.place === null ? "out" : `out · #${p.place}`}</span>`;
       const cls = [
         "seat",
         turn ? "turn" : "",
@@ -300,7 +306,8 @@ function resultText(r: Reveal): string {
   const you = (id: string | null) => id === shell.me;
   const loses = `<b>${nameOf(r.loserId, "you")}</b> ${you(r.loserId) ? "lose" : "loses"} a die${r.outId ? (you(r.outId) ? " and are out" : " and is out") : ""}.`;
   if (r.kind === "liar") return `${there} ${r.loserId === r.callerId ? "The bid stands" : "Caught bluffing"}: ${loses}`;
-  if (!r.loserId) return `${there} Spot on! ${r.gainerId ? `<b>${nameOf(r.gainerId, "You")}</b> ${you(r.gainerId) ? "get" : "gets"} a die back.` : "Already at five dice."}`;
+  if (!r.loserId)
+    return `${there} Spot on! ${r.gainerId ? `<b>${nameOf(r.gainerId, "You")}</b> ${you(r.gainerId) ? "get" : "gets"} a die back.` : "Already at five dice."}`;
   return `${there} Not quite: ${loses}`;
 }
 
@@ -355,7 +362,8 @@ function renderPicker(s: GameState): void {
     const legal = mine && !bidError(last, { qty: app.qty, face: f }, rules, total);
     const min = minQty(last, f, rules, total);
     const hint = min === null ? (last ? "—" : "no") : `≥${min}`;
-    const title = min === null ? (last ? "No higher bid on this face" : "Ones are wild: you can't open on them") : `At least ${min}`;
+    const title =
+      min === null ? (last ? "No higher bid on this face" : "Ones are wild: you can't open on them") : `At least ${min}`;
     return `<button class="face" data-face="${f}" aria-pressed="${app.face === f}" ${legal ? "" : "disabled"} title="${title}">
       ${dieSvg(f)}<span class="min">${hint}</span></button>`;
   }).join("");
@@ -380,7 +388,10 @@ function renderPicker(s: GameState): void {
   if (s.phase === "reveal") why = "The cups are up…";
   else if (move.waiting) why = "Sending…";
   else if (!isMyTurn(s)) why = turn ? `Waiting for ${esc(turn.name)}…` : "";
-  else if (!chosen) why = last ? `Pick a quantity and a face that raise ${bidText(last)}, or call Liar!` : "Open the bidding: pick a quantity and a face.";
+  else if (!chosen)
+    why = last
+      ? `Pick a quantity and a face that raise ${bidText(last)}, or call Liar!`
+      : "Open the bidding: pick a quantity and a face.";
   const whyEl = $("why");
   if (whyEl.innerHTML !== why) whyEl.innerHTML = why;
 }
@@ -388,9 +399,13 @@ function renderPicker(s: GameState): void {
 function renderHistory(s: GameState): void {
   const r = shownReveal(s);
   const rows = s.bids.map(
-    (b) => `<li>${chip(player(b.by))}<span class="who">${nameOf(b.by)}</span><span class="spacer"></span>${bidHtml(b, "small")}</li>`,
+    (b) =>
+      `<li>${chip(player(b.by))}<span class="who">${nameOf(b.by)}</span><span class="spacer"></span>${bidHtml(b, "small")}</li>`,
   );
-  if (r) rows.push(`<li class="call-row">${chip(player(r.callerId))}<span class="who">${nameOf(r.callerId)}</span><span class="spacer"></span><b>${r.kind === "liar" ? "Liar!" : "Spot on!"}</b></li>`);
+  if (r)
+    rows.push(
+      `<li class="call-row">${chip(player(r.callerId))}<span class="who">${nameOf(r.callerId)}</span><span class="spacer"></span><b>${r.kind === "liar" ? "Liar!" : "Spot on!"}</b></li>`,
+    );
   const html = rows.length ? rows.join("") : `<li class="muted">No bids yet.</li>`;
   const ol = $("history");
   if (ol.dataset.html !== html) {
@@ -472,7 +487,8 @@ function animateReveal(_now: number): void {
   }
   seats.classList.toggle("lifted", t >= REVEAL_LIFT_MS * 0.3);
   seats.classList.toggle("counting", t >= REVEAL_COUNT_START_MS);
-  const shown = t < REVEAL_COUNT_START_MS ? 0 : Math.min(r.count, Math.floor((t - REVEAL_COUNT_START_MS) / REVEAL_PER_DIE_MS) + 1);
+  const shown =
+    t < REVEAL_COUNT_START_MS ? 0 : Math.min(r.count, Math.floor((t - REVEAL_COUNT_START_MS) / REVEAL_PER_DIE_MS) + 1);
   for (const el of $$<HTMLElement>("#seats [data-k]")) el.classList.toggle("lit", Number(el.dataset.k) < shown);
   const countEl = document.getElementById("reveal-count");
   if (countEl && countEl.textContent !== String(shown)) countEl.textContent = String(shown);

@@ -42,7 +42,14 @@ export function territoryCount(owner: number[], seat: number): number {
 }
 
 /** Why `seat` can't attack `to` from `from`, or null if it can. */
-export function attackProblem(adj: number[][], owner: number[], dice: number[], seat: number, from: number, to: number): string | null {
+export function attackProblem(
+  adj: number[][],
+  owner: number[],
+  dice: number[],
+  seat: number,
+  from: number,
+  to: number,
+): string | null {
   const exists = (t: number) => Number.isInteger(t) && t >= 0 && t < owner.length;
   if (!exists(from) || !exists(to)) return "No such territory";
   if (owner[from] !== seat) return "That's not your territory";
@@ -142,7 +149,10 @@ export function setupBoard(
   extra: number,
   bonus: readonly number[] = [],
 ): { owner: number[]; dice: number[] } {
-  const order = shuffle(rng, Array.from({ length: territories }, (_, i) => i));
+  const order = shuffle(
+    rng,
+    Array.from({ length: territories }, (_, i) => i),
+  );
   const owner = new Array<number>(territories).fill(-1);
   order.forEach((t, i) => (owner[t] = i % seats));
   const dice = new Array<number>(territories).fill(1);

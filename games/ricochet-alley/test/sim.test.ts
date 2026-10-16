@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  BULLET_LIFE,
-  CELL,
-  MAX_BULLETS,
-  MAZE_LOOPINESS,
-  REFIRE_TICKS,
-  TANK_R,
-} from "../src/shared/constants";
+import { BULLET_LIFE, CELL, MAX_BULLETS, MAZE_LOOPINESS, REFIRE_TICKS, TANK_R } from "../src/shared/constants";
 import { castPath, pointInRects, rectsOverlapCircle, segmentHitsCircle } from "../src/shared/geom";
 import { HEADINGS } from "../src/shared/headings";
 import { generateMaze, mazeHeight, mazeWidth, pickSpawns, type Maze, type Rect } from "../src/shared/maze";

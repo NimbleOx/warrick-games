@@ -414,7 +414,12 @@ export function spinKind(b: Board, p: Piece, r: number, x: number, y: number, sp
     b.get(cx - 1, cy - 1) !== 0,
   ];
   if (solid.filter(Boolean).length < 3) return SPIN_NONE;
-  const [a, c] = [[0, 1], [1, 2], [2, 3], [3, 0]][r];
+  const [a, c] = [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 0],
+  ][r];
   return (solid[a] && solid[c]) || spin - 1 === 4 ? SPIN_FULL : SPIN_MINI;
 }
 

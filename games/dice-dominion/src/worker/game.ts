@@ -5,13 +5,7 @@ import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTi
 import { cpuAttack } from "../shared/ai";
 import { CPU_GAP_FAST_MS, CPU_GAP_MS, dropMs } from "../shared/constants";
 import { generateMap, type HexMap } from "../shared/map";
-import {
-  DEFAULT_SETTINGS,
-  SETTING_CHOICES,
-  type GameState,
-  type PlayerState,
-  type ServerMsg,
-} from "../shared/protocol";
+import { DEFAULT_SETTINGS, SETTING_CHOICES, type GameState, type PlayerState, type ServerMsg } from "../shared/protocol";
 import {
   applyAttack,
   attackProblem,
@@ -157,7 +151,10 @@ export class Game extends Lobby<GameState, ServerMsg, HexMap> {
     const s = this.s;
     const seed = randomSeed();
     const rng = mulberry32(seed);
-    const order = shuffle(rng, this.participants.map((p) => p.id));
+    const order = shuffle(
+      rng,
+      this.participants.map((p) => p.id),
+    );
     const size = s.settings.size;
     const map = generateMap(seed, order.length * size);
     const bonus = seatBonus(order.length, size);
@@ -187,7 +184,19 @@ export class Game extends Lobby<GameState, ServerMsg, HexMap> {
 
   protected resetForLobby(): void {
     const s = this.s;
-    Object.assign(s, { mapId: 0, owner: [], dice: [], order: [], turn: -1, round: 0, turnDeadline: null, clockEnd: null, timer: null, knockedOut: [], winnerId: null });
+    Object.assign(s, {
+      mapId: 0,
+      owner: [],
+      dice: [],
+      order: [],
+      turn: -1,
+      round: 0,
+      turnDeadline: null,
+      clockEnd: null,
+      timer: null,
+      knockedOut: [],
+      winnerId: null,
+    });
     this.live = null;
     for (const p of s.players) {
       Object.assign(p, { seat: -1, reserve: 0, outRound: null, captures: 0, attacks: 0, wins: 0, peak: 0 });

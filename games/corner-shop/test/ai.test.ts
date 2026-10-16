@@ -31,7 +31,11 @@ function playOut(levels: CpuLevel[], seed: number): { placed: number[]; moves: n
 describe("CPU players", () => {
   for (const level of ["easy", "normal", "hard"] as const) {
     it(`${level} only ever plays legal moves`, () => {
-      for (const [n, seed] of [[2, 1], [3, 2], [4, 3]] as const) {
+      for (const [n, seed] of [
+        [2, 1],
+        [3, 2],
+        [4, 3],
+      ] as const) {
         const { moves, placed } = playOut(Array(n).fill(level), seed);
         expect(moves).toBeGreaterThan(n * 8);
         expect(placed.every((p) => p > 0 && p <= TOTAL_SQUARES)).toBe(true);

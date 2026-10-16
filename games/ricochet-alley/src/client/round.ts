@@ -155,7 +155,12 @@ export class NetRound {
     const reach = TANK_R + BULLET_R;
     const bullets = this.field
       .positions(t)
-      .filter((b) => !tanks.some((k) => Math.abs(k.x - b.x) < reach && Math.abs(k.y - b.y) < reach && Math.hypot(k.x - b.x, k.y - b.y) < reach));
+      .filter(
+        (b) =>
+          !tanks.some(
+            (k) => Math.abs(k.x - b.x) < reach && Math.abs(k.y - b.y) < reach && Math.hypot(k.x - b.x, k.y - b.y) < reach,
+          ),
+      );
     return { tanks, bullets, mine };
   }
 

@@ -237,7 +237,8 @@ describe("a round", () => {
       const far = Number.MAX_SAFE_INTEGER;
       let wall = 0;
       for (let i = 0; i < 300; i++) {
-        if (i % 40 === 0 && i < 240) (round as unknown as { attack(from: unknown, colors: number[]): void }).attack(round.lanes[1], [RED, BLUE]);
+        if (i % 40 === 0 && i < 240)
+          (round as unknown as { attack(from: unknown, colors: number[]): void }).attack(round.lanes[1], [RED, BLUE]);
         wall += 3;
         ann.play(wall);
         ann.drops = ann.drops.map(([, id]) => [far, id]);

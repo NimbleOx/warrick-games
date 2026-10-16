@@ -12,7 +12,13 @@ const HARD_CANDIDATES = 8;
  * Pick a move for `seat`, or null if it has none. `order` is the seats still playing, in turn
  * order; the hard CPU uses it to guess the next player's reply and to find the leader.
  */
-export function chooseMove(pos: Position, seat: number, level: CpuLevel, rng: Rng, order: readonly number[] = [seat]): Move | null {
+export function chooseMove(
+  pos: Position,
+  seat: number,
+  level: CpuLevel,
+  rng: Rng,
+  order: readonly number[] = [seat],
+): Move | null {
   const moves = legalMoves(pos, seat);
   if (!moves.length) return null;
   if (level === "easy") return easyMove(moves, rng);
@@ -59,7 +65,8 @@ function hardMove(pos: Position, seat: number, moves: Move[], order: readonly nu
   const early = Math.max(0, 1 - squaresPlaced(pos.trays[seat]) / 30);
   const scored = moves.map((m) => {
     const f = ev(m);
-    let score = 3 * f.size + pieceDef(m.piece).awkward * (0.6 + 0.6 * early) + 1.2 * f.corners + 1.5 * f.blocked + 2 * early * f.centre;
+    let score =
+      3 * f.size + pieceDef(m.piece).awkward * (0.6 + 0.6 * early) + 1.2 * f.corners + 1.5 * f.blocked + 2 * early * f.centre;
     if (m.piece === MONOMINO && pos.trays[seat].length > 1) score -= 10;
     return { m, score: score + rng() * 0.2 };
   });
@@ -184,4 +191,3 @@ const DIAGONALS = [
   [-1, 1],
   [-1, -1],
 ] as const;
-

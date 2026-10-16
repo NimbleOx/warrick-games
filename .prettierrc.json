@@ -1,0 +1,4 @@
+{
+  "printWidth": 130,
+  "overrides": [{ "files": "*.jsonc", "options": { "trailingComma": "none" } }]
+}

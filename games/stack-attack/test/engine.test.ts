@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { choose, landings } from "../src/shared/ai";
 import { COLS, SPAWN_X, SPAWN_Y } from "../src/shared/constants";
-import { Board, Lane, SPIN_FULL, SPIN_MINI, explore, reachable, spinKind, spotKey, turn, type Placement } from "../src/shared/engine";
+import {
+  Board,
+  Lane,
+  SPIN_FULL,
+  SPIN_MINI,
+  explore,
+  reachable,
+  spinKind,
+  spotKey,
+  turn,
+  type Placement,
+} from "../src/shared/engine";
 import { Bag, GARBAGE, I, O, SHAPES, T, type Piece } from "../src/shared/pieces";
 import { mulberry32 } from "@warrick/kit/shared/rng";
 

@@ -139,7 +139,9 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
       } else if (other) {
         this.event(`💥 ${victim.name} hit their own wall`);
       } else {
-        this.event(arena.shrink > 0 ? `💥 ${victim.name} was caught by the closing wall` : `💥 ${victim.name} hit the arena wall`);
+        this.event(
+          arena.shrink > 0 ? `💥 ${victim.name} was caught by the closing wall` : `💥 ${victim.name} hit the arena wall`,
+        );
       }
     }
     if (!crashed) return;
@@ -218,7 +220,10 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
     // Riders who have gone away sit out (their cycle would only ride into a wall), unless that leaves too few.
     let riders = this.participants.filter((p) => p.cpu || this.io.isConnected(p.id));
     if (riders.length < 2) riders = this.participants;
-    const ids = shuffle(rng, riders.map((p) => p.id));
+    const ids = shuffle(
+      rng,
+      riders.map((p) => p.id),
+    );
     const spots = spawnPoints(ids.length, cfg.w, cfg.h, rng);
     this.arena = Arena.create(
       cfg,

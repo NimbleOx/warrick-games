@@ -64,7 +64,12 @@ describe("the pieces", () => {
       const stack = [p.cells[0]];
       while (stack.length) {
         const [x, y] = stack.pop()!;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ]) {
           const k = key(x + dx, y + dy);
           if (cells.has(k) && !seen.has(k)) {
             seen.add(k);
@@ -79,13 +84,36 @@ describe("the pieces", () => {
   it("have 91 distinct orientations", () => {
     expect(ORIENTATION_COUNT).toBe(91);
     const counts = Object.fromEntries(PIECE_IDS.map((id) => [id, orientations(id).length]));
-    expect(counts).toMatchObject({ "1": 1, "2": 2, I3: 2, V3: 4, O4: 1, I4: 2, T4: 4, S4: 4, L4: 8, X: 1, I5: 2, F: 8, W: 4, Z5: 4, T5: 4, U: 4, V5: 4 });
+    expect(counts).toMatchObject({
+      "1": 1,
+      "2": 2,
+      I3: 2,
+      V3: 4,
+      O4: 1,
+      I4: 2,
+      T4: 4,
+      S4: 4,
+      L4: 8,
+      X: 1,
+      I5: 2,
+      F: 8,
+      W: 4,
+      Z5: 4,
+      T5: 4,
+      U: 4,
+      V5: 4,
+    });
   });
 
   it("rotate and flip like the screen does", () => {
     // The L-tetromino turned a quarter clockwise lies flat with its foot pointing down-left.
     const t = rotateT(0);
-    expect(orientations("L4")[orientFor("L4", t)].cells).toEqual([[0, 0], [1, 0], [2, 0], [0, 1]]);
+    expect(orientations("L4")[orientFor("L4", t)].cells).toEqual([
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [0, 1],
+    ]);
     // Four quarter turns and two flips come back to the start.
     expect(rotateT(rotateT(rotateT(rotateT(5))))).toBe(5);
     expect(flipT(flipT(3))).toBe(3);
@@ -111,7 +139,15 @@ describe("placing pieces", () => {
 
   it("makes the first piece cover the starting square", () => {
     const pos = four();
-    const domino = (x: number, y: number): Move => ({ piece: "2", orient: orientOf("2", [[0, 0], [1, 0]]), x, y });
+    const domino = (x: number, y: number): Move => ({
+      piece: "2",
+      orient: orientOf("2", [
+        [0, 0],
+        [1, 0],
+      ]),
+      x,
+      y,
+    });
     expect(placementError(pos, 0, domino(0, 0))).toBeNull();
     expect(placementError(pos, 0, domino(1, 0))).toBe("Your first piece must cover your starting square");
     expect(placementError(pos, 1, domino(18, 0))).toBeNull();
@@ -133,15 +169,44 @@ describe("placing pieces", () => {
     pos = paint(pos, 1, [[19, 0]]);
     pos = { ...pos, trays: pos.trays.map((t, s) => (s === 1 ? t.filter((p) => p !== "1") : t)) };
     expect(placementError(pos, 1, { piece: "I4", orient: 0, x: 15, y: 1 })).toBeNull();
-    expect(placementError(pos, 1, { piece: "2", orient: orientOf("2", [[0, 0], [1, 0]]), x: 2, y: 0 })).toBe(
-      "It must touch one of your pieces at a corner",
-    );
+    expect(
+      placementError(pos, 1, {
+        piece: "2",
+        orient: orientOf("2", [
+          [0, 0],
+          [1, 0],
+        ]),
+        x: 2,
+        y: 0,
+      }),
+    ).toBe("It must touch one of your pieces at a corner");
     pos = paint(pos, 1, [[4, 1]]);
-    expect(placementError(pos, 1, { piece: "2", orient: orientOf("2", [[0, 0], [1, 0]]), x: 2, y: 0 })).toBeNull();
+    expect(
+      placementError(pos, 1, {
+        piece: "2",
+        orient: orientOf("2", [
+          [0, 0],
+          [1, 0],
+        ]),
+        x: 2,
+        y: 0,
+      }),
+    ).toBeNull();
   });
 
   it("keeps a player's starting square free until they've started", () => {
-    const pos = play(two(), 0, { piece: "I5", orient: orientOf("I5", [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]), x: 4, y: 4 });
+    const pos = play(two(), 0, {
+      piece: "I5",
+      orient: orientOf("I5", [
+        [0, 0],
+        [1, 0],
+        [2, 0],
+        [3, 0],
+        [4, 0],
+      ]),
+      x: 4,
+      y: 4,
+    });
     // A board where seat 0 could reach seat 1's start: still not allowed.
     const near = paint(pos, 0, [[8, 8]]);
     expect(placementError(near, 0, { piece: MONOMINO, orient: 0, x: 9, y: 9 })).toBe("That's another player's starting square");
@@ -168,11 +233,35 @@ describe("placing pieces", () => {
     expect(new Set(first.map((m) => JSON.stringify(m))).size).toBe(first.length);
 
     // After a few pieces: compare against brute force over every spot on the board.
-    pos = play(pos, 0, { piece: "V5", orient: orientOf("V5", [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]]), x: 0, y: 0 });
-    pos = play(pos, 1, { piece: "I5", orient: orientOf("I5", [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]]), x: 19, y: 0 });
+    pos = play(pos, 0, {
+      piece: "V5",
+      orient: orientOf("V5", [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [1, 2],
+        [2, 2],
+      ]),
+      x: 0,
+      y: 0,
+    });
+    pos = play(pos, 1, {
+      piece: "I5",
+      orient: orientOf("I5", [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [0, 3],
+        [0, 4],
+      ]),
+      x: 19,
+      y: 0,
+    });
     pos = play(pos, 0, { piece: "X", orient: 0, x: 3, y: 2 });
     expect(pos.cells[2 * 20 + 4]).toBe(0);
-    const fast = legalMoves(pos, 0).map((m) => JSON.stringify(m)).sort();
+    const fast = legalMoves(pos, 0)
+      .map((m) => JSON.stringify(m))
+      .sort();
     const slow: string[] = [];
     for (const piece of pos.trays[0]) {
       orientations(piece).forEach((_, orient) => {

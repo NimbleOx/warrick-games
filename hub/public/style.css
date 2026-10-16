@@ -36,8 +36,7 @@ body {
   background:
     linear-gradient(to bottom, transparent, var(--bg) 85%),
     repeating-linear-gradient(to right, rgb(58 67 112 / 0.18) 0 1px, transparent 1px 32px),
-    repeating-linear-gradient(to bottom, rgb(58 67 112 / 0.18) 0 1px, transparent 1px 32px),
-    var(--bg);
+    repeating-linear-gradient(to bottom, rgb(58 67 112 / 0.18) 0 1px, transparent 1px 32px), var(--bg);
 }
 
 a {

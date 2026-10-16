@@ -32,7 +32,14 @@ async function playing(turnSeconds: number) {
   const { s, holder } = peek(r);
   expect(s().phase).toBe("playing");
   const first = holder().name;
-  return { r, s, holder, first, other: first === "Ann" ? "Bo" : "Ann", socket: { Ann: ann, Bo: bo } as Record<string, typeof ann> };
+  return {
+    r,
+    s,
+    holder,
+    first,
+    other: first === "Ann" ? "Bo" : "Ann",
+    socket: { Ann: ann, Bo: bo } as Record<string, typeof ann>,
+  };
 }
 
 /** Let the clock reach the room's alarm, and run it. */

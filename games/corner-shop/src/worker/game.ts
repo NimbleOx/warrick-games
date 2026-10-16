@@ -109,7 +109,10 @@ export class Game extends Lobby<GameState, ServerMsg> {
     this.beginStart(byId);
     const s = this.s;
     const rng = mulberry32(randomSeed());
-    const order = shuffle(rng, this.participants.map((p) => p.id));
+    const order = shuffle(
+      rng,
+      this.participants.map((p) => p.id),
+    );
     const layout = layoutFor(order.length);
     s.size = layout.size;
     s.starts = layout.starts;
@@ -305,7 +308,9 @@ export class Game extends Lobby<GameState, ServerMsg> {
     switch (t.kind) {
       case "cpu": {
         if (!p.cpu) break;
-        const order = seated(s).filter((o) => !o.out).map((o) => o.seat);
+        const order = seated(s)
+          .filter((o) => !o.out)
+          .map((o) => o.seat);
         const move = chooseMove(positionOf(s), p.seat, p.cpu, mulberry32(randomSeed()), order);
         if (move) this.apply(p, move);
         else this.markOut(p, "stuck");

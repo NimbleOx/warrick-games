@@ -10,7 +10,10 @@ import { NONE, geometry, newBoard, type Board } from "../src/shared/board";
  *   +-+ +
  */
 export function board(picture: string): Board {
-  const rows = picture.replace(/^\n/, "").replace(/\n\s*$/, "").split("\n");
+  const rows = picture
+    .replace(/^\n/, "")
+    .replace(/\n\s*$/, "")
+    .split("\n");
   const indent = Math.min(...rows.filter((r) => r.trim()).map((r) => r.match(/^ */)![0].length));
   const text = rows.map((r) => r.slice(indent));
   const h = (text.length - 1) / 2;

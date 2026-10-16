@@ -174,7 +174,10 @@ describe("a new version", () => {
 
   it("reloads a tab once, not again straight after", () => {
     const store = new Map<string, string>();
-    vi.stubGlobal("sessionStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
+    vi.stubGlobal("sessionStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => store.set(k, v),
+    });
     reloads.n = 0;
     expect(reloadOnce("x.reloadedAt")).toBe(true);
     expect(reloadOnce("x.reloadedAt")).toBe(false);

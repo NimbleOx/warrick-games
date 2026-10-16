@@ -25,7 +25,8 @@ describe("hex grid", () => {
 
 describe("map generation", () => {
   const cases: [number, number][] = [];
-  for (const territories of [8, 12, 18, 24, 36, 48, 64]) for (let seed = 1; seed <= 12; seed++) cases.push([seed * 7919, territories]);
+  for (const territories of [8, 12, 18, 24, 36, 48, 64])
+    for (let seed = 1; seed <= 12; seed++) cases.push([seed * 7919, territories]);
 
   it.each(cases)("seed %i with %i territories: connected, no tiny territories", (seed, territories) => {
     const map = generateMap(seed, territories);

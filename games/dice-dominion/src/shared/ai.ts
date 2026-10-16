@@ -15,7 +15,8 @@ export interface BoardView {
  * plays one attack at a time against the board as it now stands.
  */
 export function cpuAttack(level: CpuLevel, b: BoardView, seat: number, rng: Rng): [number, number] | null {
-  const move = level === "easy" ? easyAttack(b, seat, rng) : level === "normal" ? normalAttack(b, seat, rng) : hardAttack(b, seat, rng);
+  const move =
+    level === "easy" ? easyAttack(b, seat, rng) : level === "normal" ? normalAttack(b, seat, rng) : hardAttack(b, seat, rng);
   if (move) return move;
   // Waiting only pays while new dice can land. Once all its territories are full, a CPU that
   // passes would pass forever (two of them would stall the game), so it takes its best shot.

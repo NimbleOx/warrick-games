@@ -143,7 +143,14 @@ describe("hidden dice", () => {
         if (step === 6) await dan.connect(env); // arrives mid-game: watches
 
         // Bob reloads mid-round: same seat, same dice.
-        if (!reloaded && step > 12 && st.phase === "playing" && st.bids.length > 0 && st.turnId !== bob.pid && !st.players.find((p) => p.id === bob.pid)?.out) {
+        if (
+          !reloaded &&
+          step > 12 &&
+          st.phase === "playing" &&
+          st.bids.length > 0 &&
+          st.turnId !== bob.pid &&
+          !st.players.find((p) => p.id === bob.pid)?.out
+        ) {
           reloaded = true;
           const before = bob.lastHand();
           await bob.drop(env);
@@ -200,7 +207,12 @@ describe("hidden dice", () => {
 
       // Each human got their own cup every round they had one.
       for (const c of [ann, bob, cat]) {
-        const rounds = new Set(c.received().filter((r) => r.msg.t === "hand").map((r) => r.msg.round));
+        const rounds = new Set(
+          c
+            .received()
+            .filter((r) => r.msg.t === "hand")
+            .map((r) => r.msg.round),
+        );
         const p = s().players.find((x) => x.id === c.pid)!;
         const lastRound = p.outRound ?? s().round;
         for (let round = 1; round <= lastRound; round++) expect(rounds.has(round), `${c.name} round ${round}`).toBe(true);
@@ -212,7 +224,10 @@ describe("hidden dice", () => {
     const live: Hands = { round: 3, dice: { p1: [2, 2, 5], p2: [1, 3, 6, 6] } };
     const leaky = { t: "state", state: { round: 3, phase: "playing", reveal: null, cups: { p2: [1, 3, 6, 6] } } };
     expect(() => checkMessage("p1", { msg: leaky, live, phase: "playing", round: 3 })).toThrow();
-    const early = { t: "state", state: { round: 3, phase: "playing", reveal: { round: 3, hands: [{ id: "p2", dice: [1, 3, 6, 6] }] } } };
+    const early = {
+      t: "state",
+      state: { round: 3, phase: "playing", reveal: { round: 3, hands: [{ id: "p2", dice: [1, 3, 6, 6] }] } },
+    };
     expect(() => checkMessage("p1", { msg: early, live, phase: "playing", round: 3 })).toThrow();
     const other = { t: "hand", round: 3, dice: [1, 3, 6, 6] };
     expect(() => checkMessage("p1", { msg: other, live, phase: "playing", round: 3 })).toThrow();

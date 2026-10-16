@@ -51,7 +51,13 @@ const EARLY_MS = 25;
  * Start the clock: for a new turn, or afresh within one (after a move that restarts it, say).
  * `turnMs` is the time limit (0 or null: none), and `here` whether the player is connected.
  */
-export function startTurnClock(c: TurnClock, rules: ClockRules, now: number, turnMs: number | null, here: boolean): number | null {
+export function startTurnClock(
+  c: TurnClock,
+  rules: ClockRules,
+  now: number,
+  turnMs: number | null,
+  here: boolean,
+): number | null {
   c.clockEnd = turnMs ? now + turnMs : null;
   c.clockTopUp = false;
   c.turnDeadline = here ? c.clockEnd : awayDeadline(c, rules, now);

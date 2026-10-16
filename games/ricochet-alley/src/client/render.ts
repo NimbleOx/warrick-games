@@ -368,4 +368,3 @@ export function shade(hex: string, amt: number): string {
   const b = ch(n & 255);
   return `rgb(${r} ${g} ${b})`;
 }
-

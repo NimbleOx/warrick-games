@@ -186,7 +186,10 @@ function onState(s: GameState, prev: GameState | null): void {
     return;
   }
   app.board = { owner: s.owner.slice(), dice: s.dice.slice() };
-  if (app.selected >= 0 && (!isMyTurn(s) || !targetsOf(app.map.adj, s.owner, s.dice, app.selected).length || s.owner[app.selected] !== mySeat(s))) {
+  if (
+    app.selected >= 0 &&
+    (!isMyTurn(s) || !targetsOf(app.map.adj, s.owner, s.dice, app.selected).length || s.owner[app.selected] !== mySeat(s))
+  ) {
     app.selected = -1;
   }
 
@@ -473,7 +476,8 @@ function hintText(s: GameState): string {
   if (!me || me.seat < 0) return "You're watching this game. You'll get a seat in the next one.";
   if (me.outRound !== null) return "You're out. Watch the rest, or chat while they finish.";
   const turn = seatPlayer(s, s.turn);
-  if (s.timer?.kind === "drop") return s.order[s.turn] === shell.me ? "Your new dice are landing…" : `${turn?.name ?? "Their"} new dice are landing…`;
+  if (s.timer?.kind === "drop")
+    return s.order[s.turn] === shell.me ? "Your new dice are landing…" : `${turn?.name ?? "Their"} new dice are landing…`;
   if (!isMyTurn(s)) {
     if (!turn) return "";
     if (turn.cpu) return `${turn.name} is attacking…`;
@@ -481,17 +485,43 @@ function hintText(s: GameState): string {
   }
   if (!app.map) return "";
   if (!legalAttacks(app.map.adj, s.owner, s.dice, me.seat).length) return "No attacks left: end your turn to collect your dice.";
-  if (app.selected >= 0) return `${pick} a highlighted neighbour to attack, or ${pick.toLowerCase()} this territory again to cancel.`;
+  if (app.selected >= 0)
+    return `${pick} a highlighted neighbour to attack, or ${pick.toLowerCase()} this territory again to cancel.`;
   return `${pick} one of your territories with 2+ dice, then a neighbour to attack.${touch ? "" : " Enter ends your turn."}`;
 }
 
 const PIPS: Record<number, [number, number][]> = {
   1: [[2, 2]],
-  2: [[1, 1], [3, 3]],
-  3: [[1, 1], [2, 2], [3, 3]],
-  4: [[1, 1], [3, 1], [1, 3], [3, 3]],
-  5: [[1, 1], [3, 1], [2, 2], [1, 3], [3, 3]],
-  6: [[1, 1], [3, 1], [1, 2], [3, 2], [1, 3], [3, 3]],
+  2: [
+    [1, 1],
+    [3, 3],
+  ],
+  3: [
+    [1, 1],
+    [2, 2],
+    [3, 3],
+  ],
+  4: [
+    [1, 1],
+    [3, 1],
+    [1, 3],
+    [3, 3],
+  ],
+  5: [
+    [1, 1],
+    [3, 1],
+    [2, 2],
+    [1, 3],
+    [3, 3],
+  ],
+  6: [
+    [1, 1],
+    [3, 1],
+    [1, 2],
+    [3, 2],
+    [1, 3],
+    [3, 3],
+  ],
 };
 
 function dieHtml(face: number, color: string): string {
@@ -526,7 +556,9 @@ function renderRollbar(): void {
     <div class="roll-side def"><b class="total">${tumbling ? "…" : def}</b><span class="dice">${side(ev.def, colors[roll.defSeat])}</span></div>`;
   el.setAttribute(
     "aria-label",
-    tumbling ? `${attName} attacks ${defName}` : `${attName} rolled ${att} against ${defName}'s ${def}: ${ev.won ? "captured" : "held"}`,
+    tumbling
+      ? `${attName} attacks ${defName}`
+      : `${attName} rolled ${att} against ${defName}'s ${def}: ${ev.won ? "captured" : "held"}`,
   );
 }
 
@@ -601,7 +633,8 @@ function tap(t: number): void {
       return warn("You can only attack a territory next to the selected one.");
     }
   }
-  if (!yours) return warn(`That's ${seatPlayer(s, owner[t])?.name ?? "an enemy"}'s. Pick one of yours with 2 or more dice first.`);
+  if (!yours)
+    return warn(`That's ${seatPlayer(s, owner[t])?.name ?? "an enemy"}'s. Pick one of yours with 2 or more dice first.`);
   if (dice[t] < 2) return warn("Only 1 die here: a territory needs 2 or more dice to attack.");
   if (!targetsOf(adj, owner, dice, t).length) return warn("No enemy territory next to this one.");
   sfx.click();

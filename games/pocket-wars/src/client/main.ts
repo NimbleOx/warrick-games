@@ -108,7 +108,8 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   settings: {
     map: {
       label: "Map",
-      fmt: (v: string) => (v === "auto" ? "Auto: one for the player count" : `${MAPS[v]?.name ?? v} (${MAPS[v]?.players ?? "?"} players)`),
+      fmt: (v: string) =>
+        v === "auto" ? "Auto: one for the player count" : `${MAPS[v]?.name ?? v} (${MAPS[v]?.players ?? "?"} players)`,
     },
     turnSeconds: { label: "Turn timer", fmt: (v: number) => (v ? `${v} seconds` : "No limit") },
     fastCpus: { label: "CPU moves", fmt: (v: boolean) => (v ? "Fast" : "One at a time") },
@@ -135,7 +136,7 @@ const attract = new Attract($<HTMLCanvasElement>("attract"));
 
 const mine = (s = shell.state): PlayerState | undefined => s?.players.find((p) => p.id === shell.me);
 const mySeat = (s = shell.state) => mine(s)?.seat ?? -1;
-const mapOf = (s = shell.state): MapDef | null => (s?.mapId ? MAPS[s.mapId] ?? null : null);
+const mapOf = (s = shell.state): MapDef | null => (s?.mapId ? (MAPS[s.mapId] ?? null) : null);
 const boardOf = (s = shell.state): Board | null => s?.board ?? null;
 const seatPlayer = (seat: number, s = shell.state) => s?.players.find((p) => p.id === s.order[seat]);
 const colors = (s = shell.state): string[] => (s?.order ?? []).map((id) => s!.players.find((p) => p.id === id)?.color ?? "#ccc");
@@ -366,7 +367,10 @@ function turnStarted(ev: TurnEvent, s: GameState): void {
   if (ev.out) return;
   if (p.id === shell.me) {
     sfx.turn();
-    flashBanner(`<span class="big">YOUR TURN</span>Day ${ev.day} · +${fmt(ev.income)} funds${ev.repairCost ? ` · repairs −${fmt(ev.repairCost)}` : ""}`, 1800);
+    flashBanner(
+      `<span class="big">YOUR TURN</span>Day ${ev.day} · +${fmt(ev.income)} funds${ev.repairCost ? ` · repairs −${fmt(ev.repairCost)}` : ""}`,
+      1800,
+    );
   } else {
     flashBanner(`<span class="big" style="color:${p.color}">${esc(p.name)}</span>Day ${ev.day}`, 1100);
   }
@@ -572,7 +576,14 @@ function openMenu(unitId: number, to: number): void {
 function startTargeting(): void {
   const mode = app.mode;
   if (mode.k !== "menu" || !mode.targets.length) return;
-  app.mode = { k: "target", unit: mode.unit, reach: mode.reach, to: mode.to, targets: mode.targets, focus: mode.targets.length === 1 ? mode.targets[0].id : null };
+  app.mode = {
+    k: "target",
+    unit: mode.unit,
+    reach: mode.reach,
+    to: mode.to,
+    targets: mode.targets,
+    focus: mode.targets.length === 1 ? mode.targets[0].id : null,
+  };
   sfx.select();
   renderGame();
 }
@@ -631,13 +642,23 @@ function renderMenu(): void {
     let note = "";
     if (isIndirect(u.type) && mode.to !== mode.reach.origin) note = `<p class="act-note">Artillery can't fire after moving.</p>`;
     menu.innerHTML = items.join("") + note;
-    place(menu, m, mode.to, mode.targets.map((t) => unitTile(m, t)));
+    place(
+      menu,
+      m,
+      mode.to,
+      mode.targets.map((t) => unitTile(m, t)),
+    );
   } else if (mode.k === "target") {
     const u = unitById(b, mode.unit)!;
     const target = mode.targets.find((t) => t.id === mode.focus);
     if (!target) {
       fc.innerHTML = `<p>Tap a red target to see the damage.</p><div class="fc-row"><button class="btn btn-small" data-fc="back">Back</button></div>`;
-      place(fc, m, mode.to, mode.targets.map((t) => unitTile(m, t)));
+      place(
+        fc,
+        m,
+        mode.to,
+        mode.targets.map((t) => unitTile(m, t)),
+      );
       return;
     }
     const s = shell.state!;
@@ -743,9 +764,14 @@ function renderHud(): void {
   let who = "";
   if (s.phase === "gameover" || s.winnerId) {
     const w = s.players.find((p) => p.id === s.winnerId);
-    who = w ? `<span class="chip" style="background:${w.color}"></span><span class="who">${esc(w.name)} wins!</span>` : `<span class="who">Game over</span>`;
+    who = w
+      ? `<span class="chip" style="background:${w.color}"></span><span class="who">${esc(w.name)} wins!</span>`
+      : `<span class="who">Game over</span>`;
   } else if (turnP) {
-    const label = turnP.id === shell.me ? "Your turn" : `${esc(turnP.name)}'s turn${turnP.cpu ? (turnP.standIn ? " (CPU standing in)" : "") : !turnP.connected ? " (away)" : ""}`;
+    const label =
+      turnP.id === shell.me
+        ? "Your turn"
+        : `${esc(turnP.name)}'s turn${turnP.cpu ? (turnP.standIn ? " (CPU standing in)" : "") : !turnP.connected ? " (away)" : ""}`;
     who = `<span class="chip" style="background:${turnP.color}"></span><span class="who">${label}</span>`;
   }
   const html = `<span class="day">Day ${s.day || 1}</span>${who}<span class="clock"></span>`;
@@ -836,13 +862,23 @@ function renderInfo(): void {
   else if (!me || me.seat < 0) hint = "You're watching. Tap a unit to see its range.";
   else if (me.outDay !== null) hint = "You're out. Tap a unit to see its range.";
   else if (s.order[s.turn] === me.id && !me.cpu && (busy() || mode.k === "sent")) hint = "";
-  else if (!canAct(s)) hint = busy() ? "" : `Waiting for ${esc(seatPlayer(s.turn, s)?.name ?? "the next player")}. Tap a unit to see its range.`;
+  else if (!canAct(s))
+    hint = busy() ? "" : `Waiting for ${esc(seatPlayer(s.turn, s)?.name ?? "the next player")}. Tap a unit to see its range.`;
   else if (mode.k === "select") hint = "Tap a blue tile to move there (its own tile to stay). Red: what it can attack.";
   else if (mode.k === "menu") hint = "Pick an action, or tap the map to take the move back.";
   else if (mode.k === "target") hint = "Tap a target to see the damage, then tap it again (or Attack) to fire.";
   else hint = "Tap a unit to move it, or a free factory to build. End turn when you're done.";
 
-  const t = mode.k === "select" ? (app.hover >= 0 ? app.hover : mode.reach.origin) : mode.k === "menu" || mode.k === "target" ? mode.to : app.hover >= 0 ? app.hover : app.focus;
+  const t =
+    mode.k === "select"
+      ? app.hover >= 0
+        ? app.hover
+        : mode.reach.origin
+      : mode.k === "menu" || mode.k === "target"
+        ? mode.to
+        : app.hover >= 0
+          ? app.hover
+          : app.focus;
   let tile = "";
   if (t >= 0) {
     const terr = m.tiles[t];
@@ -854,8 +890,7 @@ function renderInfo(): void {
       name = `${op ? `<span class="chip" style="background:${op.color}"></span>${esc(op.name)}'s ` : "Neutral "}${TERRAIN[terr].name.toLowerCase()}`;
       if (b.capture[bi] < 20) name += ` · capture ${b.capture[bi]}/20`;
     }
-    const u =
-      mode.k === "menu" || mode.k === "target" ? unitById(b, mode.unit) : b.units.find((x) => unitTile(m, x) === t);
+    const u = mode.k === "menu" || mode.k === "target" ? unitById(b, mode.unit) : b.units.find((x) => unitTile(m, x) === t);
     let unit = "";
     if (u) {
       const d = UNITS[u.type];
@@ -908,10 +943,13 @@ function renderGameOver(s: GameState): void {
   const ranked = standings(s);
   const best = ranked[0];
   $("gameover-title").textContent = best?.id === shell.me ? "Victory!" : "Game over";
-  $("gameover-winner").innerHTML = best ? `<b style="color:${best.color}">${esc(best.name)}</b> holds the field on day ${s.day}.` : "";
+  $("gameover-winner").innerHTML = best
+    ? `<b style="color:${best.color}">${esc(best.name)}</b> holds the field on day ${s.day}.`
+    : "";
   $("gameover-rows").innerHTML = ranked
     .map((p, i) => {
-      const result = p.id === s.winnerId ? "Winner" : p.outDay !== null ? `${p.resigned ? "Resigned" : "Out"} day ${p.outDay}` : "—";
+      const result =
+        p.id === s.winnerId ? "Winner" : p.outDay !== null ? `${p.resigned ? "Resigned" : "Out"} day ${p.outDay}` : "—";
       return `<tr class="${p.id === s.winnerId ? "winner" : ""}">
         <td>${i + 1}</td>
         <td><span class="pcell"><span class="chip" style="background:${p.color}"></span>${esc(p.name)}</span></td>
@@ -1147,7 +1185,12 @@ if (import.meta.env.DEV) {
     if (mv.kind === "act") shell.send({ t: "act", ...mv.act });
     else if (mv.kind === "build") shell.send({ t: "build", at: mv.at, unit: mv.unit });
     else shell.send({ t: "end" });
-    app.mode = { k: "sent", unit: mv.kind === "act" ? mv.act.unit : -1, to: mv.kind === "act" ? mv.act.to : -1, at: performance.now() };
+    app.mode = {
+      k: "sent",
+      unit: mv.kind === "act" ? mv.act.unit : -1,
+      to: mv.kind === "act" ? mv.act.to : -1,
+      at: performance.now(),
+    };
   };
   setInterval(autoStep, 250);
   /** Skip animations (a hidden pane throttles their timers), then take one autoplay step. */

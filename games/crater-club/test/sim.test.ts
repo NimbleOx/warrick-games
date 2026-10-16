@@ -70,8 +70,20 @@ describe("shots", () => {
   });
 
   it("runs every weapon to completion", () => {
-    const weapons: WeaponId[] = ["baby_missile", "missile", "baby_nuke", "nuke", "mirv", "deaths_head",
-      "funky_bomb", "leapfrog", "roller", "dirt_clod", "dirt_ball", "tracer"];
+    const weapons: WeaponId[] = [
+      "baby_missile",
+      "missile",
+      "baby_nuke",
+      "nuke",
+      "mirv",
+      "deaths_head",
+      "funky_bomb",
+      "leapfrog",
+      "roller",
+      "dirt_clod",
+      "dirt_ball",
+      "tracer",
+    ];
     for (const weapon of weapons) {
       for (const walls of ["open", "bounce", "wrap"] as const) {
         const w = shoot(flatWorld(walls), weapon, 60, 650);

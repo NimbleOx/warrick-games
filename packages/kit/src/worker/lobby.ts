@@ -189,7 +189,10 @@ export abstract class Lobby<S extends BaseState, M extends { t: string } = { t: 
 
   chat(id: string, raw: string): void {
     const p = this.player(id);
-    const text = String(raw ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 200);
+    const text = String(raw ?? "")
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .trim()
+      .slice(0, 200);
     if (!p || !text) return;
     this.logs.push({ at: this.io.now(), kind: "chat", from: p.name, color: p.color, text });
   }

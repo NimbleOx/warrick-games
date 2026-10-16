@@ -3,13 +3,7 @@ import { actProblem, pathTo, reach, unitTile } from "../src/shared/rules";
 import { at, boardWith, testMap } from "./helpers";
 
 // 9 × 5: plains, a road along the middle, a mountain column, a river column and a forest.
-const M = testMap([
-  "H1. . . ^ . . . . ",
-  ". . . . ^ . . . . ",
-  "= = = = = = = = = ",
-  ". . . T ~ . . . . ",
-  "F1. . . ~ . . . H2",
-]);
+const M = testMap(["H1. . . ^ . . . . ", ". . . . ^ . . . . ", "= = = = = = = = = ", ". . . T ~ . . . . ", "F1. . . ~ . . . H2"]);
 
 const reachable = (r: ReturnType<typeof reach>) => new Set(r.ends);
 

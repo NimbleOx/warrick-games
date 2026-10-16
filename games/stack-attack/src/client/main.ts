@@ -132,7 +132,8 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   onState,
   onScreen,
   onReset,
-  confirmLeave: (): string | null => (playing() && app.pilot && !app.pilot.lane.out ? "Leave this game? You'll be knocked out." : null),
+  confirmLeave: (): string | null =>
+    playing() && app.pilot && !app.pilot.lane.out ? "Leave this game? You'll be knocked out." : null,
   isLive: (s) => s.phase === "playing",
 });
 const own = new OwnView($<HTMLCanvasElement>("own-canvas"));
@@ -310,7 +311,15 @@ function onOp(op: Op): void {
     lane.b2b = op.b2b;
     lane.lines = op.lines;
     seat.pending = op.q;
-    const label = op.pcl ? "PC!" : op.sp && op.c ? (op.sp === SPIN_FULL ? `TS${"SDT"[op.c - 1]}` : "MINI") : op.c >= 3 ? spinName(0, op.c) : "";
+    const label = op.pcl
+      ? "PC!"
+      : op.sp && op.c
+        ? op.sp === SPIN_FULL
+          ? `TS${"SDT"[op.c - 1]}`
+          : "MINI"
+        : op.c >= 3
+          ? spinName(0, op.c)
+          : "";
     if (label) seat.popups.push({ text: label, color: op.sp ? "#b48cff" : "#3ff0e0", at: now });
     if (op.a >= 2) seat.popups.push({ text: `+${op.a}`, color: "#ff6bd6", at: now });
     if (seat.popups.length > 4) seat.popups.splice(0, seat.popups.length - 4);
@@ -450,7 +459,15 @@ function drawBoards(now: number): void {
     if (!s?.mini) continue;
     s.popups = s.popups.filter((p) => now - p.at < 1500);
     s.mini.draw(
-      { board: laneOf(s).board, pending: pendingOf(s), out: s.out, place: s.place, winner: s.place === 1, popups: s.popups, hitAt: s.hitAt },
+      {
+        board: laneOf(s).board,
+        pending: pendingOf(s),
+        out: s.out,
+        place: s.place,
+        winner: s.place === 1,
+        popups: s.popups,
+        hitAt: s.hitAt,
+      },
       now,
     );
   }
@@ -587,7 +604,8 @@ function renderHud(): void {
   if (!mine || !seat || !lane) {
     html = `<span class="note">Watching${mine?.spectator ? " — you'll get a seat next round" : ""}</span>`;
   } else {
-    const status = seat.place === 1 && app.round?.over ? "winner!" : seat.out ? `out · #${seat.place}` : app.round?.over ? "" : "in play";
+    const status =
+      seat.place === 1 && app.round?.over ? "winner!" : seat.out ? `out · #${seat.place}` : app.round?.over ? "" : "in play";
     html =
       `<span class="chip" style="background:${mine.color}"></span><span>${esc(mine.name)}</span>` +
       (total ? `<span class="tag">${left} of ${total} left</span>` : "") +

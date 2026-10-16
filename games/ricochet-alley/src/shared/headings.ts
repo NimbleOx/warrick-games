@@ -15,7 +15,7 @@ function taylorSin(x: number): number {
   let term = x;
   let sum = x;
   for (let n = 1; n <= 9; n++) {
-    term = (-term * x2) / ((2 * n) * (2 * n + 1));
+    term = (-term * x2) / (2 * n * (2 * n + 1));
     sum += term;
   }
   return sum;

@@ -211,7 +211,9 @@ describe("lobby", () => {
     const host = t.human("Host");
     t.game().addCpu(host.id, "easy");
     t.game().updateSettings(host.id, { map: "four-corners" });
-    expect(() => t.game().start(host.id)).toThrow("Four Corners is a 4-player map and there are 2 players. Pick another map, or Auto.");
+    expect(() => t.game().start(host.id)).toThrow(
+      "Four Corners is a 4-player map and there are 2 players. Pick another map, or Auto.",
+    );
     t.game().addCpu(host.id, "easy");
     t.game().updateSettings(host.id, { map: "auto" });
     t.game().start(host.id);

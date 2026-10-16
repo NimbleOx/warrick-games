@@ -314,7 +314,16 @@ export function drawStack(ctx: CanvasRenderingContext2D, x: number, y: number, n
 }
 
 /** One die: an isometric cube whose top face is centred on (x, y). */
-function cube(ctx: CanvasRenderingContext2D, x: number, y: number, d: number, top: string, left: string, right: string, outline: number): void {
+function cube(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  d: number,
+  top: string,
+  left: string,
+  right: string,
+  outline: number,
+): void {
   const hw = d / 2;
   const q = d / 4;
   const side = d / 2;

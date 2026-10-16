@@ -89,7 +89,14 @@ describe("turns", () => {
   it("completes two boxes with one line and still moves again", () => {
     const t = twoHumans();
     // Two side-by-side boxes with everything but the line between them drawn.
-    for (const e of [hEdge(t.s, 0, 0), hEdge(t.s, 0, 1), hEdge(t.s, 1, 0), hEdge(t.s, 1, 1), vEdge(t.s, 0, 0), vEdge(t.s, 0, 2)]) {
+    for (const e of [
+      hEdge(t.s, 0, 0),
+      hEdge(t.s, 0, 1),
+      hEdge(t.s, 1, 0),
+      hEdge(t.s, 1, 1),
+      vEdge(t.s, 0, 0),
+      vEdge(t.s, 0, 2),
+    ]) {
       playLine(t.s, e, 0);
     }
     t.game().line(t.first, vEdge(t.s, 0, 1));

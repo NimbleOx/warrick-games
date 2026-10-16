@@ -1,16 +1,4 @@
-import {
-  COLOR,
-  KIND,
-  LINK_D,
-  LINK_L,
-  LINK_R,
-  LINK_U,
-  POP,
-  VIRUS,
-  pieceCells,
-  type Bottle,
-  type Garbage,
-} from "../shared/bottle";
+import { COLOR, KIND, LINK_D, LINK_L, LINK_R, LINK_U, POP, VIRUS, pieceCells, type Bottle, type Garbage } from "../shared/bottle";
 import { COLS, POP_TICKS, ROWS, SPAWN_X } from "../shared/constants";
 
 /** Fill, shadow and highlight for red, yellow and blue. */

@@ -145,7 +145,10 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
   start(byId: string): void {
     this.beginStart(byId);
     const s = this.s;
-    s.order = shuffle(mulberry32(randomSeed()), this.participants.map((p) => p.id));
+    s.order = shuffle(
+      mulberry32(randomSeed()),
+      this.participants.map((p) => p.id),
+    );
     for (const p of s.players) {
       Object.assign(p, { dice: p.spectator ? 0 : START_DICE, out: false, place: null, outRound: null });
       Object.assign(p, { calls: 0, callsWon: 0, spots: 0, spotsWon: 0 });
@@ -282,7 +285,12 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
     if (!last) throw new GameError("Nothing to call yet: make the first bid");
     const bidder = this.player(last.by)!;
     const cups = s.order.filter((id) => hands.dice[id]?.length).map((id) => ({ id, dice: [...hands.dice[id]] }));
-    const result = resolveCall(kind, last, cups.map((c) => c.dice), this.rules);
+    const result = resolveCall(
+      kind,
+      last,
+      cups.map((c) => c.dice),
+      this.rules,
+    );
     const loser = result.loser === "caller" ? caller : result.loser === "bidder" ? bidder : null;
     const gainer = result.callerGains && caller.dice < MAX_DICE ? caller : null;
 
@@ -296,7 +304,10 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
     const what = `${bidder.name}'s ${bidText(last)}`;
     const there = `there ${result.count === 1 ? "was" : "were"} ${result.count}`;
     if (kind === "liar") this.event(`${caller.name} called Liar! on ${what}: ${there}. ${loser!.name} loses a die.`);
-    else if (result.callerGains) this.event(`${caller.name} called Spot on for ${what}: ${there}! ${gainer ? `${caller.name} gets a die back.` : ""}`.trim());
+    else if (result.callerGains)
+      this.event(
+        `${caller.name} called Spot on for ${what}: ${there}! ${gainer ? `${caller.name} gets a die back.` : ""}`.trim(),
+      );
     else this.event(`${caller.name} called Spot on for ${what}: ${there}. ${caller.name} loses a die.`);
 
     let outId: string | null = null;

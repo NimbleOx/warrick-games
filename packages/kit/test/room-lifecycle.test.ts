@@ -208,7 +208,11 @@ describe("after a restart", () => {
     (r.room as unknown as { connectedIds(): Set<string> }).connectedIds();
     await r.say(bo, { t: "hello", token: "token-bo-0000", name: "Bo" });
     expect(heard).toEqual(["Ann gone"]);
-    expect(peek(r).s().players.find((p) => p.name === "Bo")?.connected).toBe(true);
+    expect(
+      peek(r)
+        .s()
+        .players.find((p) => p.name === "Bo")?.connected,
+    ).toBe(true);
   });
 
   it("only tells the game once", async () => {

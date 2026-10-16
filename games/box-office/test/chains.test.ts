@@ -14,8 +14,7 @@ import {
 import { EndgameMemo, endgame } from "../src/shared/endgame";
 import { board, box, hEdge, vEdge } from "./helpers";
 
-const sorted = (cs: { kind: string; size: number }[]) =>
-  cs.map((c) => `${c.kind}${c.size}`).sort();
+const sorted = (cs: { kind: string; size: number }[]) => cs.map((c) => `${c.kind}${c.size}`).sort();
 
 describe("safe lines and captures", () => {
   it("a line that makes a box's third side isn't safe", () => {

@@ -8,8 +8,12 @@ function setup() {
   const io = { now: () => now, isConnected: (id: string) => connected.has(id) };
   const game = () => new Game(s, io);
   return {
-    s, game, connected,
-    advance(ms: number) { now += ms; },
+    s,
+    game,
+    connected,
+    advance(ms: number) {
+      now += ms;
+    },
     runTimers(max = 2000) {
       for (let i = 0; i < max && s.timer; i++) {
         now = Math.max(now, s.timer.at);

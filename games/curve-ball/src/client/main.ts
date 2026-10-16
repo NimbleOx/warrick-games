@@ -474,7 +474,7 @@ function renderHud(s: GameState): void {
 
 function renderPlayers(s: GameState): void {
   const live = livePoints();
-  const r =app.play && app.play.num === s.round ? app.play.round : null;
+  const r = app.play && app.play.num === s.round ? app.play.round : null;
   const total = (p: PlayerState) => p.score + (live.get(p.id) ?? 0);
   const ranked = s.players.filter((p) => !p.spectator).sort((a, b) => total(b) - total(a) || rankPlayers(a, b));
   const top = ranked[0] ? total(ranked[0]) : 0;

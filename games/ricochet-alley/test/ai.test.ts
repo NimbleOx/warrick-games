@@ -23,7 +23,12 @@ function cpuRound(seed: number, levels: CpuLevel[], maxTicks: number): number {
   const { cols, rows } = MAZE_SIZES.medium;
   const maze = generateMaze(mulberry32(seed), cols, rows, MAZE_LOOPINESS);
   const ids = levels.map((_, i) => `c${i}`);
-  const w = new World(maze, { tick: 0, nextId: 1, tanks: startingTanks(ids, pickSpawns(maze, ids.length, mulberry32(seed))), bullets: [] });
+  const w = new World(maze, {
+    tick: 0,
+    nextId: 1,
+    tanks: startingTanks(ids, pickSpawns(maze, ids.length, mulberry32(seed))),
+    bullets: [],
+  });
   const brains = levels.map((l, i) => new CpuBrain(l, mulberry32(seed * 100 + i)));
   const bits = levels.map(() => 0);
   for (let t = 0; t < maxTicks; t++) {
@@ -63,19 +68,28 @@ const FROZE: { seed: number; h: string; v: string; tanks: [number, number, numbe
     seed: 75,
     h: "111111100001000101010100000010000101111111",
     v: "1001000111000111100111011011000110010001",
-    tanks: [[350, 150, 360], [50, 350, 0]],
+    tanks: [
+      [350, 150, 360],
+      [50, 350, 0],
+    ],
   },
   {
     seed: 25,
     h: "111111101100100001000001110101010101111111",
     v: "1000100110000101110001111100000110000001",
-    tanks: [[450, 50, 180], [250, 350, 180]],
+    tanks: [
+      [450, 50, 180],
+      [250, 350, 180],
+    ],
   },
   {
     seed: 77,
     h: "111111101001010011000011000000000111111111",
     v: "1000000111000011101010011101010110100001",
-    tanks: [[450, 50, 0], [350, 350, 180]],
+    tanks: [
+      [450, 50, 0],
+      [350, 350, 180],
+    ],
   },
 ];
 
@@ -98,7 +112,12 @@ describe("turnKey", () => {
 
 describe("traceShot", () => {
   it("sees a straight shot and nothing when facing away", () => {
-    const w = new World(openMaze(6, 1), { tick: 0, nextId: 1, tanks: [tank("a", 50, 50, 0), tank("b", 450, 50, 0)], bullets: [] });
+    const w = new World(openMaze(6, 1), {
+      tick: 0,
+      nextId: 1,
+      tanks: [tank("a", 50, 50, 0), tank("b", 450, 50, 0)],
+      bullets: [],
+    });
     expect(traceShot(w, 0, 0, 0)).toBe(1);
     // Facing the near wall with no bounces allowed: hits nobody.
     expect(traceShot(w, 0, HEADINGS / 2, 0)).toBe(-1);
@@ -155,7 +174,12 @@ describe("CPU players", () => {
     for (let seed = 1; seed <= 16; seed++) {
       const { cols, rows } = MAZE_SIZES.small;
       const maze = generateMaze(mulberry32(seed), cols, rows, MAZE_LOOPINESS);
-      const w = new World(maze, { tick: 0, nextId: 1, tanks: startingTanks(["h", "e"], pickSpawns(maze, 2, mulberry32(seed))), bullets: [] });
+      const w = new World(maze, {
+        tick: 0,
+        nextId: 1,
+        tanks: startingTanks(["h", "e"], pickSpawns(maze, 2, mulberry32(seed))),
+        bullets: [],
+      });
       const brains = [new CpuBrain("hard", mulberry32(seed)), new CpuBrain("easy", mulberry32(seed + 1000))];
       const bits = [0, 0];
       for (let t = 0; t < 30 * 120 && w.aliveCount > 1; t++) {

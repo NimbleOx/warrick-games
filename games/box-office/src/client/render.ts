@@ -76,7 +76,9 @@ export class BoardView {
 
   /** Board units (x across, y down, in boxes) to canvas CSS pixels. */
   toScreen(x: number, y: number): [number, number] {
-    return this.transposed ? [this.ox + y * this.cell, this.oy + x * this.cell] : [this.ox + x * this.cell, this.oy + y * this.cell];
+    return this.transposed
+      ? [this.ox + y * this.cell, this.oy + x * this.cell]
+      : [this.ox + x * this.cell, this.oy + y * this.cell];
   }
 
   toBoard(sx: number, sy: number): [number, number] {

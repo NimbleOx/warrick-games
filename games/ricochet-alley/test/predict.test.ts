@@ -9,7 +9,15 @@ import { World, startingTanks } from "../src/shared/sim";
  * A server world and a predicting client, with messages delayed by `up`/`down` ticks (plus jitter), the
  * server's tick landing `phase` of the way between client ticks. Returns every reconcile error.
  */
-function simulate(opts: { up: number; down: number; jitter: number; phase: number; seed: number; ticks: number; quietAfter?: number }) {
+function simulate(opts: {
+  up: number;
+  down: number;
+  jitter: number;
+  phase: number;
+  seed: number;
+  ticks: number;
+  quietAfter?: number;
+}) {
   const rng = mulberry32(opts.seed);
   const maze = generateMaze(mulberry32(opts.seed), 9, 6, MAZE_LOOPINESS);
   const world = new World(maze, { tick: 0, nextId: 1, tanks: startingTanks(["me"], pickSpawns(maze, 1, rng)), bullets: [] });
@@ -99,7 +107,12 @@ describe("client helpers", () => {
 
   it("flies bullets like the world does", () => {
     const maze = generateMaze(mulberry32(4), 9, 6, MAZE_LOOPINESS);
-    const world = new World(maze, { tick: 0, nextId: 1, tanks: startingTanks(["a", "b"], pickSpawns(maze, 2, mulberry32(4))), bullets: [] });
+    const world = new World(maze, {
+      tick: 0,
+      nextId: 1,
+      tanks: startingTanks(["a", "b"], pickSpawns(maze, 2, mulberry32(4))),
+      bullets: [],
+    });
     const field = new BulletField(world.walls.bullet);
     for (let t = 0; t < 400; t++) {
       if (t % 20 === 0) world.requestFire(t % 40 ? 0 : 1);

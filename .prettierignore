@@ -1,0 +1,13 @@
+# Prettier also skips what .gitignore lists (node_modules, dist, .wrangler).
+
+# Generated.
+**/worker-configuration.d.ts
+packages/kit/worker-runtime.d.ts
+package-lock.json
+
+# Written by hand: Prettier's line breaks would make the markup and the tables harder to read.
+*.md
+*.html
+
+# Not brought into the format yet. Drop this line and run `npm run format` to bring it in.
+games/base-jump/

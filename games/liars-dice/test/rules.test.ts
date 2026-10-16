@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Bid } from "../src/shared/protocol";
-import {
-  bidError,
-  bidRank,
-  bidText,
-  canOpenOn,
-  countFace,
-  legalBids,
-  minQty,
-  nextSeat,
-  resolveCall,
-} from "../src/shared/rules";
+import { bidError, bidRank, bidText, canOpenOn, countFace, legalBids, minQty, nextSeat, resolveCall } from "../src/shared/rules";
 
 const WILD = { wild: true };
 const PLAIN = { wild: false };
@@ -19,7 +9,8 @@ const ok = (last: Bid | null, next: Bid, rules = WILD, total = 30) => bidError(l
 
 /** Perudo's raise rule written out case by case, to check the rank trick against. */
 function perudoRaise(last: Bid, next: Bid, wild: boolean): boolean {
-  if (!wild || (last.face !== 1 && next.face !== 1)) return next.qty > last.qty || (next.qty === last.qty && next.face > last.face);
+  if (!wild || (last.face !== 1 && next.face !== 1))
+    return next.qty > last.qty || (next.qty === last.qty && next.face > last.face);
   if (last.face !== 1 && next.face === 1) return next.qty >= Math.ceil(last.qty / 2);
   if (last.face === 1 && next.face === 1) return next.qty > last.qty;
   return next.qty >= last.qty * 2 + 1;

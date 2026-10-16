@@ -14,15 +14,7 @@ import {
   type ShotMessage,
 } from "../shared/protocol";
 import { maxPowerFor, type World } from "../shared/sim";
-import {
-  SHOP_ORDER,
-  WEAPONS,
-  WEAPON_ORDER,
-  shopDef,
-  weaponCount,
-  type ShopId,
-  type WeaponId,
-} from "../shared/weapons";
+import { SHOP_ORDER, WEAPONS, WEAPON_ORDER, shopDef, weaponCount, type ShopId, type WeaponId } from "../shared/weapons";
 import { worldFromState } from "../shared/world-state";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
@@ -488,9 +480,7 @@ function renderGameOver(s: GameState): void {
   if (!open) return;
   const ranked = s.players.filter((p) => !p.spectator).sort(rankPlayers);
   const best = ranked[0];
-  $("gameover-winner").innerHTML = best
-    ? `<b style="color:${best.color}">${esc(best.name)}</b> rules the crater.`
-    : "";
+  $("gameover-winner").innerHTML = best ? `<b style="color:${best.color}">${esc(best.name)}</b> rules the crater.` : "";
   $("gameover-rows").innerHTML = ranked
     .map(
       (p, i) => `<tr>
@@ -739,7 +729,6 @@ function wire(): void {
     else shell.send({ t: "buy", item: el.dataset.sell as ShopId, qty: -1 });
   });
   $("shop-ready").addEventListener("click", () => shell.send({ t: "ready", ready: !me()?.ready }));
-
 }
 
 wire();

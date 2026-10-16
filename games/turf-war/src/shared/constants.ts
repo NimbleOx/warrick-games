@@ -11,6 +11,8 @@ export const COUNTDOWN_TICKS = 3 * TICKS_PER_SEC;
 export const RESPAWN_TICKS = 3 * TICKS_PER_SEC;
 /** Every this many ticks a frame carries a board checksum, so clients can spot drift. */
 export const CHECKSUM_EVERY = 50;
+/** The server answers each socket's requests for a fresh snapshot at most this often, in ms. */
+export const RESYNC_MS = 1000;
 
 /** Turf War's player colours: the usual ones, with violet in place of white. */
 export const PLAYER_COLORS = [

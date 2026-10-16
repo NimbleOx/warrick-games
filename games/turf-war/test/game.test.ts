@@ -139,6 +139,51 @@ describe("a round", () => {
     expect(t.live!.round.slotFree(2)).toBe(true);
   });
 
+  it("starts a late joiner from scratch, not with the stats of their slot's last owner", () => {
+    const t = setup();
+    const host = t.human("Ann");
+    t.act((g) => g.updateSettings(host.id, { roundSeconds: 60 }));
+    const bo = t.human("Bo");
+    t.act((g) => g.addCpu(host.id, "easy"));
+    t.act((g) => g.start(host.id));
+    t.tickUntil(() => t.live!.round.n > COUNTDOWN_TICKS + 20);
+    const round = t.live!.round;
+    expect(bo.slot).toBe(1);
+    // Bo has had a busy round, and a client has been following it.
+    round.kills[1] = 4;
+    round.deaths[1] = 3;
+    round.best[1] = 900;
+    const view = viewFromSnapshot(JSON.parse(JSON.stringify(round.snapshot())))!;
+    let seen = t.sent.length;
+    const follow = () => {
+      for (const m of t.sent.slice(seen)) {
+        if (m.t === "f") expect(applyFrame(view, JSON.parse(JSON.stringify(m)) as Frame)).toBe(true);
+      }
+      seen = t.sent.length;
+    };
+
+    t.act((g) => g.leave(bo.id));
+    t.act((g) => g.tick());
+    const cy = t.human("Cy");
+    expect(cy.slot).toBe(1);
+    expect([round.kills[1], round.deaths[1], round.best[1]]).toEqual([0, 0, 0]);
+    t.act((g) => g.tick());
+    follow();
+    expect(view.board.heads[1].alive).toBe(true);
+    expect([view.kills[1], view.deaths[1]]).toEqual([0, 0]);
+
+    let most = 0;
+    t.tickUntil(() => {
+      most = Math.max(most, round.board.land[1]);
+      return t.s.phase !== "playing";
+    });
+    follow();
+    expect([view.kills[1], view.deaths[1]]).toEqual([round.kills[1], round.deaths[1]]);
+    const mine = t.s.results!.standings.find((x) => x.id === cy.id)!;
+    expect(mine).toMatchObject({ best: most, kills: round.kills[1], deaths: round.deaths[1] });
+    expect(mine.best).toBeLessThan(900);
+  });
+
   it("refuses lobby changes mid-round, and turns from players without a seat", () => {
     const t = setup();
     const host = t.human("Ann");
@@ -161,6 +206,27 @@ describe("a round", () => {
     expect(t.live!.round.n).toBe(0);
     expect(t.s.round).toBe(1);
     expect(t.live!.round.board.heads.filter((h) => h.alive)).toHaveLength(2);
+  });
+
+  it("seats a newcomer whose hello is the first thing after a restart", () => {
+    const t = setup();
+    const host = t.human("Ann");
+    t.act((g) => g.addCpu(host.id, "easy"));
+    t.act((g) => g.start(host.id));
+    t.tickUntil(() => t.live!.round.n > 100);
+    t.forget();
+    // The room adds the newcomer, then recovers the round (`afterHello`).
+    const cy = t.act((g) => {
+      const p = g.addHuman("Cy");
+      g.recover();
+      return p;
+    });
+    expect(cy.spectator).toBe(false);
+    expect(cy.slot).toBe(2);
+    const round = t.live!.round;
+    expect(round.n).toBe(0);
+    expect(round.inRound.slice(0, 3)).toEqual([true, true, true]);
+    expect(round.board.heads[2].alive).toBe(true);
   });
 
   it("sends frames a client can follow from the round's snapshot", () => {

@@ -3,7 +3,7 @@ import { $, $$, esc } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import type { DeathCause, Dir, Frame, Op } from "../shared/board";
 import { forEachRunCell } from "../shared/codec";
-import { PLAYER_COLORS, TICKS_PER_SEC } from "../shared/constants";
+import { PLAYER_COLORS, RESYNC_MS, TICKS_PER_SEC } from "../shared/constants";
 import {
   BOARD_SIZES,
   SETTING_CHOICES,
@@ -22,6 +22,9 @@ import { Controls } from "./input";
 import { Renderer, type Look, type Scene } from "./render";
 
 // ------------------------------------------------------------------ helpers
+
+/** Ask again for a snapshot if none has come this long after asking (the server may have dropped the ask). */
+const RESYNC_RETRY_MS = RESYNC_MS + 500;
 
 function clock(ticks: number): string {
   const secs = Math.max(0, Math.ceil(ticks / TICKS_PER_SEC));
@@ -44,7 +47,8 @@ const app = {
   /** The tick last painted into the renderer, and the palette it used. */
   painted: -1,
   paintKey: "",
-  resyncing: false,
+  /** When we last asked for a snapshot (performance.now()), while waiting for one. */
+  resyncAskedAt: null as number | null,
   feed: [] as FeedItem[],
   /** Why we last died, for the respawn banner. */
   death: null as { by: number; why: DeathCause } | null,
@@ -136,7 +140,7 @@ function onMessage(msg: ServerMsg): void {
 }
 
 function setView(snap: Snapshot | null): void {
-  app.resyncing = false;
+  app.resyncAskedAt = null;
   if (!snap) return;
   const v = viewFromSnapshot(snap);
   if (!v) return;
@@ -153,9 +157,11 @@ function setView(snap: Snapshot | null): void {
   renderHud();
 }
 
+/** Ask for a fresh snapshot. The server answers a socket once a second at most, so ask again if none comes. */
 function requestResync(): void {
-  if (app.resyncing) return;
-  app.resyncing = shell.send({ t: "resync" });
+  const now = performance.now();
+  if (app.resyncAskedAt !== null && now - app.resyncAskedAt < RESYNC_RETRY_MS) return;
+  if (shell.send({ t: "resync" })) app.resyncAskedAt = now;
 }
 
 function onFrame(f: Frame): void {
@@ -323,7 +329,7 @@ function renderHud(): void {
   const main = $("hud-main");
   let html: string;
   if (!mine || (s.phase === "playing" && slot < 0) || mine.spectator) {
-    html = `<span class="note">Watching${mine?.spectator ? " — all 8 seats are taken; you'll get one between rounds if a seat frees up" : ""}</span>`;
+    html = `<span class="note">Watching${mine?.spectator ? ` — ${whyWatching(s)}` : ""}</span>`;
     $("hud-land").textContent = "—";
     $("hud-kills").textContent = "—";
   } else {
@@ -345,6 +351,14 @@ function renderHud(): void {
     $("hud-kills").textContent = v && slot >= 0 ? String(v.kills[slot]) : "—";
   }
   if (main.innerHTML !== html) main.innerHTML = html;
+}
+
+/** Why a spectator isn't playing, and when they will. */
+function whyWatching(s: GameState): string {
+  const seated = s.players.filter((p) => !p.spectator).length;
+  if (seated >= MAX_PLAYERS) return `all ${MAX_PLAYERS} seats are taken; you'll get one between rounds if a seat frees up`;
+  // A seat is free: someone left after you started watching, or you came in just as they were leaving.
+  return "you'll get a seat next round";
 }
 
 let lastBoardHtml = "";

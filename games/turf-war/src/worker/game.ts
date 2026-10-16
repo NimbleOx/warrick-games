@@ -154,15 +154,18 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     this.touch();
   }
 
-  /** Give a player joining mid-round a free board slot. Returns false if there isn't one. */
+  /**
+   * Give a player joining mid-round a free board slot. Returns false if there isn't one. With no
+   * round, the board was lost to a restart: the newcomer just takes a slot, and `recover` (which
+   * the room runs straight after the hello) starts the round over with them in it.
+   */
   protected joinMidGame(p: PlayerState): boolean {
     const round = this.live?.round;
-    if (!round) return false;
     const taken = new Set(this.s.players.map((o) => o.slot));
     for (let slot = 0; slot < MAX_PLAYERS; slot++) {
-      if (taken.has(slot) || !round.slotFree(slot)) continue;
+      if (taken.has(slot) || (round && !round.slotFree(slot))) continue;
       p.slot = slot;
-      round.join(slot);
+      round?.join(slot);
       return true;
     }
     return false;

@@ -93,11 +93,15 @@ export class Round {
     this.queues[slot] = [d];
   }
 
-  /** Bring a slot into the round; it spawns on the next tick. */
+  /**
+   * Bring a slot into the round; it spawns on the next tick. Whoever takes it starts afresh: no
+   * kills, deaths or best of the slot's last owner. The join op goes out with the next frame.
+   */
   join(slot: number): void {
     if (this.inRound[slot]) return;
     this.inRound[slot] = true;
-    this.board.heads[slot].respawnAt = this.n + 1;
+    this.best[slot] = 0;
+    this.emit(["j", slot, this.n + 1]);
   }
 
   /** Nobody is using this slot and nothing of its last owner is left on the board. */
@@ -121,7 +125,6 @@ export class Round {
 
   step(): Frame {
     this.n++;
-    this.ops = [];
     const b = this.board;
 
     for (const slot of this.leaving) {
@@ -138,7 +141,9 @@ export class Round {
     }
     for (let s = 0; s < MAX_PLAYERS; s++) this.best[s] = Math.max(this.best[s], b.land[s]);
 
+    // Ops from between ticks (joins) go out with this tick's.
     const frame: Frame = { t: "f", n: this.n, o: this.ops };
+    this.ops = [];
     if (this.n % CHECKSUM_EVERY === 0) frame.ck = b.checksum();
     return frame;
   }
@@ -342,8 +347,15 @@ export class Round {
   }
 }
 
-/** Count kills and deaths from a death op. Cutting a trail or squeezing someone out is a kill. */
+/**
+ * Count kills and deaths from a death op. Cutting a trail or squeezing someone out is a kill.
+ * A join op starts the slot's count again.
+ */
 export function tally(op: Op, kills: number[], deaths: number[]): void {
+  if (op[0] === "j") {
+    kills[op[1]] = deaths[op[1]] = 0;
+    return;
+  }
   if (op[0] !== "d") return;
   const [, slot, by, , why] = op;
   if (why !== "left") deaths[slot]++;

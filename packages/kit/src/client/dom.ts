@@ -5,6 +5,22 @@ export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+/**
+ * Set an element's markup, unless it's what this last set. Rebuilding markup that hasn't changed
+ * restarts its animations, loses hover and focus, and costs layout, so a HUD redrawn every frame
+ * goes through here.
+ */
+export function setHtml(el: HTMLElement, html: string): void {
+  if (el.dataset.html === html) return;
+  el.innerHTML = html;
+  el.dataset.html = html;
+}
+
+/** Set an element's text, unless it already says that. */
+export function setText(el: HTMLElement, text: string): void {
+  if (el.textContent !== text) el.textContent = text;
+}
+
 // Every game shares the warrick.games origin, so each one prefixes its localStorage keys.
 let prefix = "game";
 

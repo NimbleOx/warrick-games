@@ -1,3 +1,5 @@
+import { hexToRgb, mix, type RGB } from "@warrick/kit/client/color";
+
 export interface Theme {
   name: string;
   /** Sky colors from the top of the screen down to the horizon. */
@@ -56,17 +58,8 @@ export const THEMES: Theme[] = [
   },
 ];
 
-export function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function mix(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-}
-
 /** Sample a multi-stop gradient at t in [0, 1]. */
-export function gradientAt(stops: string[], t: number): [number, number, number] {
+export function gradientAt(stops: string[], t: number): RGB {
   const rgb = stops.map(hexToRgb);
   const f = Math.min(0.9999, Math.max(0, t)) * (rgb.length - 1);
   const i = Math.floor(f);

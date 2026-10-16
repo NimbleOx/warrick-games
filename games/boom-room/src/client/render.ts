@@ -3,7 +3,8 @@ import { CHAR_ITEM } from "../shared/arena";
 import { FALL_SHOW_MS, FUSE_MS } from "../shared/constants";
 import type { Dir } from "../shared/movement";
 import { mulberry32 } from "@warrick/kit/shared/rng";
-import { THEMES, hexA, hexToRgb, mix, shade, type RGB, type Theme } from "./themes";
+import { hexToRgb, mix, rgba, type RGB } from "@warrick/kit/client/color";
+import { THEMES, shade, type Theme } from "./themes";
 
 /** World units per tile. Pixel art is drawn at half this (16 art pixels per tile). */
 export const TILE = 32;
@@ -627,7 +628,7 @@ export class Renderer {
     ctx.fill();
     ctx.stroke();
     // Owner's color band, so you can tell whose is whose.
-    ctx.strokeStyle = hexA(color, 0.9);
+    ctx.strokeStyle = rgba(color, 0.9);
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, r - 3, Math.PI * 0.15, Math.PI * 0.85);

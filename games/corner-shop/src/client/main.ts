@@ -1,5 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, esc, toast } from "@warrick/kit/client/dom";
+import { $, esc, setHtml, toast } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { PIECE_IDS, flipT, orientFor, orientations, pieceDef, pieceSize, rotateT, type PieceId } from "../shared/pieces";
 import {
@@ -444,13 +445,6 @@ function renderGhost(): void {
   renderHint(s);
 }
 
-/** Set an element's HTML only when it's different, so hovering and tooltips survive. */
-function setHtml(el: HTMLElement, html: string): void {
-  if (el.dataset.html === html) return;
-  el.innerHTML = html;
-  el.dataset.html = html;
-}
-
 function renderHud(s: GameState): void {
   const turn = shell.player(s.turnPlayerId);
   let who = "";
@@ -618,11 +612,6 @@ function tickClock(): void {
   const text = left === null ? "" : formatClock(left);
   if (clock.textContent !== text) clock.textContent = text;
   clock.classList.toggle("low", left !== null && left < 10000);
-}
-
-function formatClock(ms: number): string {
-  const secs = Math.ceil(ms / 1000);
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------------ layout

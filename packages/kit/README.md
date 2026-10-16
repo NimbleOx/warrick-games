@@ -16,7 +16,9 @@ What every Warrick game shares, so each game's folder holds only its game: rooms
 | `@warrick/kit/shared/build` | `buildId()`: the build's id, the same in its client and worker |
 | `@warrick/kit/client/shell` | `Shell`: the home card (with the link back to the hub), create/join, the lobby, chat, connection status, leave, mute |
 | `@warrick/kit/client/net` | the reconnecting WebSocket (it notices a dead one), with the heartbeat real-time games need, `ClockSync` and a `?lag=150` dev aid |
-| `@warrick/kit/client/dom` | `$`, `$$`, `esc`, `toast`, `store` (localStorage under the game's prefix) and `reloadOnce` |
+| `@warrick/kit/client/dom` | `$`, `$$`, `esc`, `setHtml` and `setText` (only when changed), `toast`, `store` (localStorage under the game's prefix) and `reloadOnce` |
+| `@warrick/kit/client/color` | `hexToRgb`, `mix` and `rgba`: colour arithmetic for canvas drawing |
+| `@warrick/kit/client/format` | `formatClock(ms)`: m:ss for HUD clocks |
 | `@warrick/kit/client/audio` | the synthesized-sound core (`tone`, `noiseBurst`, mute); each game builds its own `sfx` |
 | `@warrick/kit/style.css` | base styles: colours as custom properties, buttons, home, lobby, chat, modals, results table, toast |
 | `@warrick/kit/testing/room` | runs a game's real `Room` in Node with fake sockets and storage, for its tests (see below) |

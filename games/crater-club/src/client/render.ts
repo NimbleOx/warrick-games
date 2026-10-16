@@ -1,7 +1,8 @@
 import { BARREL_LEN, TANK_HALF_W, TURRET_Y, WORLD_H, WORLD_W } from "../shared/constants";
+import { hexToRgb, mix, rgba } from "@warrick/kit/client/color";
 import { mulberry32 } from "@warrick/kit/shared/rng";
 import type { SimEvent, SimTank, World } from "../shared/sim";
-import { THEMES, gradientAt, hexToRgb, mix, type Theme } from "./themes";
+import { THEMES, gradientAt, type Theme } from "./themes";
 
 export interface TankInfo {
   name: string;
@@ -350,8 +351,8 @@ export class Renderer {
     const u = this.ui;
 
     if (t.alive && t.shield > 0) {
-      ctx.strokeStyle = hexA(info.color, 0.8);
-      ctx.fillStyle = hexA(info.color, 0.12);
+      ctx.strokeStyle = rgba(info.color, 0.8);
+      ctx.fillStyle = rgba(info.color, 0.12);
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(x, base - 6, 18, 0, Math.PI * 2);
@@ -443,7 +444,7 @@ export class Renderer {
   private drawTrail(tr: Trail, alpha: number, dotted: boolean): void {
     if (alpha <= 0 || tr.pts.length < 4) return;
     const ctx = this.ctx;
-    ctx.strokeStyle = hexA(tr.color, alpha);
+    ctx.strokeStyle = rgba(tr.color, alpha);
     ctx.lineWidth = dotted ? 1.4 : 1.6;
     ctx.setLineDash(dotted ? [3, 4] : []);
     ctx.beginPath();
@@ -556,9 +557,4 @@ function shade(hex: string, amt: number): string {
 function lighten(hex: string, amt: number): string {
   const m = mix(hexToRgb(hex), [255, 255, 255], amt);
   return `#${m.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
-}
-
-function hexA(hex: string, a: number): string {
-  const c = hexToRgb(hex);
-  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
 }

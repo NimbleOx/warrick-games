@@ -1,4 +1,4 @@
-export type RGB = [number, number, number];
+import { hexToRgb, mix, type RGB } from "@warrick/kit/client/color";
 
 export interface Theme {
   name: string;
@@ -64,24 +64,10 @@ export const THEMES: Theme[] = [
   },
 ];
 
-export function hexToRgb(hex: string): RGB {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function mix(a: RGB, b: RGB, t: number): RGB {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-}
-
 export function rgb(c: RGB): string {
   return `rgb(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0})`;
 }
 
 export function shade(hex: string, amt: number): string {
   return rgb(mix(hexToRgb(hex), amt < 0 ? [0, 0, 0] : [255, 255, 255], Math.abs(amt)));
-}
-
-export function hexA(hex: string, a: number): string {
-  const c = hexToRgb(hex);
-  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
 }

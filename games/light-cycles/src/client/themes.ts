@@ -1,3 +1,5 @@
+import { hexToRgb, mix } from "@warrick/kit/client/color";
+
 export interface Theme {
   name: string;
   /** Grid line color. */
@@ -15,20 +17,6 @@ export const THEMES: Theme[] = [
   { name: "Ember", grid: "#ff6a3d", floor: "#170905", edge: "#060201" },
   { name: "Neon", grid: "#ff3d9a", floor: "#16061a", edge: "#050108" },
 ];
-
-export function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function mix(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-}
-
-export function rgba(hex: string, a: number): string {
-  const c = hexToRgb(hex);
-  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
-}
 
 /** Blend toward white: the hot core of a light wall. */
 export function lighten(hex: string, amt: number): string {

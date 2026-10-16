@@ -1,5 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { Arena, type ArenaSnapshot, type Cycle, type Dir, type Frame, type WallMode } from "../shared/arena";
 import { PLAYER_COLORS, tickMsFor, type ArenaSize, type Speed } from "../shared/constants";
@@ -264,11 +265,6 @@ function tickClocks(): void {
     app.bannerUntil = 0;
     renderBanner();
   }
-}
-
-function formatClock(ms: number): string {
-  const secs = Math.ceil(ms / 1000);
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------------ rendering: top level

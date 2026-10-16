@@ -1,5 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc, toast } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { dropMs } from "../shared/constants";
 import type { HexMap } from "../shared/map";
@@ -351,11 +352,6 @@ function tickClock(s: GameState | null): void {
   const text = left === null ? "" : formatClock(left);
   if (clock.textContent !== text) clock.textContent = text;
   clock.classList.toggle("low", left !== null && left < 10000);
-}
-
-function formatClock(ms: number): string {
-  const secs = Math.ceil(ms / 1000);
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------------ rendering

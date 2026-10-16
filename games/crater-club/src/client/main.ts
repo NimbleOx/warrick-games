@@ -1,5 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc, toast } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { TICK_MS, TURRET_Y } from "../shared/constants";
 import {
@@ -270,11 +271,6 @@ function tickClocks(): void {
     app.bannerUntil = 0;
     renderBanner();
   }
-}
-
-function formatClock(ms: number): string {
-  const secs = Math.ceil(ms / 1000);
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------------ game

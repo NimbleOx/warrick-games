@@ -31,7 +31,5 @@ export const BUILD_MS = 450;
 
 /** A player who isn't connected loses their turn after this long. */
 export const AWAY_MS = 60_000;
-/** Someone back from a dropped connection mid-turn gets at least this long on the clock. */
-export const BACK_MIN_MS = 15_000;
 /** The winner's banner, before the standings. */
 export const FINISH_MS = 4000;

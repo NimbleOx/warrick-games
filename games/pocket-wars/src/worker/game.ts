@@ -1,11 +1,11 @@
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randomSeed, shuffle } from "@warrick/kit/shared/rng";
 import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
 import { cpuNext } from "../shared/ai";
 import {
   ATTACK_MS,
   AWAY_MS,
-  BACK_MIN_MS,
   BUILD_MS,
   CAPTURE_MS,
   CPU_FAST_MS,
@@ -40,6 +40,16 @@ const CPU_NAMES = ["Sarge", "Major", "Colonel", "Captain", "Marshal", "Corporal"
 
 const freshStats = (): Stats => ({ built: 0, kills: 0, lost: 0, captured: 0 });
 
+/**
+ * The turn clock: a player who isn't connected loses their turn after a minute (sooner if their
+ * clock runs out), and one who comes back gets the clock they had, never more (with 5 seconds
+ * on it, once a turn, if it had nearly run out).
+ */
+const CLOCK: ClockRules = { awayMs: AWAY_MS };
+
+/** The messages that carry an event and the state after it. */
+type GameEvent = Extract<ServerMsg, { ev: unknown }>;
+
 export function newGameState(code: string, now: number): GameState {
   return {
     ...baseState(code, now, DEFAULT_SETTINGS),
@@ -52,6 +62,7 @@ export function newGameState(code: string, now: number): GameState {
     actionNo: 0,
     turnDeadline: null,
     clockEnd: null,
+    clockTopUp: false,
     timer: null,
     knockedOut: [],
     winnerId: null,
@@ -87,6 +98,17 @@ export class Game extends Lobby<GameState, ServerMsg> {
     return this.s.board!;
   }
 
+  /**
+   * Events carry the state after them, and stand in for the room's own state message (see the
+   * kit's `Room.flush`). So the last event of an action also carries whatever the action changed
+   * after it: the next CPU step's timer, say.
+   */
+  protected touch(): void {
+    super.touch();
+    const last = this.outbox.at(-1);
+    if (last && "state" in last) last.state = structuredClone(this.s);
+  }
+
   // ---------------------------------------------------------------- players
 
   /** Leaving mid-game leaves your army behind; the host can hand it to a CPU. */
@@ -106,25 +128,22 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const p = this.player(id);
     if (!p) return;
     const s = this.s;
+    let reclaimed = false;
     if (p.standIn && connected) {
       // Back from being away: they take their seat back from the CPU.
       p.cpu = null;
       p.standIn = false;
       p.connected = false;
+      reclaimed = true;
       this.event(`${p.name} is back and takes over from the CPU`);
     }
     if (p.cpu || p.connected === connected) return;
     super.setConnected(id, connected);
     if (!this.isTurnOf(id)) return;
     const now = this.io.now();
-    if (connected) {
-      s.clockEnd = s.clockEnd === null ? this.clock() : Math.max(s.clockEnd, now + BACK_MIN_MS);
-      s.turnDeadline = s.clockEnd;
-      s.timer = s.clockEnd ? { kind: "turn", at: s.clockEnd } : null;
-    } else {
-      s.turnDeadline = Math.min(s.clockEnd ?? Infinity, now + AWAY_MS);
-      s.timer = { kind: "turn", at: s.turnDeadline };
-    }
+    // Taking over from the CPU mid-turn: the rest of the turn is theirs, with the whole clock.
+    if (reclaimed) this.armTurn(startTurnClock(s, CLOCK, now, this.turnMs(), true));
+    else this.armTurn(connected ? turnHolderBack(s, CLOCK, now) : turnHolderLeft(s, CLOCK, now));
     this.touch();
   }
 
@@ -156,6 +175,14 @@ export class Game extends Lobby<GameState, ServerMsg> {
   // ---------------------------------------------------------------- game flow
 
   start(byId: string): void {
+    this.requireHost(byId);
+    this.requireBetweenRounds();
+    // Check the map before beginStart changes anything (it drops whoever has gone and seats the
+    // watchers), so a start that fails leaves the lobby as it was. With fewer than two, its own
+    // check says so.
+    const staying = this.s.players.filter((p) => p.cpu || p.connected).length;
+    const problem = staying >= 2 ? this.mapProblem(Math.min(this.maxPlayers, staying)) : null;
+    if (problem) throw new GameError(problem);
     this.beginStart(byId);
     const s = this.s;
     const n = this.participants.length;
@@ -178,19 +205,23 @@ export class Game extends Lobby<GameState, ServerMsg> {
     this.beginTurn(0);
   }
 
-  private pickMap(n: number, rng: () => number): MapDef {
+  /** Why the chosen map can't be played by `n` armies, or null. */
+  private mapProblem(n: number): string | null {
     const id = this.s.settings.map;
-    if (id === "auto") {
-      const list = mapsFor(n);
-      if (!list.length) throw new GameError(`There's no map for ${n} players`);
-      return list[Math.floor(rng() * list.length)];
-    }
+    if (id === "auto") return mapsFor(n).length ? null : `There's no map for ${n} players`;
     const m = MAPS[id];
-    if (!m) throw new GameError("Pick a map");
-    if (m.players !== n) {
-      throw new GameError(`${m.name} is a ${m.players}-player map and there are ${n} players. Pick another map, or Auto.`);
-    }
-    return m;
+    if (!m) return "Pick a map";
+    if (m.players !== n) return `${m.name} is a ${m.players}-player map and there are ${n} players. Pick another map, or Auto.`;
+    return null;
+  }
+
+  private pickMap(n: number, rng: () => number): MapDef {
+    const problem = this.mapProblem(n);
+    if (problem) throw new GameError(problem);
+    const id = this.s.settings.map;
+    if (id !== "auto") return MAPS[id];
+    const list = mapsFor(n);
+    return list[Math.floor(rng() * list.length)];
   }
 
   protected resetForLobby(): void {
@@ -268,15 +299,20 @@ export class Game extends Lobby<GameState, ServerMsg> {
   onTimer(): void {
     const s = this.s;
     const t = s.timer;
-    if (!t || this.io.now() < t.at - 25) return;
+    const now = this.io.now();
+    if (!t || now < t.at - 25) return;
     s.timer = null;
     const p = this.seatPlayer(s.turn);
     switch (t.kind) {
       case "turn":
-        if (s.phase === "playing" && p && !s.winnerId) {
-          this.event(this.io.isConnected(p.id) ? `⏱ ${p.name} ran out of time` : `${p.name} is away, so their turn ends`);
-          this.finishTurn();
+        if (s.phase !== "playing" || !p || s.winnerId) break;
+        if (!turnTimeUp(s, CLOCK, now)) {
+          // It ran out long ago, while the room was empty or restarting: they get a minute to come back.
+          this.armTurn(s.turnDeadline);
+          break;
         }
+        this.event(this.io.isConnected(p.id) ? `⏱ ${p.name} ran out of time` : `${p.name} is away, so their turn ends`);
+        this.finishTurn();
         break;
       case "cpu":
         if (s.phase === "playing" && p?.cpu && !s.winnerId) this.cpuStep(p);
@@ -311,10 +347,22 @@ export class Game extends Lobby<GameState, ServerMsg> {
     return p;
   }
 
-  /** The turn clock for a human starting to think now. */
-  private clock(): number | null {
-    const secs = this.s.settings.turnSeconds;
-    return secs ? this.io.now() + secs * 1000 : null;
+  /** A human's time for a turn, in ms (0: no limit). */
+  private turnMs(): number {
+    return this.s.settings.turnSeconds * 1000;
+  }
+
+  /** The turn timer, for the deadline the turn clock gave. */
+  private armTurn(at: number | null): void {
+    this.s.timer = at === null ? null : { kind: "turn", at };
+  }
+
+  /**
+   * Queue an event for everyone, with a copy of the state after it: the room sends the outbox
+   * only once the whole action is done, and the state will have moved on by then.
+   */
+  private emit<T extends GameEvent["t"]>(t: T, ev: Extract<GameEvent, { t: T }>["ev"]): void {
+    this.outbox.push({ t, ev, state: structuredClone(this.s), now: this.io.now() } as GameEvent);
   }
 
   /** How long a CPU waits before its next step, so everyone can watch the last one. */
@@ -329,10 +377,11 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.turn = seat;
     s.turnNo++;
     const start = startTurn(this.map, this.board, seat);
-    this.outbox.push({ t: "turn", ev: { ...start, day: s.day }, state: s, now });
+    const ev = { ...start, day: s.day };
     if (start.out) {
       this.markOut(p);
       this.event(`💀 ${p.name} has no army and nothing to build, and is out`);
+      this.emit("turn", ev);
       if (!this.checkWin()) this.nextTurn();
       this.touch();
       return;
@@ -341,10 +390,9 @@ export class Game extends Lobby<GameState, ServerMsg> {
       s.turnDeadline = s.clockEnd = null;
       s.timer = { kind: "cpu", at: now + this.cpuGap(CPU_FIRST_MS - CPU_GAP_MS) };
     } else {
-      s.clockEnd = this.clock();
-      s.turnDeadline = this.io.isConnected(p.id) ? s.clockEnd : Math.min(s.clockEnd ?? Infinity, now + AWAY_MS);
-      s.timer = s.turnDeadline ? { kind: "turn", at: s.turnDeadline } : null;
+      this.armTurn(startTurnClock(s, CLOCK, now, this.turnMs(), this.io.isConnected(p.id)));
     }
+    this.emit("turn", ev);
     this.touch();
   }
 
@@ -391,7 +439,6 @@ export class Game extends Lobby<GameState, ServerMsg> {
       if (kind === "hq" && home >= 0 && ev.out?.includes(home)) this.event(`🚩 ${p.name} captured ${this.seatPlayer(home)?.name}'s HQ!`);
       else this.event(`🚩 ${p.name} captured ${kind === "hq" ? "an HQ" : `a ${kind}`}`);
     }
-    this.outbox.push({ t: "act", ev, state: s, now: this.io.now() });
     for (const seat of ev.out ?? []) {
       const out = this.seatPlayer(seat);
       if (!out) continue;
@@ -399,6 +446,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
       this.event(`💀 ${out.name} is out`);
     }
     this.checkWin();
+    this.emit("act", ev);
     return ev;
   }
 
@@ -406,7 +454,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const ev = applyBuild(this.map, this.board, p.seat, at, unit);
     p.stats.built++;
     this.s.actionNo++;
-    this.outbox.push({ t: "build", ev, state: this.s, now: this.io.now() });
+    this.emit("build", ev);
   }
 
   /** After a human's action: their turn goes on, unless it knocked them out. */

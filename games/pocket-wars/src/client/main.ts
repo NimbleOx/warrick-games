@@ -62,8 +62,8 @@ interface Anim {
 /** What tapping the map does next. */
 type Mode =
   | { k: "idle" }
-  /** One of your units is picked: its movement range is showing. */
-  | { k: "select"; unit: number; reach: Reach }
+  /** One of your units is picked: its movement range is showing, and what it could attack from there. */
+  | { k: "select"; unit: number; reach: Reach; danger: number[] }
   /** It has a destination, and the action menu is open. */
   | { k: "menu"; unit: number; reach: Reach; to: number; targets: Unit[]; capture: boolean }
   /** Picking what to attack; `focus` has its forecast showing. */
@@ -373,6 +373,14 @@ function turnStarted(ev: TurnEvent, s: GameState): void {
 
 // ------------------------------------------------------------------ frame loop
 
+/** What the canvas was last drawn from: the state, the mode (and its target), the tile under the mouse. */
+let drawnFrom: unknown[] = [];
+
+/**
+ * The canvas is drawn again only when what it shows changes, or while something on it moves: a
+ * unit sliding or being built, effects, the pulsing selection and targets. Otherwise a frame
+ * just keeps the clock up to date.
+ */
 function frame(now: number): void {
   requestAnimationFrame(frame);
   if (shell.screen === "home") {
@@ -384,11 +392,15 @@ function frame(now: number): void {
   const m = mapOf(s);
   const b = boardOf(s);
   if (s && m && b) {
-    const g = ghosts(m, b, now);
-    renderer.draw(
-      { m, b, colors: colors(s), activeSeat: s.turn, hide: g.hide, ghosts: g.ghosts, overlay: overlay(m, b) },
-      now,
-    );
+    const mode = app.mode;
+    const from = [s, mode, mode.k === "target" ? mode.focus : null, app.hover];
+    const o = overlay(m, b);
+    const moving = !!app.anim || renderer.busy || o.selected !== undefined || !!o.targets?.length;
+    if (moving || renderer.stale || from.some((v, i) => v !== drawnFrom[i])) {
+      drawnFrom = from;
+      const g = ghosts(m, b, now);
+      renderer.draw({ m, b, colors: colors(s), activeSeat: s.turn, hide: g.hide, ghosts: g.ghosts, overlay: o }, now);
+    }
   }
   tickClocks(now);
 }
@@ -398,8 +410,7 @@ function overlay(m: MapDef, b: Board): Overlay {
   const o: Overlay = { cursor: app.hover };
   if (mode.k === "select") {
     o.move = mode.reach.ends;
-    const u = unitById(b, mode.unit);
-    if (u) o.danger = reachableTargets(m, b, u, mode.reach);
+    o.danger = mode.danger;
     o.selected = mode.reach.origin;
     if (app.hover >= 0 && mode.reach.ends.includes(app.hover)) o.path = pathTo(mode.reach, app.hover);
   } else if (mode.k === "menu") {
@@ -523,7 +534,7 @@ function tap(t: number): void {
 function select(u: Unit): void {
   const m = mapOf()!;
   const b = boardOf()!;
-  app.mode = { k: "select", unit: u.id, reach: reach(m, b, u) };
+  app.mode = selecting(m, b, u);
   app.focus = unitTile(m, u);
   sfx.select();
   renderGame();
@@ -536,9 +547,15 @@ function backToSelect(unitId: number): void {
   if (!m || !b || !u || !canAct()) {
     app.mode = { k: "idle" };
   } else {
-    app.mode = { k: "select", unit: u.id, reach: reach(m, b, u) };
+    app.mode = selecting(m, b, u);
   }
   renderGame();
+}
+
+/** Pick a unit: where it can move, and the enemies it could attack after moving (worked out once, not every frame). */
+function selecting(m: MapDef, b: Board, u: Unit): Mode {
+  const r = reach(m, b, u);
+  return { k: "select", unit: u.id, reach: r, danger: reachableTargets(m, b, u, r) };
 }
 
 function openMenu(unitId: number, to: number): void {
@@ -1120,6 +1137,8 @@ function wire(): void {
 wire();
 shell.start();
 requestAnimationFrame(frame);
+// Labels drawn before the pixel font arrived were drawn in the fallback font.
+document.fonts?.addEventListener("loadingdone", () => (renderer.stale = true));
 
 // Dev aid: the console can drive a seat with the CPU (`__pw.autoplay("hard")`) to play whole games.
 if (import.meta.env.DEV) {

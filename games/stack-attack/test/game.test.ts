@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { choose } from "../src/shared/ai";
-import { COUNTDOWN_MS, TICK_MS } from "../src/shared/constants";
-import { Lane } from "../src/shared/engine";
+import { COUNTDOWN_MS, SPAWN_X, SPAWN_Y, TICK_MS } from "../src/shared/constants";
+import { Lane, SPIN_FULL, SPIN_MINI, SPIN_NONE, lockPoints, type LockResult, type Placement } from "../src/shared/engine";
 import { attackScale, gravityMs, levelAt, type Frame, type GameState, type Op, type ServerMsg } from "../src/shared/protocol";
 import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Game, GameError, newGameState } from "../src/worker/game";
@@ -28,6 +28,7 @@ function setup() {
     sent,
     direct,
     connect: (id: string) => connected.add(id),
+    disconnect: (id: string) => connected.delete(id),
     advance: (ms: number) => (now += ms),
     get now() {
       return now;
@@ -108,15 +109,24 @@ describe("speed", () => {
 });
 
 describe("lobby", () => {
-  it("needs two players to start", () => {
+  it("starts with a CPU as a match", () => {
     const t = setup();
     const host = t.act((g) => g.addHuman("Ann"));
     t.connect(host.id);
-    expect(() => t.act((g) => g.start(host.id))).toThrow(GameError);
     t.act((g) => g.addCpu(host.id, "easy"));
     t.act((g) => g.start(host.id));
     expect(t.state.phase).toBe("playing");
-    expect(t.sent.some((m) => m.t === "snap")).toBe(true);
+    const snap = t.sent.find((m) => m.t === "snap");
+    expect(snap?.t === "snap" && snap.snap.solo).toBe(false);
+  });
+
+  it("only lets the host start", () => {
+    const t = setup();
+    const host = t.act((g) => g.addHuman("Ann"));
+    const bo = t.act((g) => g.addHuman("Bo"));
+    t.connect(host.id);
+    t.connect(bo.id);
+    expect(() => t.act((g) => g.start(bo.id))).toThrow(GameError);
   });
 
   it("makes anyone arriving mid-round a spectator", () => {
@@ -310,5 +320,137 @@ describe("rounds", () => {
     t.act((g) => g.leave(bo.id));
     expect(t.state.phase).toBe("results");
     expect(t.state.results!.winnerId).toBe(host.id);
+  });
+});
+
+/** A placement straight down from where the piece appears: always reachable, and it stacks up fast. */
+function dropAtSpawn(lane: Lane): Placement {
+  const piece = lane.current;
+  return { piece, r: 0, x: SPAWN_X, y: lane.board.drop(piece, 0, SPAWN_X, SPAWN_Y), hold: false, spin: 0 };
+}
+
+describe("solo", () => {
+  it("plays alone until the player tops out, scoring and sending nothing", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    t.connect(ann.id);
+    t.act((g) => g.start(ann.id));
+    expect(t.state.phase).toBe("playing");
+    const snap = t.act((g) => g.snapshot())!;
+    expect(snap.solo).toBe(true);
+    expect(snap.seats.filter(Boolean)).toHaveLength(1);
+    t.advance(COUNTDOWN_MS);
+
+    // A good stretch of clearing lines: nobody to send garbage to, and the round goes on.
+    const me = browser(t, ann.id);
+    for (let i = 0; i < 60; i++) {
+      expect(me.lock()).not.toBeNull();
+      t.advance(400);
+      t.act((g) => g.tick());
+    }
+    const seat = t.live!.round.seat(me.slot)!;
+    expect(t.state.phase).toBe("playing");
+    expect(seat.lane.lines).toBeGreaterThan(10);
+    expect(seat.score).toBeGreaterThan(0);
+    expect(seat.atk).toBe(0);
+    expect(ops(t.sent).some((o) => o.k === "g")).toBe(false);
+    // Every lock carries the score so far.
+    const last = ops(t.sent)
+      .filter((o) => o.k === "l")
+      .at(-1)!;
+    expect(last.k === "l" && last.sc).toBe(seat.score);
+    expect(t.direct).toHaveLength(0);
+
+    // Then stack up in the middle until there's no room.
+    let lane = me.lane;
+    for (let i = 0; i < 40 && t.state.phase === "playing"; i++) {
+      const k = lane.pc;
+      const pl = dropAtSpawn(lane);
+      lane.lock(pl, 0);
+      t.act((g) => g.lock(ann.id, { e: 0, k, pl, g: 0, ck: lane.checksum() }));
+      t.advance(400);
+    }
+    expect(lane.out).toBe(true);
+    expect(t.state.phase).toBe("results");
+    const r = t.state.results!;
+    expect(r.solo).toBe(true);
+    expect(r.winnerId).toBeNull();
+    expect(r.standings).toHaveLength(1);
+    const x = r.standings[0];
+    expect(x).toMatchObject({ id: ann.id, place: 1, lines: lane.lines, pieces: lane.pc, kos: 0, sent: 0 });
+    expect(x.score).toBe(seat.score);
+    expect(x.level).toBe(levelAt("normal", x.secs * 1000));
+    expect(t.state.players[0].wins).toBe(0);
+    expect(ops(t.sent).filter((o) => o.k === "ko")).toHaveLength(1);
+    // Another go, still alone.
+    t.act((g) => g.start(ann.id));
+    expect(t.state.phase).toBe("playing");
+    lane = Lane.fromSnap(t.act((g) => g.snapshot())!.seats[0]!);
+    expect(lane.pc).toBe(0);
+  });
+
+  it("leaves a solo board alone while its player is away", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    t.connect(ann.id);
+    t.act((g) => g.start(ann.id));
+    t.advance(COUNTDOWN_MS);
+    const locks = () => ops(t.sent).filter((o) => o.k === "l").length;
+    // No autopilot and no dropped pieces, however long they're gone (someone watching keeps the
+    // room's loop going).
+    t.disconnect(ann.id);
+    for (let i = 0; i < 2400; i++) {
+      t.advance(100);
+      t.act((g) => g.tick());
+    }
+    expect(locks()).toBe(0);
+    expect(t.state.phase).toBe("playing");
+    // Back: the piece they left hanging gets the whole deadline again before it drops.
+    t.connect(ann.id);
+    for (let i = 0; i < 50; i++) {
+      t.advance(100);
+      t.act((g) => g.tick());
+    }
+    expect(locks()).toBe(0);
+    for (let i = 0; i < 600; i++) {
+      t.advance(100);
+      t.act((g) => g.tick());
+    }
+    expect(locks()).toBeGreaterThan(0);
+  });
+
+  it("ends when the solo player leaves", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    t.connect(ann.id);
+    t.act((g) => g.start(ann.id));
+    t.act((g) => g.leave(ann.id));
+    expect(t.state.phase).toBe("results");
+    expect(t.state.results).toMatchObject({ solo: true, winnerId: null, standings: [] });
+  });
+
+  it("scores clears the usual way, times the level", () => {
+    const res = (lines: number, x: Partial<LockResult> = {}): LockResult => ({
+      piece: 1,
+      cleared: Array.from({ length: lines }, (_, i) => i),
+      spin: SPIN_NONE,
+      combo: lines ? 0 : -1,
+      b2b: false,
+      pc: false,
+      attack: 0,
+      cancelled: 0,
+      sent: 0,
+      inserted: 0,
+      out: false,
+      ...x,
+    });
+    expect(lockPoints(res(0), 5)).toBe(0);
+    expect(lockPoints(res(1), 1)).toBe(100);
+    expect(lockPoints(res(4), 3)).toBe(2400);
+    expect(lockPoints(res(4, { b2b: true }), 1)).toBe(1200);
+    expect(lockPoints(res(2, { spin: SPIN_FULL }), 2)).toBe(2400);
+    expect(lockPoints(res(0, { spin: SPIN_MINI }), 1)).toBe(100);
+    expect(lockPoints(res(1, { combo: 3 }), 1)).toBe(250);
+    expect(lockPoints(res(4, { pc: true }), 1)).toBe(2800);
   });
 });

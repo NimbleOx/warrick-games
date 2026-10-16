@@ -49,14 +49,18 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     if (this.live?.round.over) this.finish();
   }
 
-  /** Start a round, from the lobby or from the last round's results. */
+  /** Start a round, from the lobby or from the last round's results. One player on their own plays solo. */
   start(byId: string): void {
-    this.beginStart(byId);
+    this.beginStart(byId, 1);
     this.s.round++;
     this.participants.forEach((p, i) => (p.slot = i));
     this.startRound();
     const n = this.participants.length;
-    this.event(`Round ${this.s.round}: ${n} players. Last one standing wins!`);
+    this.event(
+      n === 1
+        ? `Round ${this.s.round}: solo. Play until you top out!`
+        : `Round ${this.s.round}: ${n} players. Last one standing wins!`,
+    );
   }
 
   protected resetForLobby(): void {
@@ -152,16 +156,22 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
         sent: seat.atk,
         lines: seat.lane.lines,
         pieces: seat.lane.pc,
+        score: seat.score,
+        level: round.reached(p.slot, now),
         secs: Math.round(round.survived(p.slot, now)),
       });
     }
     standings.sort((a, b) => a.place - b.place || b.kos - a.kos);
-    const winner = standings.find((x) => x.place === 1) ?? null;
-    const result: RoundResult = { round: s.round, winnerId: winner?.id ?? null, standings };
+    const solo = round.solo;
+    const winner = solo ? null : (standings.find((x) => x.place === 1) ?? null);
+    const result: RoundResult = { round: s.round, winnerId: winner?.id ?? null, solo, standings };
     s.results = result;
     s.phase = "results";
     for (const p of s.players) p.slot = -1;
-    if (winner) {
+    const me = solo ? standings[0] : null;
+    if (me) {
+      this.event(`${me.name} topped out with ${me.score.toLocaleString("en")} points: ${me.lines} lines, level ${me.level}`);
+    } else if (winner) {
       this.player(winner.id)!.wins++;
       this.event(`${winner.name} wins round ${s.round}!`);
     } else {

@@ -40,6 +40,8 @@ export interface OwnScene {
   out: boolean;
   /** Finishing place once out. */
   place: number;
+  /** Playing on their own: topping out is game over, and nobody's the winner. */
+  solo: boolean;
   flashes: Flash[];
   popups: Popup[];
   /** Garbage just rose in: shake the board for a moment. */
@@ -192,7 +194,7 @@ export class OwnView {
     for (let y = 0; y < top; y++) {
       for (let x = 0; x < COLS; x++) {
         const v = s.board.get(x, y);
-        if (v) cell(ctx, bx + x * c, rowTop(y), c, s.out && s.place !== 1 ? "#3a4166" : PIECE_COLORS[v], true);
+        if (v) cell(ctx, bx + x * c, rowTop(y), c, s.out && (s.solo || s.place !== 1) ? "#3a4166" : PIECE_COLORS[v], true);
       }
     }
     const a = s.active;
@@ -236,14 +238,15 @@ export class OwnView {
     ctx.fillStyle = BG;
     for (let i = 1; i < Math.min(s.pending, VISIBLE); i++) ctx.fillRect(mx, bottom - i * c, mw, 1);
 
-    if (s.out || s.place === 1) {
-      ctx.fillStyle = s.place === 1 ? "rgb(8 10 20 / 0.35)" : "rgb(8 10 20 / 0.6)";
+    const won = s.place === 1 && !s.solo;
+    if (s.out || won) {
+      ctx.fillStyle = won ? "rgb(8 10 20 / 0.35)" : "rgb(8 10 20 / 0.6)";
       ctx.fillRect(bx, by, bw, bh);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = s.place === 1 ? "#ffd23f" : "#ff4d5e";
-      ctx.font = `${Math.round(c * 1.3)}px ${PIXEL}`;
-      ctx.fillText(s.place === 1 ? "WINNER" : "K.O.", bx + bw / 2, by + bh * 0.42);
+      ctx.fillStyle = won ? "#ffd23f" : "#ff4d5e";
+      ctx.font = `${Math.round(c * (s.solo ? 1 : 1.3))}px ${PIXEL}`;
+      ctx.fillText(s.solo ? "GAME OVER" : won ? "WINNER" : "K.O.", bx + bw / 2, by + bh * 0.42);
       if (s.place > 1) {
         ctx.fillStyle = "#e9ecf8";
         ctx.font = `${Math.round(c * 0.7)}px ${PIXEL}`;

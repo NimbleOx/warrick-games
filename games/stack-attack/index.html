@@ -43,10 +43,11 @@
           <div class="hud" id="hud">
             <div class="hud-main" id="hud-main"></div>
             <div class="hud-stat"><span class="label">Level</span><b id="hud-level">—</b></div>
-            <div class="hud-stat"><span class="label">Garbage</span><b id="hud-scale">×1</b></div>
+            <div class="hud-stat" data-solo><span class="label">Score</span><b id="hud-score">—</b></div>
+            <div class="hud-stat" data-versus><span class="label">Garbage</span><b id="hud-scale">×1</b></div>
             <div class="hud-stat"><span class="label">Lines</span><b id="hud-lines">—</b></div>
-            <div class="hud-stat"><span class="label">Sent</span><b id="hud-sent">—</b></div>
-            <div class="hud-stat"><span class="label">KOs</span><b id="hud-kos">—</b></div>
+            <div class="hud-stat" data-versus><span class="label">Sent</span><b id="hud-sent">—</b></div>
+            <div class="hud-stat" data-versus><span class="label">KOs</span><b id="hud-kos">—</b></div>
           </div>
 
           <div class="arena" id="arena">
@@ -102,7 +103,7 @@
           <p class="winner-line" id="results-winner"></p>
           <table class="standings">
             <thead>
-              <tr><th></th><th>Player</th><th>KOs</th><th>Sent</th><th>Lines</th><th>Pieces</th><th>Time</th><th>Wins</th></tr>
+              <tr id="results-head"></tr>
             </thead>
             <tbody id="results-rows"></tbody>
           </table>

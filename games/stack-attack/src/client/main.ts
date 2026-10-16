@@ -1,6 +1,6 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { sfx } from "./audio";
-import { $, $$, esc, store } from "@warrick/kit/client/dom";
+import { $, $$, esc, personalBest, store } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { NEXT_COUNT, PLAYER_COLORS } from "../shared/constants";
 import { Board, Lane, SPIN_FULL, SPIN_NONE, spinName, type LockResult, type Placement } from "../shared/engine";
@@ -24,6 +24,8 @@ import { Pilot, type Action, type Handling } from "./pilot";
 import { MINI_H, MINI_W, MiniView, OWN_H, OWN_W, OwnView, type Flash, type Popup } from "./render";
 
 // ------------------------------------------------------------------ helpers
+
+const fmt = (n: number) => n.toLocaleString("en");
 
 function clock(secs: number): string {
   secs = Math.max(0, Math.round(secs));
@@ -66,6 +68,7 @@ interface SeatView {
   kos: number;
   /** Garbage sent, after the multiplier. */
   atk: number;
+  score: number;
   place: number;
   out: boolean;
   popups: Popup[];
@@ -81,6 +84,8 @@ interface RoundView {
   speed: Speed;
   who: (string | null)[];
   over: boolean;
+  /** One player on their own: score, lines and level, until they top out. */
+  solo: boolean;
 }
 
 const app = {
@@ -120,6 +125,12 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     "Garbage coming at you shows as a red bar. Clear lines first to cancel it.",
     "Top out and you're out. Pieces fall faster as the round goes on, and later garbage gets multiplied. Last one standing wins.",
   ],
+  minPlayers: 1,
+  soloRules: [
+    "On your own, you play until you top out. Pieces fall faster as you go.",
+    "Clear lines to score: quads, T-spins, back-to-backs, combos and perfect clears score more, times the level.",
+    "Your best score is kept in this browser. Add a CPU or invite a friend for a match instead.",
+  ],
   colors: PLAYER_COLORS,
   settings: {
     speed: { label: "Speed", fmt: (v: Speed) => SPEED_LABELS[v] },
@@ -148,6 +159,7 @@ const laneOf = (s: SeatView) => (s.slot === app.mySlot && app.pilot ? app.pilot.
 const pendingOf = (s: SeatView) => (s.slot === app.mySlot && app.pilot ? app.pilot.lane.pending() : s.pending);
 const alive = () => app.seats.filter((s) => s && !s.out).length;
 const playing = (): boolean => shell.state?.phase === "playing" && !!app.round && !app.round.over;
+const solo = (): boolean => !!app.round?.solo;
 
 const input = new Input(
   {
@@ -196,6 +208,7 @@ function seatFromSnap(slot: number, s: SeatSnap): SeatView {
     pending: s.q.reduce((n, g) => n + g.lines, 0),
     kos: s.kos,
     atk: s.atk,
+    score: s.sc ?? 0,
     place: s.place,
     out: s.out || s.place > 0,
     popups: [],
@@ -216,7 +229,15 @@ function setRound(snap: RoundSnap | null): void {
     return;
   }
   const fresh = !app.round || app.round.n !== snap.round || app.round.seed !== snap.seed;
-  app.round = { n: snap.round, seed: snap.seed, goAt: snap.goAt, speed: snap.speed, who: snap.who, over: snap.over };
+  app.round = {
+    n: snap.round,
+    seed: snap.seed,
+    goAt: snap.goAt,
+    speed: snap.speed,
+    who: snap.who,
+    over: snap.over,
+    solo: !!snap.solo,
+  };
   app.mySlot = snap.who.indexOf(shell.me);
   if (fresh) {
     app.feed = [];
@@ -301,6 +322,7 @@ function onOp(op: Op): void {
     const seat = app.seats[op.s];
     if (!seat) return;
     seat.atk = op.atk;
+    seat.score = op.sc ?? seat.score;
     if (op.s === app.mySlot && app.pilot) return; // we played it already
     const lane = seat.lane;
     lane.board = Board.decode(op.b) ?? lane.board;
@@ -356,6 +378,11 @@ function onOp(op: Op): void {
       sfx.thud();
     }
     const victim = who(op.s);
+    if (solo()) {
+      pushFeed(`${victim} topped out`);
+      if (app.round) app.round.over = true;
+      return;
+    }
     pushFeed(killer ? `${who(op.by)} knocked out ${victim}` : `${victim} ${op.s === app.mySlot ? "are" : "is"} out`);
     // Last one standing.
     if (app.round && alive() <= 1) {
@@ -392,7 +419,7 @@ function onState(s: GameState, prev: GameState | null): void {
     app.resultsAt = performance.now() + 1600;
     if (app.round) app.round.over = true;
     app.pilot?.stop();
-    if (s.results?.winnerId === shell.me) sfx.win();
+    if (s.results?.winnerId === shell.me || (s.results?.solo && soloBest(s)?.fresh)) sfx.win();
   }
   if (s.phase !== "lobby") {
     renderGame(s);
@@ -448,6 +475,7 @@ function drawBoards(now: number): void {
         armed: lane.armed(),
         out: lane.out || seat.out,
         place: seat.place,
+        solo: solo(),
         flashes: app.flashes,
         popups: app.popups,
         bumpAt: app.bumpAt,
@@ -582,7 +610,7 @@ const AIM_LABELS: Record<Aim, string> = {
 
 function renderGame(s: GameState): void {
   const n = app.seats.filter(Boolean).length;
-  $("round-label").textContent = app.round ? `Round ${app.round.n} · ${n} players` : `Round ${s.round}`;
+  $("round-label").textContent = app.round ? `Round ${app.round.n} · ${solo() ? "solo" : `${n} players`}` : `Round ${s.round}`;
   renderHud();
   renderScoreboard();
   if (s.phase === "results") {
@@ -604,15 +632,26 @@ function renderHud(): void {
   if (!mine || !seat || !lane) {
     html = `<span class="note">Watching${mine?.spectator ? " — you'll get a seat next round" : ""}</span>`;
   } else {
-    const status =
-      seat.place === 1 && app.round?.over ? "winner!" : seat.out ? `out · #${seat.place}` : app.round?.over ? "" : "in play";
+    const status = solo()
+      ? seat.out
+        ? "topped out"
+        : "solo"
+      : seat.place === 1 && app.round?.over
+        ? "winner!"
+        : seat.out
+          ? `out · #${seat.place}`
+          : app.round?.over
+            ? ""
+            : "in play";
     html =
       `<span class="chip" style="background:${mine.color}"></span><span>${esc(mine.name)}</span>` +
-      (total ? `<span class="tag">${left} of ${total} left</span>` : "") +
+      (total && !solo() ? `<span class="tag">${left} of ${total} left</span>` : "") +
       (status ? `<span class="note">${status}</span>` : "");
   }
   const main = $("hud-main");
   if (main.innerHTML !== html) main.innerHTML = html;
+  $("hud").classList.toggle("solo", solo());
+  $("hud-score").textContent = seat ? fmt(seat.score) : "—";
   $("hud-lines").textContent = lane ? String(lane.lines) : "—";
   $("hud-sent").textContent = seat ? String(seat.atk) : "—";
   $("hud-kos").textContent = seat ? String(seat.kos) : "—";
@@ -646,12 +685,23 @@ function renderScoreboard(): void {
       const look = app.looks[seat.slot];
       const lane = laneOf(seat);
       const you = seat.slot === app.mySlot;
-      const status = seat.place === 1 && app.round?.over ? "winner" : seat.out ? `#${seat.place}` : "";
-      return `<li class="${you ? "me" : ""} ${seat.out && seat.place !== 1 ? "dead" : ""}">
+      const status = solo()
+        ? seat.out
+          ? "out"
+          : ""
+        : seat.place === 1 && app.round?.over
+          ? "winner"
+          : seat.out
+            ? `#${seat.place}`
+            : "";
+      const meta = solo()
+        ? `${fmt(seat.score)} points · ${lane.lines} lines`
+        : `${seat.kos} KO · ${seat.atk} sent · ${lane.lines} lines`;
+      return `<li class="${you ? "me" : ""} ${seat.out && (solo() || seat.place !== 1) ? "dead" : ""}">
         <span class="chip" style="background:${look?.color ?? "#888"}"></span>
         <span class="pname">${esc(look?.name ?? "?")}${you ? ` <span class="tag tag-you">you</span>` : ""}</span>
         <span class="pct">${status}</span>
-        <span class="meta">${seat.kos} KO · ${seat.atk} sent · ${lane.lines} lines</span>
+        <span class="meta">${meta}</span>
       </li>`;
     })
     .join("");
@@ -687,7 +737,7 @@ function renderBanner(): void {
     if (until > 0) {
       const n = Math.ceil(until / 1000);
       big = String(n);
-      sub = app.pilot ? "Last one standing wins" : "";
+      sub = app.pilot ? (r.solo ? "Play until you top out" : "Last one standing wins") : "";
       sound = `count${n}-${r.n}`;
     } else if (until > -800 && app.pilot) {
       big = "GO!";
@@ -707,35 +757,74 @@ function renderBanner(): void {
   el.innerHTML = big ? `<div class="big">${esc(big)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}` : "";
 }
 
+/** The solo player's score against their best in this browser; null for a match, or someone else's round. */
+function soloBest(s: GameState): { best: number; prev: number | null; fresh: boolean } | null {
+  const r = s.results;
+  const x = r?.solo ? r.standings[0] : null;
+  if (!r || !x || x.id !== shell.me) return null;
+  return personalBest(`best.${shell.state?.settings.speed ?? "normal"}`, `${s.code}:${r.round}`, x.score);
+}
+
 function renderResults(s: GameState): void {
   const r = s.results;
   const open = s.phase === "results" && !!r;
   $("results").hidden = !open;
   if (!open || !r) return;
-  $("results-title").textContent = `Round ${r.round} results`;
-  const winner = r.standings.find((x) => x.id === r.winnerId);
-  $("results-winner").innerHTML = winner
-    ? `<b style="color:${winner.color}">${esc(winner.id === shell.me ? "You" : winner.name)}</b> ${winner.id === shell.me ? "are" : "is"} the last one standing.`
-    : "Nobody made it.";
-  $("results-rows").innerHTML = r.standings
-    .map((x) => {
-      const p = playerById(x.id);
-      return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
+  const you = (x: { id: string }) => (x.id === shell.me ? ` <span class="tag tag-you">you</span>` : "");
+  const name = (x: { name: string; color: string }) =>
+    `<span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}`;
+  if (r.solo) {
+    $("results-title").textContent = "Game over";
+    const x = r.standings[0];
+    const best = soloBest(s);
+    const mine = x?.id === shell.me;
+    $("results-winner").innerHTML = !x
+      ? "Nobody made it."
+      : `${mine ? "You" : `<b style="color:${x.color}">${esc(x.name)}</b>`} scored <b>${fmt(x.score)}</b>.` +
+        (!best
+          ? ""
+          : best.fresh && best.prev !== null
+            ? ` <b class="best">A new personal best!</b>`
+            : best.fresh
+              ? ` That's your best so far.`
+              : ` Your best is ${fmt(best.best)}.`);
+    $("results-head").innerHTML =
+      `<th></th><th>Player</th><th>Score</th><th>Lines</th><th>Level</th><th>Pieces</th><th>Time</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map(
+        (x) => `<tr><td></td><td>${name(x)}${you(x)}</span></td><td>${fmt(x.score)}</td><td>${x.lines}</td>
+        <td>${x.level}</td><td>${x.pieces}</td><td>${clock(x.secs)}</td></tr>`,
+      )
+      .join("");
+  } else {
+    $("results-title").textContent = `Round ${r.round} results`;
+    const winner = r.standings.find((x) => x.id === r.winnerId);
+    $("results-winner").innerHTML = winner
+      ? `<b style="color:${winner.color}">${esc(winner.id === shell.me ? "You" : winner.name)}</b> ${winner.id === shell.me ? "are" : "is"} the last one standing.`
+      : "Nobody made it.";
+    $("results-head").innerHTML =
+      `<th></th><th>Player</th><th>KOs</th><th>Sent</th><th>Lines</th><th>Pieces</th><th>Time</th><th>Wins</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map((x) => {
+        const p = playerById(x.id);
+        return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
         <td>${x.place}</td>
-        <td><span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span></td>
+        <td>${name(x)}${you(x)}</span></td>
         <td>${x.kos}</td><td>${x.sent}</td><td>${x.lines}</td><td>${x.pieces}</td><td>${clock(x.secs)}</td><td>${p?.wins ?? "—"}</td></tr>`;
-    })
-    .join("");
+      })
+      .join("");
+  }
   const host = canHost();
   const again = $<HTMLButtonElement>("results-again");
   const lobby = $<HTMLButtonElement>("results-lobby");
   again.hidden = lobby.hidden = !host;
-  const enough = s.players.filter((p) => !p.spectator && (p.cpu || p.connected)).length >= 2;
+  // Someone has to be here to play, even on their own.
+  const enough = s.players.some((p) => p.cpu || p.connected);
   again.disabled = !enough;
   $("results-wait").textContent = host
     ? enough
       ? ""
-      : "Need at least two players for another round — add a CPU from the lobby."
+      : "Nobody's here to play another round."
     : `Waiting for ${playerById(s.hostId)?.name ?? "the host"} to start the next round…`;
 }
 

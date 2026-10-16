@@ -93,6 +93,12 @@
   white-space: nowrap;
 }
 
+/* A solo round has a score and no garbage; a match the other way round. */
+.hud:not(.solo) [data-solo],
+.hud.solo [data-versus] {
+  display: none;
+}
+
 #hud-scale.hot {
   color: var(--danger);
   animation: blink 0.9s steps(2) 3;

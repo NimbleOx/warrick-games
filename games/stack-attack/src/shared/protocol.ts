@@ -68,13 +68,19 @@ export interface Standing {
   sent: number;
   lines: number;
   pieces: number;
+  /** Points scored, and the level they reached. */
+  score: number;
+  level: number;
   /** How long they lasted, in seconds. */
   secs: number;
 }
 
 export interface RoundResult {
   round: number;
+  /** Nobody wins a solo round (one player on their own): it's their score that counts. */
   winnerId: string | null;
+  /** One player on their own. Missing in results from before solo play. */
+  solo?: boolean;
   standings: Standing[];
 }
 
@@ -93,6 +99,8 @@ export interface SeatSnap extends LaneSnap {
   kos: number;
   /** Garbage actually sent, after the multiplier. */
   atk: number;
+  /** Points scored. */
+  sc: number;
   /** Finishing place once they're out (1 is the winner), otherwise 0. */
   place: number;
 }
@@ -107,6 +115,8 @@ export interface RoundSnap {
   who: (string | null)[];
   seats: (SeatSnap | null)[];
   over: boolean;
+  /** One player on their own: no garbage, and the round goes on until they top out. */
+  solo: boolean;
 }
 
 /** What happened in a round since the last frame. */
@@ -125,6 +135,8 @@ export type Op =
       lines: number;
       /** Garbage this player has sent in all, after the multiplier. */
       atk: number;
+      /** Points this player has scored in all. */
+      sc: number;
       /** Rows this lock cleared, the T-spin kind, the garbage it was worth and whether it was a perfect clear. */
       c: number;
       sp: number;

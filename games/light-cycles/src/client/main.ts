@@ -26,10 +26,22 @@ function plural(n: number, word: string): string {
 const app = {
   /** The round on screen, kept in step by the server's frames. */
   arena: null as Arena | null,
+  /** Frames received but not shown yet, oldest first. */
+  frames: [] as Frame[],
+  /** Where playback is, in ticks. It trails the newest frame a little to smooth out network jitter. */
+  clock: 0,
+  lastNow: 0,
+  /** The state being applied came with a welcome (joining or reconnecting), not a change of phase. */
+  welcomed: false,
   bannerUntil: 0,
   lastCount: 0,
   swipe: null as { x: number; y: number; dir: Dir | null } | null,
 };
+
+/** How far behind the newest frame playback aims to be, in ticks. */
+const BUFFER_TICKS = 1.5;
+/** Further behind than this (say, the tab was in the background) and playback skips ahead. */
+const MAX_BEHIND_TICKS = 30;
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "light-cycles",
@@ -53,7 +65,7 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     suddenDeath: { label: "Sudden death", fmt: (v: number) => (v ? `Walls close after ${v}s` : "Off") },
   },
   choices: SETTING_CHOICES,
-  onWelcome: (msg) => msg.t === "welcome" && setArena(msg.arena),
+  onWelcome,
   onMessage,
   onState,
   onScreen,
@@ -89,10 +101,17 @@ function onScreen(screen: Screen): void {
 /** Left the game, or lost it for good. */
 function onReset(): void {
   app.arena = null;
+  app.frames = [];
   $("gameover").hidden = true;
 }
 
 // ------------------------------------------------------------------ messages
+
+function onWelcome(msg: ServerMsg): void {
+  if (msg.t !== "welcome") return;
+  app.welcomed = true;
+  setArena(msg.arena);
+}
 
 function onMessage(msg: ServerMsg): void {
   switch (msg.t) {
@@ -108,13 +127,20 @@ function onMessage(msg: ServerMsg): void {
 
 function setArena(snap: ArenaSnapshot | null): void {
   app.arena = snap ? new Arena(snap) : null;
+  app.frames = [];
+  app.clock = app.arena?.tick ?? 0;
   if (app.arena) renderer.reset(app.arena);
 }
 
 /** The shell has shown the lobby or the game screen (and drawn the lobby). */
 function onState(s: GameState, prev: GameState | null): void {
-  if (s.phase === "lobby") app.arena = null;
-  if (prev && prev.phase !== s.phase) {
+  // A welcome's state isn't a change of phase: you've just (re)joined, so don't replay its effects.
+  const welcomed = app.welcomed;
+  app.welcomed = false;
+  if (s.phase === "lobby") setArena(null);
+  // The round just ended: show its last frames before the result.
+  if (s.phase !== "playing") drain();
+  if (prev && !welcomed && prev.phase !== s.phase) {
     if (s.phase === "playing") {
       sfx.go();
       flashBanner(`<span class="count">GO!</span>`, 700, "count-banner");
@@ -128,8 +154,39 @@ function onState(s: GameState, prev: GameState | null): void {
 
 function onFrame(f: Frame): void {
   const a = app.arena;
-  if (!a) return;
+  if (!a || f.n <= (app.frames.at(-1)?.n ?? a.tick)) return;
+  app.frames.push(f);
+  // A background tab doesn't animate, so keep its round current rather than queueing.
+  if (document.hidden) drain();
+}
+
+/**
+ * Play buffered frames in real time, a little behind the newest one, so a late frame or two
+ * arriving together don't make the heads stall and jump. Playback speeds up when it falls behind.
+ */
+function advance(now: number): void {
+  const dt = app.lastNow ? Math.min(250, now - app.lastNow) : 0;
+  app.lastNow = now;
+  const a = app.arena;
+  const s = shell.state;
+  if (!a || !s) return;
+  const newest = app.frames.at(-1)?.n ?? a.tick;
+  const behind = newest - app.clock;
+  if (behind > MAX_BEHIND_TICKS) app.clock = newest - BUFFER_TICKS;
+  else app.clock += (dt / tickMsFor(s.settings.speed)) * (1 + Math.max(0, behind - BUFFER_TICKS) * 0.5);
+  if (app.clock > newest) app.clock = newest;
+  while (app.frames.length && app.frames[0].n <= app.clock) applyFrame(app.frames.shift()!, now);
+}
+
+/** Show every buffered frame now. */
+function drain(): void {
   const now = performance.now();
+  while (app.frames.length) applyFrame(app.frames.shift()!, now);
+  if (app.arena) app.clock = app.arena.tick;
+}
+
+function applyFrame(f: Frame, now: number): void {
+  const a = app.arena!;
   renderer.beforeFrame(a, now);
   a.apply(f);
   renderer.afterFrame(a, f, now, (id) => playerById(id)?.color ?? "#ffffff", shell.me);
@@ -157,6 +214,7 @@ function frame(now: number): void {
     return;
   }
   if (shell.screen !== "game") return;
+  advance(now);
   const s = shell.state;
   if (app.arena && s) renderer.draw(app.arena, drawOpts(s), now);
   tickClocks();

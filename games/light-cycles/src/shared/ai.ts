@@ -104,7 +104,6 @@ function clearRun(arena: Arena, x: number, y: number, d: Dir, max: number): numb
 
 // Scratch buffers shared by every search, so a tick doesn't allocate.
 let seen = new Uint32Array(0);
-let owner = new Uint8Array(0);
 let dist = new Uint16Array(0);
 let queue = new Int32Array(0);
 let stamp = 0;
@@ -112,7 +111,6 @@ let stamp = 0;
 function fresh(n: number): void {
   if (seen.length < n) {
     seen = new Uint32Array(n);
-    owner = new Uint8Array(n);
     dist = new Uint16Array(n);
     queue = new Int32Array(n);
     stamp = 0;
@@ -145,46 +143,96 @@ function flood(arena: Arena, x: number, y: number, cap: number): number {
   return Math.min(head, cap);
 }
 
-const MINE = 1;
-const THEIRS = 2;
-const TIED = 3;
+// For every cell: how far the nearest rider's head is (and whose it is), and how far the nearest
+// other rider's is. Worked out once per tick and shared by every CPU's territory count.
+const FAR = 0xffff;
+let near1 = new Uint16Array(0);
+let who1 = new Uint8Array(0);
+let near2 = new Uint16Array(0);
+let rq = new Int32Array(0);
+let rqWho = new Uint8Array(0);
+let rivalsArena: Arena | null = null;
+let rivalsTick = -1;
 
-/** Cells rider i would reach (from x, y) strictly before any other rider. */
-function territory(arena: Arena, i: number, x: number, y: number): number {
+/** A breadth-first search from every head at once, where each cell takes the first two riders to reach it. */
+function rivals(arena: Arena): void {
+  if (rivalsArena === arena && rivalsTick === arena.tick) return;
+  rivalsArena = arena;
+  rivalsTick = arena.tick;
   const { w, h } = arena.cfg;
-  fresh(w * h);
+  const n = w * h;
+  if (near1.length < n) {
+    near1 = new Uint16Array(n);
+    who1 = new Uint8Array(n);
+    near2 = new Uint16Array(n);
+    // Each cell is queued at most twice, plus the heads.
+    rq = new Int32Array(2 * n + arena.cycles.length);
+    rqWho = new Uint8Array(2 * n + arena.cycles.length);
+  }
+  near1.fill(FAR, 0, n);
+  near2.fill(FAR, 0, n);
+  who1.fill(0, 0, n);
   let head = 0;
   let tail = 0;
-  const seed = (cell: number, who: number) => {
-    seen[cell] = stamp;
-    owner[cell] = who;
-    dist[cell] = 0;
-    queue[tail++] = cell;
-  };
-  seed(y * w + x, MINE);
-  arena.cycles.forEach((o, j) => {
-    if (j !== i && o.alive) seed(o.y * w + o.x, THEIRS);
+  arena.cycles.forEach((c, j) => {
+    if (!c.alive) return;
+    const cell = c.y * w + c.x;
+    near1[cell] = 0;
+    who1[cell] = j + 1;
+    rq[tail] = cell;
+    rqWho[tail++] = j + 1;
   });
-  let mine = 0;
   while (head < tail) {
-    const p = queue[head++];
-    const who = owner[p];
-    if (who === MINE) mine++;
-    if (who === TIED) continue;
+    const p = rq[head];
+    const who = rqWho[head++];
+    const d = (who1[p] === who ? near1[p] : near2[p]) + 1;
     const px = p % w;
     const py = (p - px) / w;
-    for (let d = 0; d < 4; d++) {
-      const q = step(arena, px, py, d as Dir);
+    for (let k = 0; k < 4; k++) {
+      const q = step(arena, px, py, k as Dir);
       if (q < 0) continue;
-      if (seen[q] !== stamp) {
-        seen[q] = stamp;
-        owner[q] = who;
-        dist[q] = dist[p] + 1;
-        queue[tail++] = q;
-      } else if (dist[q] === dist[p] + 1 && owner[q] !== who && owner[q] !== TIED) {
-        owner[q] = TIED;
+      if (who1[q] === 0) {
+        who1[q] = who;
+        near1[q] = d;
+      } else if (who1[q] !== who && near2[q] === FAR) {
+        near2[q] = d;
+      } else {
+        continue;
       }
+      rq[tail] = q;
+      rqWho[tail++] = who;
     }
   }
-  return mine;
+}
+
+/**
+ * Cells rider i would reach (from x, y) strictly before any other rider. Only those cells are
+ * searched: a cell someone else reaches first (or as soon) can't be on rider i's way to one of its own.
+ */
+export function territory(arena: Arena, i: number, x: number, y: number): number {
+  rivals(arena);
+  const { w, h } = arena.cfg;
+  fresh(w * h);
+  const me = i + 1;
+  let head = 0;
+  let tail = 0;
+  const start = y * w + x;
+  seen[start] = stamp;
+  dist[start] = 0;
+  queue[tail++] = start;
+  while (head < tail) {
+    const p = queue[head++];
+    const d = dist[p] + 1;
+    const px = p % w;
+    const py = (p - px) / w;
+    for (let k = 0; k < 4; k++) {
+      const q = step(arena, px, py, k as Dir);
+      if (q < 0 || seen[q] === stamp) continue;
+      seen[q] = stamp;
+      if (d >= (who1[q] === me ? near2[q] : near1[q])) continue;
+      dist[q] = d;
+      queue[tail++] = q;
+    }
+  }
+  return tail;
 }

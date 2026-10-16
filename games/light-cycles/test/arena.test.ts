@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { steer } from "../src/shared/ai";
+import { steer, territory } from "../src/shared/ai";
 import { Arena, spawnPoints, type ArenaConfig, type Dir } from "../src/shared/arena";
 import { ARENA_SIZES } from "../src/shared/constants";
 import { DEFAULT_SETTINGS, arenaConfig } from "../src/shared/protocol";
@@ -65,6 +65,27 @@ describe("arena", () => {
     const hits = crashes(a, 1);
     expect(hits).toHaveLength(2);
     expect(hits.every((h) => h.k === "crash" && h.headOn)).toBe(true);
+  });
+
+  it("calls it a head-on when two cycles side by side drive into each other", () => {
+    const a = arena([{ x: 4, y: 5, dir: 1 }, { x: 7, y: 5, dir: 3 }]);
+    a.step(); // nose to nose at 5 and 6
+    const hits = crashes(a, 1);
+    expect(hits).toHaveLength(2);
+    expect(hits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ i: 0, by: 1, headOn: true }),
+        expect.objectContaining({ i: 1, by: 0, headOn: true }),
+      ]),
+    );
+  });
+
+  it("but driving into the cell another cycle just left hits its wall", () => {
+    const a = arena([{ x: 5, y: 5, dir: 1 }, { x: 6, y: 5, dir: 2 }]);
+    const hits = crashes(a, 1);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ i: 0, by: 1 });
+    expect(hits[0]).not.toHaveProperty("headOn");
   });
 
   it("boosts two cells per tick for a limited time", () => {
@@ -140,6 +161,35 @@ describe("cpu riders", () => {
     }
   });
 
+  it("count territory exactly as a full search from every rider does", () => {
+    const rng = mulberry32(11);
+    let checked = 0;
+    for (const walls of ["solid", "wrap"] as const) {
+      const cfg = arenaConfig({ ...DEFAULT_SETTINGS, arena: "small", walls, suddenDeath: 0 });
+      const a = Arena.create(cfg, spawnPoints(6, cfg.w, cfg.h, rng).map((s, i) => ({ id: `c${i}`, ...s })));
+      for (let t = 0; t < 600 && a.aliveCount > 1; t++) {
+        if (t % 25 === 0) {
+          a.cycles.forEach((c, i) => {
+            if (!c.alive) return;
+            for (let d = 0; d < 4; d++) {
+              const [x, y] = a.next(c.x, c.y, d as Dir);
+              if (!a.open(x, y)) continue;
+              expect(territory(a, i, x, y)).toBe(bruteTerritory(a, i, x, y));
+              checked++;
+            }
+          });
+        }
+        a.cycles.forEach((c, i) => {
+          if (!c.alive) return;
+          const move = steer(a, i, "normal", rng);
+          if (move.dir !== null) a.queueTurn(i, move.dir);
+        });
+        a.step();
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
   it("finish rounds on every arena size within the sudden-death limit", () => {
     for (const size of Object.keys(ARENA_SIZES) as (keyof typeof ARENA_SIZES)[]) {
       const rng = mulberry32(size.length);
@@ -163,3 +213,32 @@ describe("cpu riders", () => {
     }
   });
 });
+
+/** Breadth-first distances over open cells from any of `from`. */
+function distances(a: Arena, from: number[]): number[] {
+  const { w, h } = a.cfg;
+  const d: number[] = new Array(w * h).fill(Infinity);
+  const queue = [...from];
+  for (const c of from) d[c] = 0;
+  for (let k = 0; k < queue.length; k++) {
+    const p = queue[k];
+    const x = p % w;
+    const y = (p - x) / w;
+    for (let dir = 0; dir < 4; dir++) {
+      const [nx, ny] = a.next(x, y, dir as Dir);
+      const c = ny * w + nx;
+      if (!a.open(nx, ny) || d[c] !== Infinity) continue;
+      d[c] = d[p] + 1;
+      queue.push(c);
+    }
+  }
+  return d;
+}
+
+/** Cells rider i reaches from (x, y) strictly before every other rider, the slow way. */
+function bruteTerritory(a: Arena, i: number, x: number, y: number): number {
+  const { w } = a.cfg;
+  const mine = distances(a, [y * w + x]);
+  const theirs = distances(a, a.cycles.flatMap((c, j) => (j !== i && c.alive ? [c.y * w + c.x] : [])));
+  return mine.filter((d, c) => d < theirs[c]).length;
+}

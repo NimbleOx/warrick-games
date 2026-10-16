@@ -28,6 +28,7 @@ export function newGameState(code: string, now: number): GameState {
     roundWinnerId: null,
     phaseDeadline: null,
     timer: null,
+    roundBase: null,
   };
 }
 
@@ -162,6 +163,8 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
     for (const p of [...this.s.players]) {
       if (!p.cpu && !p.connected) this.removePlayer(p.id);
     }
+    // Anyone who was watching a full lobby gets a seat that has since come free.
+    this.promoteSpectators();
     if (this.participants.length < 2) throw new GameError("Need at least two riders — add a CPU?");
     for (const p of this.s.players) p.kills = p.wins = p.score = 0;
     this.s.round = 0;
@@ -175,6 +178,7 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
     s.roundWinnerId = null;
     s.phaseDeadline = null;
     s.timer = null;
+    s.roundBase = null;
     this.arena = null;
   }
 
@@ -187,6 +191,12 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
     const s = this.s;
     if (s.phase !== "countdown" && s.phase !== "playing") return;
     if (!this.arena) {
+      // Points scored in the lost round are scored again in the replay, so take them back.
+      // (A state saved before this field existed has no base, and keeps its points.)
+      for (const p of s.players) {
+        const base = s.roundBase?.[p.id];
+        if (base) [p.score, p.kills] = base;
+      }
       s.round--;
       this.event(`Round ${s.round + 1} was interrupted — restarting it`);
       this.startRound();
@@ -201,6 +211,8 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
     const rng = this.rng;
     s.round++;
     s.roundWinnerId = null;
+    s.roundBase = {};
+    for (const p of s.players) s.roundBase[p.id] = [p.score, p.kills];
     s.theme = randInt(rng, 0, THEME_COUNT - 1);
     const cfg = arenaConfig(s.settings);
     // Riders who have gone away sit out (their cycle would only ride into a wall), unless that leaves too few.

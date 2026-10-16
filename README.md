@@ -15,12 +15,12 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Turf War | `/turf-war/` | `games/turf-war` | live | 5178 |
 | Pill Panic | `/pill-panic/` | `games/pill-panic` | live | 5179 |
 | Stack Attack | `/stack-attack/` | `games/stack-attack` | live | 5180 |
-| Dice Dominion | `/dice-dominion/` | `games/dice-dominion` | not deployed | 5181 |
+| Dice Dominion | `/dice-dominion/` | `games/dice-dominion` | live | 5181 |
 | Double Trouble | `/double-trouble/` | `games/double-trouble` | live | 5182 |
-| Corner Shop | `/corner-shop/` | `games/corner-shop` | not deployed | 5183 |
-| Box Office | `/box-office/` | `games/box-office` | not deployed | 5184 |
-| Liar's Dice | `/liars-dice/` | `games/liars-dice` | not deployed | 5185 |
-| Pocket Wars | `/pocket-wars/` | `games/pocket-wars` | not deployed | 5186 |
+| Corner Shop | `/corner-shop/` | `games/corner-shop` | live | 5183 |
+| Box Office | `/box-office/` | `games/box-office` | live | 5184 |
+| Liar's Dice | `/liars-dice/` | `games/liars-dice` | live | 5185 |
+| Pocket Wars | `/pocket-wars/` | `games/pocket-wars` | live | 5186 |
 
 The dev ports are the ones in `.claude/launch.json`, so every game can run at the same time.
 

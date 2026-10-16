@@ -17,26 +17,17 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Development
 
-```bash
-npm install        # at the repo root
-npm run dev        # http://localhost:5180/stack-attack/: Vite + the Worker and Durable Object running in workerd
-npm test           # engine, T-spin, garbage, CPU and game-flow tests (Node)
-npm run typecheck
-```
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/stack-attack -- --port 5180  # http://localhost:5180/stack-attack/, with the Worker and Durable Object in workerd
+npm test -w games/stack-attack                    # engine, T-spin, garbage, CPU and game-flow tests (Node)
+npm run typecheck -w games/stack-attack
 ```
 
-That creates a Worker called `stack-attack` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets. It's served at **https://warrick.games/stack-attack/** through the zone route `warrick.games/stack-attack*` in `wrangler.jsonc`, next to the hub and the other games; see the repo README for how the routing works.
+## Deploying
 
-- Vite's `base` is `/stack-attack/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/stack-attack/api/`.
-- `vite.config.ts` is the kit's `gameConfig("stack-attack")`, which moves the client build into `dist/client/stack-attack/`, because Workers static assets ignore Vite's `base`. Check a build before deploying: `npm run build && npx vite preview`, then confirm `/stack-attack/assets/*.js` and `/stack-attack/g/ABCDE` both return 200.
-- `localStorage` keys start with `sa.`.
-- After the first deploy, turn Stack Attack's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
+`npm run deploy -w games/stack-attack` builds it and deploys it to **https://warrick.games/stack-attack/**. The root README explains how the games share warrick.games. `localStorage` keys start with `sa.`.
 
 ## How it works
 

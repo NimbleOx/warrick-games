@@ -17,29 +17,17 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Development
 
-```bash
-npm install
-npm run dev        # http://localhost:5173/light-cycles/ — Vite + the Worker and Durable Object running in workerd
-npm test           # arena, CPU and game-rule tests (Node)
-npm run typecheck
-```
-
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. (`.claude/launch.json` runs it on port 5174 so it can sit next to Crater Club.)
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/light-cycles -- --port 5174  # http://localhost:5174/light-cycles/, with the Worker and Durable Object in workerd
+npm test -w games/light-cycles                    # arena, CPU, game-rule and room tests (Node)
+npm run typecheck -w games/light-cycles
 ```
 
-That creates a Worker called `light-cycles` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
+## Deploying
 
-It's served at **https://warrick.games/light-cycles/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/light-cycles*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
-
-Everything lives under the base path `/light-cycles/`. `vite.config.ts` is the kit's `gameConfig("light-cycles")`: it sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/light-cycles/api/...` (the kit's `gameWorker("light-cycles")`), and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so `gameConfig` moves the client build into `dist/client/light-cycles/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
-
-If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+`npm run deploy -w games/light-cycles` builds it and deploys it to **https://warrick.games/light-cycles/**. The root README explains how the games share warrick.games. `localStorage` keys start with `lc.`.
 
 ## How it works
 

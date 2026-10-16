@@ -14,11 +14,3 @@ A falling-block battle game like *Tetris 99* or a *Puyo Puyo Tetris* versus matc
 ## Not in v1
 
 Opponents' falling pieces, 180° turns, per-player targeting (like *Tetris 99*'s attacker/KO modes), key remapping, and a solo marathon or sprint mode. Design so they can be added.
-
-## Lessons from the other games
-
-- Deploying restarts every Durable Object and drops every socket. Clients must reconnect and resync from a full snapshot.
-- When a button has keyboard focus, let it own Space/Enter; don't also fire game hotkeys. Blur buttons after clicks in the game screen, since Space is hard drop.
-- Make every limit visible. If something stops a player from acting, the UI must say why.
-
-Ask before deploying, committing or pushing.

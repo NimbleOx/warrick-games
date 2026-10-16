@@ -71,40 +71,20 @@ A small turn-based tactics game like *Advance Wars*, for 2–4 players. Each pla
 - **Balance checks.** `test/sim.ts` plays CPU-only games with the pure rules. `BALANCE=1 npx vitest run test/balance.test.ts` prints how often each seat wins on every map, for tuning `SEAT_FUNDS` and the maps.
 - **Dev aid.** In `npm run dev`, the console can play your seat with a CPU: `__pw.autoplay("hard")` (and `null` to stop). That's how full games against every level were played in the preview.
 
-## How to build it
+## Lessons from this game
 
-Built on `@warrick/kit` (see `../../packages/kit/README.md`), starting from Crater Club in `../crater-club`, which is turn-based and on the kit. Read its README first. Dice Dominion in `../dice-dominion` is another turn-based kit game with a seat takeover, Fast CPUs and stand-ins, so it's worth reading too. Read the other games for ideas, but don't modify them.
-
-- Cloudflare Worker + Vite, TypeScript, no client framework, canvas rendering. One Durable Object per 5-character room code, with the kit's `Room` doing sockets, tokens, storage, cleanup and the alarm.
-- `vite.config.ts` is `gameConfig("pocket-wars")`, and `src/worker/index.ts` exports `GameRoom` and `gameWorker("pocket-wars")`. The tsconfigs extend `@warrick/kit/tsconfig.base.json`.
-- `src/worker/game.ts` is the `Game` class: it extends the kit's `Lobby` and turns the pure rules into turns, timers, CPU steps, takeovers and messages. `src/worker/room.ts` extends `Room` with `timerAt` and `handle` for the game's own messages.
-- `src/client/main.ts` makes a kit `Shell` with prefix `pw` and `maxPlayers: 4`. The shell does the home card, the lobby and chat, so `index.html` holds only the game screen. `render.ts` draws the map, units, overlays and animations on a canvas with a pan-and-zoom camera. `attract.ts` is the home-screen demo, and `audio.ts` builds the sounds from the kit's tones.
-- Dev port 5186, reserved in `../../.claude/launch.json`: run `preview_start {name: "pocket-wars"}` or `npm run dev -w games/pocket-wars`, and the game is at `http://localhost:5186/pocket-wars/`. The game's row is in the table in `../../README.md`.
-
-### Turn-based, like Crater Club
-
-- No tick loop. The Durable Object handles each action as it arrives and checks it.
-- One alarm drives every timer: the turn clock, an away player's 60 seconds, the CPU's next step and the winner's banner. Timers pause when nobody is connected. A game with no connections for 12 hours is deleted.
-- Hibernatable WebSockets let the object sleep between actions.
-
-## Lessons from the other games
-
-- Deploying restarts every Durable Object and drops every socket. Clients must reconnect and resync from a full snapshot, and drop whatever animation queue they had.
-- When a button has keyboard focus, let it own Space/Enter, and don't also fire game hotkeys. Blur buttons after clicks in the game screen.
-- Make every limit visible. If something stops a player from acting, the UI must say why: not your turn, already moved, artillery can't move and fire, not enough funds, the factory is blocked.
-- A message that carries `state` stands in for the room's own state message (see the kit's `Room.flush`). Events carry the state after them, so clients can animate and then snap to it.
-- Drive the animation queue with timers, not `requestAnimationFrame`. Frames stop in background tabs (and in a hidden preview pane), and a queue that waits on them never applies the next state. Prune canvas effects when they're added, too, not only when a frame draws them.
 - Symmetric isn't fair if both sides race for the same objective: seat 1 wins the ties. Twin Rivers first had each side's spare factory in the middle, 9 and 10 tiles from the two HQs, and seat 1 won almost every CPU game even with 10,000 extra for seat 2. With each spare factory behind its own side's river, it's even. Give each seat its own expansion and keep the contested buildings few.
-- CPU-only simulations are cheap (a 2-player game takes about 0.1 seconds), so measure CPU strength and seat balance with a few hundred games, never one. Seat order swamps level differences on small maps, so compare levels from both seats.
-- Before attaching a custom domain, check DNS against the zone's authoritative nameservers (`dig @mina.ns.cloudflare.com <name>`), not the local resolver, which caches the "doesn't exist" answer for 30 minutes.
+
+## Development
+
+From the repo root, after `npm install` there:
+
+```bash
+npm run dev -w games/pocket-wars -- --port 5186  # http://localhost:5186/pocket-wars/, with the Worker and Durable Object in workerd
+npm test -w games/pocket-wars                    # rules, movement, maps, balance, CPU, game-flow and room tests (Node)
+npm run typecheck -w games/pocket-wars
+```
 
 ## Deploying
 
-Cloudflare, the same account as the other games. The game is served at `https://warrick.games/pocket-wars/`: a path on the shared site, not a subdomain. The hub at the root is its own Worker in `../../hub`, with `warrick.games` as a Custom Domain. This game gets its own Worker with a zone route on the same hostname, and routes take precedence over a Custom Domain.
-
-- `wrangler.jsonc`: the route `{ "pattern": "warrick.games/pocket-wars*", "zone_name": "warrick.games" }` (a zone route, not a custom domain), `workers_dev: false`, `preview_urls: false`, `not_found_handling: "single-page-application"` and `run_worker_first: ["/pocket-wars/api/*"]`. One Durable Object binding, `GAME_ROOM` → `GameRoom`, with a `new_sqlite_classes` migration.
-- The kit's `gameConfig` sets Vite's `base` to `/pocket-wars/` and moves the client build into `dist/client/pocket-wars/`, because Workers static assets are looked up by request path and ignore Vite's `base`. The shell builds every URL from `import.meta.env.BASE_URL`. Check with `npm run build && npx vite preview` before deploying.
-- `localStorage` keys are prefixed `pw.`, since every game shares the warrick.games origin.
-- Deploy with `npm run deploy -w games/pocket-wars`. Then turn the game's card in `../../hub/public/index.html` from "Coming soon" into a link, and deploy the hub with `npm run deploy -w hub`.
-
-Ask before deploying, committing or pushing.
+`npm run deploy -w games/pocket-wars` builds it and deploys it to **https://warrick.games/pocket-wars/**. The root README explains how the games share warrick.games. `localStorage` keys start with `pw.`.

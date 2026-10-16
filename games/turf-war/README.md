@@ -17,32 +17,19 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Development
 
-```bash
-npm install
-npm run dev        # http://localhost:5178/turf-war/: Vite + the Worker and Durable Object running in workerd
-npm test           # board, claiming, tick rules, replay, CPU and game-flow tests (Node)
-npm run typecheck
-```
-
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. Editing worker code restarts the Durable Object, which also tests what a deploy does to a round in progress.
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/turf-war -- --port 5178  # http://localhost:5178/turf-war/, with the Worker and Durable Object in workerd
+npm test -w games/turf-war                    # board, claiming, tick rules, replay, CPU, game-flow and room tests (Node)
+npm run typecheck -w games/turf-war
 ```
 
-That creates a Worker called `turf-war` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
+Editing worker code restarts the Durable Object, which also shows what a deploy does to a round in progress.
 
-It's served at **https://warrick.games/turf-war/**, one path on a site shared with the other games. The hub page at the root is its own Worker (`../../hub`, with `warrick.games` as a Custom Domain). This Worker has the zone route `warrick.games/turf-war*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is off (`workers_dev: false`).
+## Deploying
 
-- Vite's `base` is `/turf-war/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/turf-war/api/`.
-- Workers static assets are looked up by request path and know nothing about Vite's `base`. `vite.config.ts` is the kit's `gameConfig("turf-war")`, which moves the client build into `dist/client/turf-war/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/turf-war/assets/*.js` and `/turf-war/g/ABCDE` both return 200.
-- All the games share one origin, so `localStorage` keys start with `tw.`.
-- After the first deploy, turn Turf War's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
-
-If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+`npm run deploy -w games/turf-war` builds it and deploys it to **https://warrick.games/turf-war/**. The root README explains how the games share warrick.games. `localStorage` keys start with `tw.`.
 
 ## How it works
 

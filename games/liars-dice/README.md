@@ -42,37 +42,21 @@ A multiplayer bluffing dice game like *Perudo*. Everyone rolls five dice under a
 - One alarm drives every timer: the turn clock, the 5-second grace for a missing player, CPU thinking time and the reveal pause. Timers pause when nobody is connected.
 - The turn clock is the kit's (`@warrick/kit/worker/turns`). `clockEnd` is the turn's clock, and `turnDeadline` is when the turn really ends (sooner while its player is away), which is what the client shows. Coming back gets you the clock you had, never more: 5 seconds if less was left, once a turn. A deadline that passed while the room was empty or restarting starts over at 5 seconds, so nobody is moved for the moment they're back.
 
-## How to build it
-
-Built on `@warrick/kit` (see `../../packages/kit/README.md`), starting from Crater Club (`../crater-club`), which is turn-based and already on the kit. Read the root `README.md` first.
-
-- `vite.config.ts` is `gameConfig("liars-dice")`. It sets Vite's `base` to `/liars-dice/` and nests the built client under `dist/client/liars-dice/`.
-- `src/worker/index.ts` exports `GameRoom` and `gameWorker("liars-dice")`, with the API under `/liars-dice/api/...`.
-- `src/worker/game.ts`: `Game extends Lobby<GameState, ServerMsg, Hands>`. It overrides `createPlayer`, `betweenRounds` (the lobby is open only in the "lobby" phase), `leave` (mid-game it counts as going out), `setConnected` (queues your hand, and starts the 5-second grace), `resetForLobby`, and adds `start`, `bid`, `liar`, `spot` and `onTimer`.
-- `src/worker/room.ts`: `GameRoom extends Room` with `newState`, `makeGame`, `handle` (bid, liar, spot) and `timerAt`. It loads the hands in its constructor, and its `changedKeys` gives them to the kit whenever they changed, so they go in the same storage write as the state. If they're lost anyway (in a game saved by an older version, which wrote them separately), the game rolls that round again, clears its bids (so a call has nothing left to call) and sends everyone their new cup.
-- `src/client/main.ts` creates a `Shell` with prefix `ld`, the settings' labels, and hooks for the `hand` message and the game screen. `index.html` holds only the game screen. The stylesheet imports `@warrick/kit/style.css` and sets an amber accent.
-- `tsconfig.client.json` and `tsconfig.worker.json` extend `@warrick/kit/tsconfig.base.json`. `vitest.config.ts` aliases `cloudflare:workers` to the kit's stub, so `test/room.test.ts` and `test/privacy.test.ts` run the real room in Node with the kit's harness (`@warrick/kit/testing/room`). Tests of client code are in `test/client/`, type-checked with the client's tsconfig.
-- Dev port 5185, reserved as "liars-dice" in `../../.claude/launch.json`: `http://localhost:5185/liars-dice/`.
-
 ## Lessons from this game
 
 - Plain binomial odds undersell a bidder's own dice: people (and CPUs) bid on faces they hold. In simulated games, a Normal CPU that called Liar! below 35% lost to Easy, which only calls far-fetched bids, and without wilds (1 die in 6 matches, not 1 in 3) it lost badly. Calling below 30% with wilds and 15% without puts the levels in order (easy < normal < hard) for every combination of the two options. `test/sim.ts` plays CPU-only games with the pure rules; `test/ai.test.ts` keeps the order from slipping.
 - The kit broadcasts the whole state and sends it whole in the welcome, and doesn't persist `live`. So the hidden dice live in `live` and `GameRoom` saves them itself (with the kit's `changedKeys`, in the same write as the state), and each player's cup goes out as a direct message queued from `setConnected` (every hello passes through it). A future kit hook for a per-seat view would make this simpler.
 
-## Lessons from the other games
+## Development
 
-- Deploying restarts every Durable Object and drops every socket. Clients reconnect and resync from the welcome. Here that means the hidden hands must be persisted too, not just the state.
-- When a button has keyboard focus, let it own Space/Enter; don't also fire game hotkeys. Blur buttons after clicks in the game screen.
-- Make every limit visible. If something stops a player from acting, the UI says why: not your turn, that bid doesn't raise the last one, nothing to call yet.
-- Before attaching a custom domain, check DNS against the zone's authoritative nameservers (`dig @mina.ns.cloudflare.com <name>`), not the local resolver, which caches the "doesn't exist" answer for 30 minutes.
+From the repo root, after `npm install` there:
+
+```bash
+npm run dev -w games/liars-dice -- --port 5185  # http://localhost:5185/liars-dice/, with the Worker and Durable Object in workerd
+npm test -w games/liars-dice                    # rules, CPU, privacy, game-flow and room tests (Node)
+npm run typecheck -w games/liars-dice
+```
 
 ## Deploying
 
-Cloudflare, same account as the other games. The game is served at `https://warrick.games/liars-dice/`, a path on the shared site. The hub at the root is its own Worker in `../../hub` with `warrick.games` as a Custom Domain. This game is its own Worker with a zone route on the same hostname, and routes take precedence over a Custom Domain.
-
-- `wrangler.jsonc`: the route `{ "pattern": "warrick.games/liars-dice*", "zone_name": "warrick.games" }`, `workers_dev: false`, `preview_urls: false`, and `run_worker_first: ["/liars-dice/api/*"]`.
-- The client's `Shell` builds every URL from `import.meta.env.BASE_URL`, and the kit's `gameConfig` handles the static-assets base path. Check with `npm run build && npx vite preview` before the first deploy.
-- `localStorage` keys are prefixed `ld.` (every game shares the warrick.games origin).
-- `npm run deploy -w games/liars-dice`. Then turn the game's card in `../../hub/public/index.html` from "Coming soon" into a link, mark it live in the root README's table, and deploy the hub (`npm run deploy -w hub`).
-
-Ask before deploying, committing or pushing.
+`npm run deploy -w games/liars-dice` builds it and deploys it to **https://warrick.games/liars-dice/**. The root README explains how the games share warrick.games. `localStorage` keys start with `ld.`.

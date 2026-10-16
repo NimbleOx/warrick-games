@@ -16,29 +16,19 @@ It's a sibling of [Crater Club](../crater-club) and is built the same way: a Clo
 
 ## Development
 
-```bash
-npm install
-npm run dev        # http://localhost:5173/boom-room/ — Vite + the Worker and Durable Object running in workerd
-npm test           # arena, CPU and game-rule tests (Node)
-npm run typecheck
-```
-
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. To try two players on one machine, open the second one at `http://p2.localhost:5173/boom-room/`; it's a different origin, so it gets its own player identity.
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/boom-room -- --port 5177  # http://localhost:5177/boom-room/, with the Worker and Durable Object in workerd
+npm test -w games/boom-room                    # arena, CPU and game-rule tests (Node)
+npm run typecheck -w games/boom-room
 ```
 
-That creates a Worker called `boom-room` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
+To try two players on one machine, open the second at `http://p2.localhost:5177/boom-room/`: it's a different origin, so it gets its own player.
 
-It's served at **https://warrick.games/boom-room/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/boom-room*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+## Deploying
 
-Everything lives under the base path `/boom-room/`. `vite.config.ts` is the kit's `gameConfig("boom-room")`: it sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/boom-room/api/...` (the kit's `gameWorker("boom-room")`), and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so `gameConfig` moves the client build into `dist/client/boom-room/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
-
-If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+`npm run deploy -w games/boom-room` builds it and deploys it to **https://warrick.games/boom-room/**. The root README explains how the games share warrick.games. `localStorage` keys start with `br.`.
 
 ## How it works
 

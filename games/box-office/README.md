@@ -41,35 +41,16 @@ Dots and Boxes for up to 8 players. The board is a grid of dots. On your turn yo
 - The server sends the whole board in every state. The biggest board is 195 edges and 88 boxes, a few hundred bytes. `order` lists the edges in the order they were drawn, so a client can animate every line it hasn't seen yet, in order, and highlight the last move.
 - Rendering: one canvas. Dots, faint undrawn lines, drawn lines in the drawer's colour, translucent box fills with initials. On a portrait screen a board that's wider than tall is drawn transposed, so its long side runs down the phone; input maps back through the same transform.
 
-## How to build it
+## Development
 
-Box Office is built on `@warrick/kit` (`../../packages/kit`; read its README). Start from Crater Club in `../crater-club`, which is turn-based and on the kit: its alarm timers, CPU pacing and game-over flow are the closest match. Read the other games for ideas but don't edit them.
+From the repo root, after `npm install` there:
 
-- Cloudflare Worker + Vite (`@cloudflare/vite-plugin`), TypeScript, no client framework, canvas rendering. One Durable Object per 5-character room code; no accounts, a random token in `localStorage` maps to a seat, so a reload puts you back in it. All of that comes from the kit.
-- `vite.config.ts` is `gameConfig("box-office")`, which sets Vite's `base` to `/box-office/` and nests the built client under `dist/client/box-office/`. `tsconfig.client.json` and `tsconfig.worker.json` extend `@warrick/kit/tsconfig.base.json`.
-- `src/worker/index.ts` exports the room and `gameWorker("box-office")`, with the API under `/box-office/api/...`.
-- `src/worker/game.ts`: `Game extends Lobby` with `start`, `line`, `takeAll`, the turn flow and `onTimer`. It overrides `leave` and `setConnected` like Crater Club (a leaver keeps their seat; a disconnect shortens the turn clock, and coming back gives you the clock you had, never a new one: the kit's turn clock). `finishedPhase` is the kit's default, `"results"`.
-- `src/worker/room.ts`: `GameRoom extends Room` with `newState`, `makeGame`, `timerAt` (the state's `timer.at`) and `handle` for `line` and `takeAll`. No tick loop.
-- One alarm drives every timer: the turn clock, the away player's 5 seconds, and CPU thinking time. Timers pause when nobody is connected. The state is small, so it's saved after every line, and a deploy mid-game resumes where it was.
-- `src/client/main.ts` creates the kit's `Shell` with the prefix `bo`, the size and timer settings, and hooks for the game screen. `index.html` holds only the game screen. The stylesheet starts with `@import "@warrick/kit/style.css";` and sets the cinema colours: ticket red buttons, a gold logo.
-- Dev port 5184, already reserved as `box-office` in `../../.claude/launch.json`. Run `npm run dev -w games/box-office`, or `preview_start` with the name `box-office`; the game is at `http://localhost:5184/box-office/`.
-- Add the game's row to the table in `../../README.md` and its card ("Coming soon" until deployed) to `../../hub/public/index.html`.
-
-## Lessons from the other games
-
-- Deploying restarts every Durable Object and drops every socket. Clients must reconnect and resync from a full snapshot.
-- When a button has keyboard focus, let it own Space/Enter; don't also fire game hotkeys. Blur buttons after clicks in the game screen.
-- Make every limit visible. If something stops a player from acting, the UI must say why: not your turn, that line's taken, tap again to draw.
-- A tab in the background doesn't run `requestAnimationFrame`, so nothing the game needs may wait on an animation. The client snaps the board to the latest state instead of queueing animations while the tab is hidden.
-- Before attaching a custom domain, check DNS against the zone's authoritative nameservers (`dig @mina.ns.cloudflare.com <name>`), not the local resolver, which caches the "doesn't exist" answer for 30 minutes.
+```bash
+npm run dev -w games/box-office -- --port 5184  # http://localhost:5184/box-office/, with the Worker and Durable Object in workerd
+npm test -w games/box-office                    # board, chain, endgame, CPU, game-flow and room tests (Node)
+npm run typecheck -w games/box-office
+```
 
 ## Deploying
 
-Cloudflare, same account as the other games. The game is served at `https://warrick.games/box-office/`, a path on the shared site. The hub at the root is its own Worker in `../../hub` with `warrick.games` as a Custom Domain; this game gets its own Worker with a zone route on the same hostname, and routes take precedence over a Custom Domain.
-
-- `wrangler.jsonc`: `"routes": [{ "pattern": "warrick.games/box-office*", "zone_name": "warrick.games" }]` (a zone route, not a custom domain), `workers_dev: false`, `preview_urls: false`, `not_found_handling: "single-page-application"` and `run_worker_first: ["/box-office/api/*"]`. One Durable Object binding, `GAME_ROOM` → `GameRoom`, with a `new_sqlite_classes` migration. Run `npm run cf-typegen` after changing bindings.
-- Build every client URL from `import.meta.env.BASE_URL` (the kit's `Shell` does). Workers static assets ignore Vite's `base`, which is why `gameConfig` nests the build; check with `npm run build && npx vite preview` before the first deploy.
-- `localStorage` keys are prefixed `bo.`, because every game shares the warrick.games origin.
-- `npm run deploy -w games/box-office`, then turn the hub card from "Coming soon" into a link, mark the README row live, and `npm run deploy -w hub`.
-
-Ask before deploying, committing or pushing.
+`npm run deploy -w games/box-office` builds it and deploys it to **https://warrick.games/box-office/**. The root README explains how the games share warrick.games. `localStorage` keys start with `bo.`.

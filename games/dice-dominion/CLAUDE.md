@@ -2,6 +2,8 @@
 
 A turn-based territory game like *Dice Wars* and *KDice*. The map is split into territories, each holding a stack of dice. On your turn you attack neighbouring territories by rolling your stack against theirs. When you end your turn you get new dice, one for each territory in your biggest connected group. Take the whole map to win.
 
+Read `README.md` for how it plays, how it's built and how to run it; this file is the rules and design the code keeps to.
+
 ## Rules for v1
 
 - 2–8 players online, each on their own device. Click or tap one of your territories that has 2 or more dice, then an enemy territory next to it to attack. Click the selected territory again, or press Esc, to cancel. The **End turn** button or Enter ends your turn.
@@ -29,40 +31,3 @@ A turn-based territory game like *Dice Wars* and *KDice*. The map is split into 
 - Dice are rolled only on the server. Broadcast each attack as the two territories, both sets of rolls and the result. Clients play a short roll animation (under a second, skippable), then apply it. The end-of-turn broadcast lists where each new die landed, so clients can drop them in one by one.
 - Largest group, legal attacks and win checks are graph functions over the territory neighbour lists. Keep them pure so Vitest can test them.
 - First-move advantage: in simulated games between normal CPUs, the first of two players won about 80% of the time, and the first of four about 38%. Later seats now start with extra dice, rising to `round(1.2 × territories per player ÷ players)` for the last seat (`seatBonus` in `rules.ts`), which brought two players to about 50/50 and the first of four to about 29%. The README has the numbers. Keep watching it in playtests with people.
-
-## How to build it
-
-Copy the architecture of Crater Club, the turn-based artillery game in `../crater-club`. Read its README first. Crater Club is built on `@warrick/kit` (`../../packages/kit`), and so is this game: the room, lobby, router, socket and page shell come from the kit, and the game keeps its own rules, screen and look. It is turn-based like this game, so its turn timers, CPU pacing and alarm handling are the closest match. The other games in `../` are live; read them for ideas if useful, but don't modify them.
-
-- Cloudflare Worker + Vite (`@cloudflare/vite-plugin`), TypeScript, no client framework, canvas rendering.
-- One Durable Object per 5-character room code. `POST /api/games` creates a room, `/g/CODE` is the invite link, `/api/games/CODE/ws` is the WebSocket.
-- No accounts: a random token in `localStorage` maps to a player slot, so a reload puts you back in your seat.
-- Lobby: the host picks settings, can add CPU players, and starts the game. Up to 8 players.
-- Build on the kit (see `../../packages/kit/README.md`), not on copies of Crater Club's files. `src/worker/game.ts` is a `Lobby` subclass with the game's rules; `src/worker/room.ts` extends the kit's `Room` (sockets, tokens, storage, the alarm via `timerAt`/`onTimer`, cleanup) and handles the game's own messages; `src/worker/index.ts` is `gameWorker("dice-dominion")`. On the client, `src/client/main.ts` creates the kit's `Shell` (home, create/join, invite links, lobby, chat, reconnecting socket, mute) and adds the game screen; `index.html` holds only that screen, and `src/client/style.css` starts with `@import "@warrick/kit/style.css"`. Copy Crater Club's tsconfig / Vitest / wrangler setup, which already points at the kit.
-- Dev port 5181, already reserved in `../../.claude/launch.json`. Add a row for the game to the table in `../../README.md`.
-
-### Turn-based, like Crater Club
-
-- No tick loop. The Durable Object handles each action as it arrives and checks it: your turn, your territory, at least 2 dice, an enemy neighbour.
-- One alarm drives every timer: the turn clock, CPU thinking time between attacks, the end-of-turn dice drop and the game-over banner. Timers pause when nobody is connected.
-- Use hibernatable WebSockets so the object can sleep between actions. A game with no connections for 12 hours is deleted.
-- The state is small, so persist it after every attack and every turn end. The map (about 8 KB) has its own storage key, written in the same save as the state when a game makes a new map (the room's `changedKeys`), and loaded in the room's constructor. A deploy mid-game should resume exactly where it was.
-
-## Lessons from the other games
-
-- Deploying restarts every Durable Object and drops every socket. Clients must reconnect and resync from a full snapshot.
-- When a button has keyboard focus, let it own Space/Enter; don't also fire game hotkeys. Blur buttons after clicks in the game screen, since Enter ends your turn.
-- Make every limit visible. If something stops a player from acting, the UI must say why: not your turn, only 1 die, not a neighbour.
-- Before attaching a custom domain, check DNS against the zone's authoritative nameservers (`dig @mina.ns.cloudflare.com <name>`), not the local resolver, which caches the "doesn't exist" answer for 30 minutes.
-
-## Deploying
-
-Cloudflare, same account as Crater Club. The game is served at `https://warrick.games/dice-dominion/`: a path on one shared site, not a subdomain. The hub page at the root is its own Worker in `../../hub`, with `warrick.games` as a Custom Domain. This game gets its own Worker with a zone route on the same hostname, and routes take precedence over a Custom Domain. Each game is its own folder under `games/` in this repo and its own Worker, and deploys on its own. Crater Club already works this way, and the kit does most of the setup.
-
-- `wrangler.jsonc`: `"routes": [{ "pattern": "warrick.games/dice-dominion*", "zone_name": "warrick.games" }]` (a zone route, not a custom domain), `workers_dev: false`, `preview_urls: false`, and `run_worker_first: ["/dice-dominion/api/*"]`.
-- `vite.config.ts` is the kit's `gameConfig("dice-dominion")`. It sets Vite's `base` to `/dice-dominion/`, and the kit's `Shell` and socket build every client URL from `import.meta.env.BASE_URL` (fetches, the WebSocket, invite links like `/dice-dominion/g/CODE`, `history` paths). The Worker's API lives under `/dice-dominion/api/...`. Locally the game is at `http://localhost:5181/dice-dominion/`.
-- Static assets gotcha: Workers static assets are looked up by request path and ignore Vite's `base`. `gameConfig` handles it: it moves the client build into `dist/client/dice-dominion/` and leaves `index.html` at the root, because the single-page-application fallback always serves `/index.html`. Still check with `npm run build && npx vite preview` before deploying.
-- All the games share one origin, so `localStorage` keys get the game's prefix: the `Shell` is created with `prefix: "dd"` (`dd.name`, `dd.token`, …). Crater Club uses `cc.`, Stack Attack `sa.`.
-- A "Coming soon" card is already in `../../hub/public/index.html`. After the first deploy, turn it into a link (like Stack Attack's) and deploy the hub.
-
-Ask before deploying, committing or pushing.

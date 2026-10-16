@@ -18,26 +18,17 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Development
 
-```bash
-npm install        # at the repo root
-npm run dev        # http://localhost:5182/double-trouble/: Vite + the Worker and Durable Object running in workerd
-npm test           # engine, rocks, replay, CPU and game-flow tests (Node)
-npm run typecheck
-```
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/double-trouble -- --port 5182  # http://localhost:5182/double-trouble/, with the Worker and Durable Object in workerd
+npm test -w games/double-trouble                    # engine, rocks, replay, CPU and game-flow tests (Node)
+npm run typecheck -w games/double-trouble
 ```
 
-That creates a Worker called `double-trouble` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets. It's served at **https://warrick.games/double-trouble/** through the zone route `warrick.games/double-trouble*` in `wrangler.jsonc`, next to the hub and the other games; see the repo README for how the routing works.
+## Deploying
 
-- Vite's `base` is `/double-trouble/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/double-trouble/api/`.
-- `vite.config.ts` is the kit's `gameConfig("double-trouble")`, which moves the client build into `dist/client/double-trouble/`, because Workers static assets ignore Vite's `base`. Check a build before deploying: `npm run build && npx vite preview`, then confirm `/double-trouble/assets/*.js` and `/double-trouble/g/ABCDE` both return 200.
-- `localStorage` keys start with `dt.`.
-- After the first deploy, add Double Trouble's card to `../../hub/public/index.html` (with an icon in `hub/public/icons/`) and deploy the hub.
+`npm run deploy -w games/double-trouble` builds it and deploys it to **https://warrick.games/double-trouble/**. The root README explains how the games share warrick.games. `localStorage` keys start with `dt.`.
 
 ## How it works
 

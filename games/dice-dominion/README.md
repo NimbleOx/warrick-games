@@ -17,25 +17,19 @@ It runs on Cloudflare: a Worker serves the client and the API, and each game is 
 
 ## Development
 
-```bash
-npm install        # once, at the repo root
-npm run dev        # http://localhost:5181/dice-dominion/ — Vite + the Worker and Durable Object running in workerd
-npm test           # map, odds, rules and game-flow tests (Node)
-npm run typecheck
-```
-
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. In dev builds `window.__dd` holds the client's state, the map view and the shell.
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/dice-dominion -- --port 5181  # http://localhost:5181/dice-dominion/, with the Worker and Durable Object in workerd
+npm test -w games/dice-dominion                    # map, odds, rules and game-flow tests (Node)
+npm run typecheck -w games/dice-dominion
 ```
 
-That creates a Worker called `dice-dominion` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets. It's served at **https://warrick.games/dice-dominion/** through the zone route `warrick.games/dice-dominion*` in `wrangler.jsonc`; the `workers.dev` address is off, so invite links always point at warrick.games. Everything lives under the base path `/dice-dominion/`, set by the kit's `gameConfig("dice-dominion")` in `vite.config.ts` and `gameWorker("dice-dominion")` in `src/worker/index.ts` (see Crater Club's README for how the base path and the static assets fit together). Check with `npm run build && npx vite preview` before deploying.
+In dev builds `window.__dd` holds the client's state, the map view and the shell.
 
-If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+## Deploying
+
+`npm run deploy -w games/dice-dominion` builds it and deploys it to **https://warrick.games/dice-dominion/**. The root README explains how the games share warrick.games. `localStorage` keys start with `dd.`.
 
 ## How it works
 

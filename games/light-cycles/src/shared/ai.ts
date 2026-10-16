@@ -1,6 +1,6 @@
 import { DX, DY, type Arena, type Dir } from "./arena";
 import type { CpuLevel } from "./protocol";
-import type { Rng } from "./rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 
 // Lives in shared/ so the home-screen demo can race the same bots the server uses.
 

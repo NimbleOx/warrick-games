@@ -27,13 +27,12 @@ export const SHRINK_SECONDS = 0.8;
 /** Sudden death stops shrinking when the open floor is this small. */
 export const MIN_OPEN = 12;
 
-export const MAX_PLAYERS = 8;
-
 // Scoring.
 export const SCORE_PER_OUTLAST = 1;
 export const SCORE_PER_KILL = 2;
 export const SCORE_PER_WIN = 3;
 
+/** Light Cycles' neon player colours, in place of the kit's usual ones. */
 export const PLAYER_COLORS = [
   "#2be4ff", // cyan
   "#ff9f1c", // orange
@@ -44,10 +43,6 @@ export const PLAYER_COLORS = [
   "#5c7cff", // blue
   "#f2f6ff", // white
 ] as const;
-
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const CODE_LENGTH = 5;
-export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 
 /** Number of grid palettes the client knows how to draw. */
 export const THEME_COUNT = 5;

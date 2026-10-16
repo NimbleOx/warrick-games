@@ -3,7 +3,7 @@ import { steer } from "../src/shared/ai";
 import { Arena, spawnPoints, type ArenaConfig, type Dir } from "../src/shared/arena";
 import { ARENA_SIZES } from "../src/shared/constants";
 import { DEFAULT_SETTINGS, arenaConfig } from "../src/shared/protocol";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 
 const CFG: ArenaConfig = { w: 20, h: 12, walls: "solid", boosts: 2, boostTicks: 3, suddenDeathAt: 0, shrinkEvery: 1 };
 

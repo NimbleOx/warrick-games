@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { newBrain, think, type Brain, type CpuLevel } from "../src/shared/ai";
 import { BLUE, Bottle, RED, type Garbage } from "../src/shared/bottle";
 import type { DropEntry, Frame, KeyEntry, LaneSnap } from "../src/shared/protocol";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Mirror, Round, type Seat } from "../src/shared/round";
 
 function makeRound(seats: (CpuLevel | null)[], opts: { level?: number; aim?: "leader" | "random" | "all" } = {}) {

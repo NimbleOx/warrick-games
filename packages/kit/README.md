@@ -20,9 +20,9 @@ What every Warrick game shares, so each game's folder holds only its game: rooms
 
 ## How a game uses it
 
-**Server.** The game's `Game` class extends `Lobby` and adds its rules: `start`, playing, finishing. Override anything that works differently (Crater Club keeps a leaving player's tank, so it overrides `leave`). Hooks: `createPlayer` (the game's own player fields), `betweenRounds` (when the lobby is open), `joinMidGame`, `resetForLobby`, `finishedPhase`, and optional `tick()` and `onTimer()`.
+**Server.** The game's `Game` class extends `Lobby` and adds its rules: `start`, playing, finishing. Override anything that works differently (Crater Club keeps a leaving player's tank, so it overrides `leave`). Hooks: `createPlayer` (the game's own player fields), `betweenRounds` (when the lobby is open), `joinMidGame`, `resetForLobby`, `finishedPhase`, `maxPlayers` and `maxSpectators`, and optional `tick()` and `onTimer()`.
 
-Its `GameRoom` extends `Room` with `newState` and `makeGame`, plus whichever it needs: `handle` (messages beyond the lobby's), `timerAt` (when the alarm should call `onTimer`, for turn timers), `tickMs` and `wantsLoop` (a tick loop for real-time games), `afterHello` and `welcome` (extra fields like a snapshot). `src/worker/index.ts` is three lines: export the room and `gameWorker("<slug>")`.
+Its `GameRoom` extends `Room` with `newState` and `makeGame`, plus whichever it needs: `handle` (messages beyond the lobby's), `timerAt` (when the alarm should call `onTimer`, for turn timers), `tickMs` and `wantsLoop` (a tick loop for real-time games), `afterHello` and `welcome` (extra fields like a snapshot), `rateLimits` (how fast one socket may send). `src/worker/index.ts` is three lines: export the room and `gameWorker("<slug>")`.
 
 **Client.** `main.ts` creates a `Shell` with the home card's text, the settings' labels and choices, and hooks for its own messages and screen (`onMessage`, `onState`, `onScreen`, `onReset`, `confirmLeave`, `isLive`, `intercept`). The shell adds the home and lobby screens to the page, so `index.html` holds only the game screen. Buttons with `data-action="leave"`, `"start"` or `"lobby"` work anywhere; so do `.conn`, `[data-log]`, `form[data-chat]` and `#mute`. Call `shell.start()` once the game's own setup is done.
 

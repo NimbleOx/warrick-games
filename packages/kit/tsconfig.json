@@ -7,6 +7,7 @@
     "types": ["vitest"]
   },
   "include": ["src/shared", "src/worker/lobby.ts", "test"],
-  // The room test imports the room, which needs the Workers runtime's types.
-  "exclude": ["test/room.test.ts", "test/stubs"]
+  // The room tests import the room, which needs the Workers runtime's types; the net test the
+  // client's socket, which needs the DOM's.
+  "exclude": ["test/room.test.ts", "test/room-lifecycle.test.ts", "test/net.test.ts", "test/stubs"]
 }

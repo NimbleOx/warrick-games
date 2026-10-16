@@ -74,10 +74,6 @@ export function cloneBoard(b: Board): Board {
   return { w: b.w, h: b.h, lines: b.lines.slice(), boxes: b.boxes.slice() };
 }
 
-export function isDrawn(b: Board, e: number): boolean {
-  return b.lines[e] !== NONE;
-}
-
 /** How many of a box's sides are still undrawn. */
 export function undrawnSides(b: Board, box: number): number {
   let n = 0;
@@ -120,6 +116,7 @@ export function isOver(b: Board): boolean {
   return b.boxes.every((o) => o !== NONE);
 }
 
+/** Boxes nobody has claimed yet. */
 export function boxesLeft(b: Board): number {
   return b.boxes.filter((o) => o === NONE).length;
 }

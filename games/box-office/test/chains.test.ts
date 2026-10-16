@@ -11,7 +11,7 @@ import {
   safeLines,
   takeAll,
 } from "../src/shared/chains";
-import { endgame } from "../src/shared/endgame";
+import { EndgameMemo, endgame } from "../src/shared/endgame";
 import { board, box, hEdge, vEdge } from "./helpers";
 
 const sorted = (cs: { kind: string; size: number }[]) =>
@@ -173,5 +173,18 @@ describe("the endgame model", () => {
   it("more players: declining hands the next chain to the player after the receiver", () => {
     expect(endgame([chain(3), chain(3)], 3)).toEqual([0, 3, 3]);
     expect(endgame([chain(3), chain(8)], 3)).toEqual([0, 3, 8]);
+  });
+
+  it("keeps its memo to a size, with the same answers", () => {
+    // About 7000 positions to look at; a memo that holds 5000 starts again once along the way.
+    const comps = [...[1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 6, 7].map((n) => chain(n)), loop(4), loop(4), loop(6)];
+    for (const players of [2, 5, 8]) {
+      const full = new EndgameMemo();
+      const answer = endgame(comps, players, full);
+      expect(full.size).toBeGreaterThan(6000);
+      const small = new EndgameMemo(5000);
+      expect(endgame(comps, players, small)).toEqual(answer);
+      expect(small.size).toBeLessThan(5000);
+    }
   });
 });

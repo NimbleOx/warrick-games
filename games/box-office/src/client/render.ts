@@ -24,6 +24,8 @@ const GRID = "#262c4a";
 const DOT = "#d8ddf5";
 const LINE_MS = 130;
 const BOX_MS = 220;
+/** How long a new line or box keeps animating. */
+export const SETTLE_MS = Math.max(LINE_MS, BOX_MS);
 
 /**
  * The board on a canvas. A board that's wider than tall is drawn on its side when the space

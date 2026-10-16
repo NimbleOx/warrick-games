@@ -35,7 +35,12 @@ export interface GameState extends BaseState<PlayerState, Settings>, Board {
   turn: number;
   /** Every line drawn this game, in order. */
   order: number[];
+  /** When the turn ends by itself (the kit's turn clock): its clock, or sooner while the player is away. */
   turnDeadline: number | null;
+  /** When the turn's clock runs out (null: no limit). Missing in a game saved before it had one. */
+  clockEnd?: number | null;
+  /** The clock's top-up, for someone back with almost no time left, has been used. */
+  clockTopUp?: boolean;
   timer: Timer | null;
   /** Counts games in this room, so clients know a new board isn't the old one. */
   game: number;

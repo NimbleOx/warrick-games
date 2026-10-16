@@ -11,13 +11,25 @@ import { Game, newGameState, type Live } from "./game";
  */
 export class GameRoom extends Room<GameState, Game, Live> {
   protected readonly tickMs = TICK_MS;
+  /**
+   * Sockets whose page has said it takes ticks as deltas. A page from before deltas can't, so
+   * while one is open (or a socket hasn't said yet), ticks go out whole.
+   */
+  private deltaSockets = new WeakSet<WebSocket>();
 
   protected newState(code: string, now: number): GameState {
     return newGameState(code, now);
   }
 
   protected makeGame(state: GameState, io: GameIO, live: Live | null): Game {
-    return new Game(state, io, live);
+    return new Game(state, io, live, () => this.allTakeDeltas());
+  }
+
+  private allTakeDeltas(): boolean {
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws.readyState === WebSocket.OPEN && !this.deltaSockets.has(ws)) return false;
+    }
+    return true;
   }
 
   protected wantsLoop(state: GameState): boolean {
@@ -34,11 +46,13 @@ export class GameRoom extends Room<GameState, Game, Live> {
   }
 
   protected welcome(game: Game): object {
-    return { frame: game.live?.arena.snapshot(false) ?? null };
+    return { frame: game.live?.arena.catchUp() ?? null };
   }
 
-  protected handle(_ws: WebSocket, game: Game, pid: string, raw: { t: string }): void {
+  protected handle(ws: WebSocket, game: Game, pid: string, raw: { t: string }): void {
     const msg = raw as ClientMsg;
     if (msg.t === "move" || msg.t === "bomb") game.move(pid, msg.x, msg.y, msg.d, msg.t === "bomb");
+    else if (msg.t === "deltas") this.deltaSockets.add(ws);
+    else if (msg.t === "sync") game.sync(pid);
   }
 }

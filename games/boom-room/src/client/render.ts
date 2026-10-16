@@ -107,7 +107,15 @@ export class Renderer {
   private cols = 15;
   private rows = 13;
   private floor = document.createElement("canvas");
+  /** What the floor image was painted for: theme and size, and the grid it shows. */
   private floorKey = "";
+  private floorGrid = "";
+  private floorImg: ImageData | null = null;
+  /** 1 for each tile painted as a wall. */
+  private floorWalls = new Uint8Array(0);
+  private floorSpecks = new Uint8Array(0);
+  /** Per theme: a wall tile's pixels, inside and on the border. */
+  private wallTiles = new Map<number, [Uint8ClampedArray, Uint8ClampedArray]>();
   private crateSprites = new Map<number, HTMLCanvasElement>();
   private gaits = new Map<string, Gait>();
   private particles: Particle[] = [];
@@ -250,11 +258,7 @@ export class Renderer {
     const H = snap.rows * TILE;
     const k = this.canvas.width / W;
 
-    const walls = wallKey(snap);
-    if (walls !== this.floorKey) {
-      this.renderFloor(snap, theme);
-      this.floorKey = walls;
-    }
+    this.syncFloor(snap, theme);
 
     let ox = 0;
     let oy = 0;
@@ -366,18 +370,108 @@ export class Renderer {
 
   // ---------------------------------------------------------------- tiles
 
-  private renderFloor(snap: ArenaSnap, theme: Theme): void {
-    const w = snap.cols * ART;
-    const h = snap.rows * ART;
-    this.floor.width = w;
-    this.floor.height = h;
+  /**
+   * Keep the floor image (floor and walls) in step with the grid. A new arena paints all of it;
+   * after that only tiles whose wall came or went are painted again, with the two neighbors
+   * whose shading they set. Sudden death drops a wall several times a second.
+   */
+  private syncFloor(snap: ArenaSnap, theme: Theme): void {
+    const { cols, rows, grid } = snap;
+    const key = `${snap.theme}:${cols}x${rows}`;
+    if (key !== this.floorKey || !this.floorImg) {
+      const w = cols * ART;
+      const h = rows * ART;
+      this.floor.width = w;
+      this.floor.height = h;
+      this.floorImg = new ImageData(w, h);
+      const rng = mulberry32(snap.theme * 7919 + cols * 31 + rows);
+      this.floorSpecks = new Uint8Array(w * h);
+      for (let i = 0; i < this.floorSpecks.length; i++) this.floorSpecks[i] = rng() < 0.07 ? 1 : 0;
+      this.floorWalls = new Uint8Array(cols * rows);
+      for (let c = 0; c < this.floorWalls.length; c++) this.floorWalls[c] = grid[c] === "#" ? 1 : 0;
+      for (let c = 0; c < this.floorWalls.length; c++) this.paintTile(c, cols, rows, theme, snap.theme);
+      this.floor.getContext("2d")!.putImageData(this.floorImg, 0, 0);
+      this.floorKey = key;
+      this.floorGrid = grid;
+      return;
+    }
+    if (grid === this.floorGrid) return;
+    this.floorGrid = grid;
+    const walls = this.floorWalls;
+    const dirty = new Set<number>();
+    for (let c = 0; c < walls.length; c++) {
+      const wall = grid[c] === "#" ? 1 : 0;
+      if (wall === walls[c]) continue;
+      walls[c] = wall;
+      dirty.add(c);
+      if ((c % cols) + 1 < cols) dirty.add(c + 1);
+      if (c + cols < walls.length) dirty.add(c + cols);
+    }
     const g = this.floor.getContext("2d")!;
-    const img = g.createImageData(w, h);
-    const d = img.data;
-    const fa = hexToRgb(theme.floor[0]);
-    const fb = hexToRgb(theme.floor[1]);
+    for (const c of dirty) {
+      this.paintTile(c, cols, rows, theme, snap.theme);
+      g.putImageData(this.floorImg, 0, 0, (c % cols) * ART, Math.floor(c / cols) * ART, ART, ART);
+    }
+  }
+
+  /** Paint one tile of the floor image, from `floorWalls`. Plain numbers throughout: it runs for every pixel. */
+  private paintTile(c: number, cols: number, rows: number, theme: Theme, themeIndex: number): void {
+    const d = this.floorImg!.data;
+    const walls = this.floorWalls;
+    const w = cols * ART;
+    const tx = c % cols;
+    const ty = (c - tx) / cols;
+    const isWall = (x: number, y: number) => x < 0 || y < 0 || x >= cols || y >= rows || walls[y * cols + x] === 1;
+    if (walls[c]) {
+      const border = tx === 0 || ty === 0 || tx === cols - 1 || ty === rows - 1;
+      const tile = this.wallTile(themeIndex, theme)[border ? 1 : 0];
+      for (let py = 0; py < ART; py++) d.set(tile.subarray(py * ART * 4, (py + 1) * ART * 4), ((ty * ART + py) * w + tx * ART) * 4);
+      return;
+    }
+    const base = hexToRgb(theme.floor[(tx + ty) % 2 ? 0 : 1]);
     const speck = hexToRgb(theme.speck);
     const seam = hexToRgb(theme.seam);
+    const shadeTop = isWall(tx, ty - 1);
+    const shadeLeft = isWall(tx - 1, ty);
+    for (let py = 0; py < ART; py++) {
+      for (let px = 0; px < ART; px++) {
+        const X = tx * ART + px;
+        const Y = ty * ART + py;
+        const dither = BAYER[(py & 3) * 4 + (px & 3)] / 16;
+        const from = this.floorSpecks[Y * w + X] && py > 1 && px > 0 ? speck : base;
+        let r = from[0];
+        let gr = from[1];
+        let b = from[2];
+        // The same sums as mix(), towards the seam color and then towards black.
+        if (px === ART - 1 || py === ART - 1) {
+          r += (seam[0] - r) * 0.6;
+          gr += (seam[1] - gr) * 0.6;
+          b += (seam[2] - b) * 0.6;
+        }
+        if (shadeTop && py < 5) {
+          const k = py < 3 ? 0.38 : dither < 0.5 ? 0.38 : 0.1;
+          r += (0 - r) * k;
+          gr += (0 - gr) * k;
+          b += (0 - b) * k;
+        }
+        if (shadeLeft && px < 3) {
+          const k = px < 2 ? 0.2 : dither < 0.5 ? 0.2 : 0.05;
+          r += (0 - r) * k;
+          gr += (0 - gr) * k;
+          b += (0 - b) * k;
+        }
+        const i = (Y * w + X) * 4;
+        d[i] = r;
+        d[i + 1] = gr;
+        d[i + 2] = b;
+        d[i + 3] = 255;
+      }
+    }
+  }
+
+  private wallTile(index: number, theme: Theme): [Uint8ClampedArray, Uint8ClampedArray] {
+    const cached = this.wallTiles.get(index);
+    if (cached) return cached;
     const wall = {
       top: hexToRgb(theme.wall.top),
       face: hexToRgb(theme.wall.face),
@@ -385,43 +479,18 @@ export class Renderer {
       dark: hexToRgb(theme.wall.dark),
     };
     const black: RGB = [0, 0, 0];
-    const isWall = (x: number, y: number) => x < 0 || y < 0 || x >= snap.cols || y >= snap.rows || snap.grid[y * snap.cols + x] === "#";
-    const rng = mulberry32(snap.theme * 7919 + snap.cols * 31 + snap.rows);
-    const specks = new Uint8Array(w * h);
-    for (let i = 0; i < specks.length; i++) specks[i] = rng() < 0.07 ? 1 : 0;
-
-    for (let ty = 0; ty < snap.rows; ty++) {
-      for (let tx = 0; tx < snap.cols; tx++) {
-        const solid = isWall(tx, ty);
-        const border = tx === 0 || ty === 0 || tx === snap.cols - 1 || ty === snap.rows - 1;
-        const shadeTop = !solid && isWall(tx, ty - 1);
-        const shadeLeft = !solid && isWall(tx - 1, ty);
-        for (let py = 0; py < ART; py++) {
-          for (let px = 0; px < ART; px++) {
-            const X = tx * ART + px;
-            const Y = ty * ART + py;
-            const dither = BAYER[(py & 3) * 4 + (px & 3)] / 16;
-            let c: RGB;
-            if (solid) {
-              c = wallPixel(wall, px, py, dither);
-              if (border) c = mix(c, black, 0.18);
-            } else {
-              c = (tx + ty) % 2 ? fa : fb;
-              if (specks[Y * w + X] && py > 1 && px > 0) c = speck;
-              if (px === ART - 1 || py === ART - 1) c = mix(c, seam, 0.6);
-              if (shadeTop && py < 5) c = mix(c, black, py < 3 ? 0.38 : dither < 0.5 ? 0.38 : 0.1);
-              if (shadeLeft && px < 3) c = mix(c, black, px < 2 ? 0.2 : dither < 0.5 ? 0.2 : 0.05);
-            }
-            const i = (Y * w + X) * 4;
-            d[i] = c[0];
-            d[i + 1] = c[1];
-            d[i + 2] = c[2];
-            d[i + 3] = 255;
-          }
-        }
+    const tiles: [Uint8ClampedArray, Uint8ClampedArray] = [new Uint8ClampedArray(ART * ART * 4), new Uint8ClampedArray(ART * ART * 4)];
+    for (let py = 0; py < ART; py++) {
+      for (let px = 0; px < ART; px++) {
+        const c = wallPixel(wall, px, py, BAYER[(py & 3) * 4 + (px & 3)] / 16);
+        tiles.forEach((tile, border) => {
+          const v = border ? mix(c, black, 0.18) : c;
+          tile.set([v[0], v[1], v[2], 255], (py * ART + px) * 4);
+        });
       }
     }
-    g.putImageData(img, 0, 0);
+    this.wallTiles.set(index, tiles);
+    return tiles;
   }
 
   private crateSprite(index: number, theme: Theme): HTMLCanvasElement {
@@ -837,12 +906,6 @@ export class Renderer {
 }
 
 // ------------------------------------------------------------------ helpers
-
-function wallKey(snap: ArenaSnap): string {
-  let n = 0;
-  for (let i = 0; i < snap.grid.length; i++) if (snap.grid[i] === "#") n = (n * 31 + i) | 0;
-  return `${snap.theme}:${snap.cols}x${snap.rows}:${n}`;
-}
 
 function wallPixel(w: { top: RGB; face: RGB; light: RGB; dark: RGB }, px: number, py: number, dither: number): RGB {
   // A raised block: lit top face, darker front face, outlined.

@@ -1,5 +1,5 @@
 import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
-import type { ArenaSnap } from "./arena";
+import type { ArenaDelta, ArenaSnap } from "./arena";
 import type { Dir } from "./movement";
 
 export type { CpuLevel } from "@warrick/kit/shared/protocol";
@@ -63,12 +63,18 @@ export interface GameState extends BaseState<PlayerState, Settings> {
 export type ClientMsg =
   | LobbyMsg
   | { t: "move"; x: number; y: number; d: Dir }
-  | { t: "bomb"; x: number; y: number; d: Dir };
+  | { t: "bomb"; x: number; y: number; d: Dir }
+  /** This page takes ticks as deltas. Sent with each new arena, since the room can forget. */
+  | { t: "deltas" }
+  /** This page lost track of the arena: send all of it. */
+  | { t: "sync" };
 
 export type ServerMsg =
   | Exclude<RoomMsg<GameState>, { t: "welcome" }>
   | { t: "welcome"; you: string; state: GameState; log: LogEntry[]; frame: ArenaSnap | null; now: number }
-  | { t: "frame"; f: ArenaSnap };
+  | { t: "frame"; f: ArenaSnap }
+  /** A tick, for pages that said they take deltas: lay it over the last frame. */
+  | { t: "delta"; f: ArenaDelta };
 
 /** Final standings order. */
 export function rankPlayers(a: PlayerState, b: PlayerState): number {

@@ -52,21 +52,34 @@ function started(level: "easy" | "normal" | "hard" = "easy", goal: 0 | 512 = 512
   return { t, host };
 }
 
-/** Play `n` moves from a browser's point of view: our own lane, sending each move as the client does. */
-function browser(t: ReturnType<typeof setup>, pid: string, slot: number) {
+/**
+ * Play moves from a browser's point of view: our own lane, taking in rocks and fixes and sending
+ * each move as the client does. `report` picks the rock id each move claims to have seen.
+ */
+function browser(t: ReturnType<typeof setup>, pid: string, slot: number, report?: (lane: Lane) => number) {
   const snap = t.act((g) => g.snapshot())!;
-  const lane = Lane.fromSnap(snap.seats[slot]!);
+  let lane = Lane.fromSnap(snap.seats[slot]!);
   const rng = mulberry32(5);
   let known = snap.seats[slot]!.g;
   let epoch = snap.seats[slot]!.e;
   let seen = t.sent.length;
+  let direct = t.direct.length;
   return {
-    lane,
+    get lane() {
+      return lane;
+    },
     get epoch() {
       return epoch;
     },
     /** Take in whatever the server sent since last time, like the client does. */
     read() {
+      for (const d of t.direct.slice(direct)) {
+        if (d.pid !== pid || d.msg.t !== "fix") continue;
+        lane = Lane.fromSnap(d.msg.seat);
+        epoch = d.msg.seat.e;
+        known = Math.max(known, d.msg.seat.g);
+      }
+      direct = t.direct.length;
       for (const op of ops(t.sent.slice(seen))) {
         if (op.k === "g" && op.to === slot && op.id > known) {
           lane.queue.push({ id: op.id, rocks: op.rocks, from: op.from, at: -1 });
@@ -74,19 +87,25 @@ function browser(t: ReturnType<typeof setup>, pid: string, slot: number) {
         }
       }
       seen = t.sent.length;
-      for (const d of t.direct) if (d.pid === pid && d.msg.t === "fix") epoch = d.msg.seat.e;
     },
     move(dir?: Dir) {
       this.read();
       const d = dir ?? choose(lane, "normal", rng);
       if (d === null || d === undefined) return null;
       const k = lane.n;
-      const res = lane.move(d, known);
+      const g = report ? report(lane) : known;
+      const res = lane.move(d, g);
       if (!res) return null;
-      t.act((g) => g.move(pid, { e: epoch, k, d, g: known, ck: lane.checksum() }));
+      t.act((game) => game.move(pid, { e: epoch, k, d, g, ck: lane.checksum() }));
       return res;
     },
   };
+}
+
+/** Send rocks from one slot to another, as if they'd just made the power for them. */
+function attack(t: ReturnType<typeof setup>, from: number, to: number, rocks: number): void {
+  const round = t.live!.round as unknown as { attack(from: number, to: unknown, rocks: number, now: number): void };
+  round.attack(from, t.live!.round.seat(to), rocks, t.now);
 }
 
 describe("rock multiplier", () => {
@@ -161,7 +180,7 @@ describe("rounds", () => {
     cpu.lane.board.cells[1] = 9;
     cpu.lane.charge = 7;
     cpu.lane.move(3, 0);
-    (round as unknown as { attack(from: number, to: unknown, rocks: number, now: number): void }).attack(1, round.seat(0), 2, t.now);
+    attack(t, 1, 0, 2);
     t.act((g) => g.move(host.id, { e: 0, k, d, g: 0, ck }));
     expect(t.direct.filter((x) => x.msg.t === "fix")).toEqual([]);
     expect(round.seat(0)!.lane.pending()).toBe(2);
@@ -181,6 +200,36 @@ describe("rounds", () => {
     const before = t.direct.length;
     t.act((g) => g.move(host.id, { e: 0, k: k + 1, d, g: 0, ck: 0 }));
     expect(t.direct.length).toBe(before);
+  });
+
+  it("lands rocks on a browser that never reports them", () => {
+    const { t, host } = started("easy", 0);
+    // Our browser keeps moving, but claims the oldest rock id the server will take.
+    const me = browser(t, host.id, 0, (lane) => lane.ack);
+    let landed = 0;
+    let read = t.sent.length;
+    for (let i = 0; i < 60 && t.state.phase === "playing"; i++) {
+      if (i % 8 === 0) attack(t, 1, 0, 1);
+      if (!me.move()) break;
+      for (const op of ops(t.sent.slice(read))) if (op.k === "m" && op.s === 0) landed += op.ins;
+      read = t.sent.length;
+      // Not still long enough for an idle drop.
+      t.advance(1000);
+    }
+    // The rocks landed (or our merges smashed them), all but the last one or two.
+    const lane = t.live?.round.seat(0)!.lane;
+    expect(landed).toBeGreaterThan(0);
+    expect(!lane || lane.out || lane.pending() <= 2).toBe(true);
+    expect(t.direct.some((d) => d.pid === host.id && d.msg.t === "fix")).toBe(true);
+  });
+
+  it("overrules a browser that moves faster than anyone could", () => {
+    const { t, host } = started("easy", 0);
+    const me = browser(t, host.id, 0);
+    // Forty moves in the same instant.
+    for (let i = 0; i < 40; i++) if (!me.move()) break;
+    expect(t.direct.some((d) => d.pid === host.id && d.msg.t === "fix")).toBe(true);
+    expect(t.live!.round.seat(0)!.lane.n).toBeLessThanOrEqual(20);
   });
 
   it("won't take moves before the countdown ends", () => {

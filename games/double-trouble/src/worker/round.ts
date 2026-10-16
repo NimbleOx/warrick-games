@@ -5,6 +5,16 @@ import { IDLE_DROP_MS } from "../shared/constants";
 import { Lane, isDir, type Dir, type MoveResult } from "../shared/engine";
 import { attackScale, type Aim, type Goal, type Op, type RoundSnap, type SeatSnap, type Size } from "../shared/protocol";
 
+/**
+ * Rocks sent to a board this long before one of its moves arrives count as seen, whatever the
+ * move says. A browser that never reports rocks can't keep them from landing; an honest one
+ * reports them a round trip after they're sent.
+ */
+const SEEN_AFTER_MS = 1500;
+/** Moves a browser can make: bursts of up to this many, refilling at MOVE_RATE a second. Beyond any human. */
+const MOVE_BURST = 20;
+const MOVE_RATE = 15;
+
 interface Seat {
   slot: number;
   lane: Lane;
@@ -12,6 +22,11 @@ interface Seat {
   e: number;
   /** The newest garbage id sent to this board. */
   g: number;
+  /** When each garbage id this board hasn't yet reported was sent. */
+  inbound: { id: number; at: number }[];
+  /** Moves the browser can make right now, and when that was worked out. */
+  moves: number;
+  movesAt: number;
   kos: number;
   /** Rocks sent, after the multiplier. */
   atk: number;
@@ -81,6 +96,9 @@ export class Round {
         lane: new Lane(o.seed, o.size),
         e: 0,
         g: 0,
+        inbound: [],
+        moves: MOVE_BURST,
+        movesAt: o.goAt,
         kos: 0,
         atk: 0,
         place: 0,
@@ -109,14 +127,24 @@ export class Round {
     if (m.e !== seat.e) return;
     const lane = seat.lane;
     const g = Number(m.g);
-    const ok = now >= this.goAt - 500 && m.k === lane.n && isDir(m.d) && Number.isInteger(g) && g >= lane.ack && g <= seat.g;
-    const res = ok ? lane.move(m.d, g) : null;
+    // Rocks the browser has had plenty of time to hear about count as seen even if it says
+    // otherwise; the move is then overruled, so the browser takes the server's board.
+    const seen = Math.max(g, this.due(seat, now));
+    const ok =
+      now >= this.goAt - 500 &&
+      this.spend(seat, now) &&
+      m.k === lane.n &&
+      isDir(m.d) &&
+      Number.isInteger(g) &&
+      g >= lane.ack &&
+      g <= seat.g;
+    const res = ok ? lane.move(m.d, seen) : null;
     if (!res) {
       this.overrule(seat);
       return;
     }
     this.moved(seat, res, now);
-    if (lane.checksum() !== m.ck) this.overrule(seat);
+    if (seen !== g || lane.checksum() !== m.ck) this.overrule(seat);
   }
 
   /** Server-side moves: CPUs, and rocks dropping on players who've stopped moving. */
@@ -182,6 +210,34 @@ export class Round {
 
   // ---------------------------------------------------------------- internals
 
+  /** The newest garbage id sent to this board at least SEEN_AFTER_MS ago, or 0. */
+  private due(seat: Seat, now: number): number {
+    this.prune(seat);
+    let id = 0;
+    for (const x of seat.inbound) {
+      if (now - x.at < SEEN_AFTER_MS) break;
+      id = x.id;
+    }
+    return id;
+  }
+
+  /** Forget send times for garbage the board has already reported. */
+  private prune(seat: Seat): void {
+    const sent = seat.inbound;
+    while (sent.length && sent[0].id <= seat.lane.ack) sent.shift();
+  }
+
+  /** Take one move from the browser's allowance. False if it's moving faster than anyone can. */
+  private spend(seat: Seat, now: number): boolean {
+    if (now > seat.movesAt) {
+      seat.moves = Math.min(MOVE_BURST, seat.moves + ((now - seat.movesAt) * MOVE_RATE) / 1000);
+      seat.movesAt = now;
+    }
+    if (seat.moves < 1) return false;
+    seat.moves--;
+    return true;
+  }
+
   private moved(seat: Seat, res: MoveResult, now: number): void {
     const lane = seat.lane;
     seat.lastMoveAt = now;
@@ -221,6 +277,8 @@ export class Round {
     if (!target.lane.queue.length) target.waitingSince = now;
     target.lane.queue.push({ id, rocks, from, at: -1 });
     target.g = id;
+    this.prune(target);
+    target.inbound.push({ id, at: now });
     this.ops.push({ k: "g", id, from, to: target.slot, rocks });
   }
 

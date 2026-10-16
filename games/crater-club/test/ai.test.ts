@@ -63,6 +63,26 @@ describe("CPU players", () => {
     expect(up.aim.weapon).toBe("baby_missile");
   });
 
+  it("take the same shot facing left as facing right", () => {
+    // An rng stuck at 0.5 fumbles nothing, so these are the shots they mean to take.
+    const steady = () => 0.5;
+    const bumpy = Array.from({ length: WORLD_W }, (_, x) => 150 + Math.round(40 * Math.sin(x / 90)));
+    for (const [heights, cpuX, otherX] of [
+      [flat(), 300, 700],
+      [flat(), 450, 650],
+      [bumpy, 250, 800],
+    ] as const) {
+      const right = board(heights, cpuX, otherX, {});
+      const left = board(heights.slice().reverse(), WORLD_W - cpuX, WORLD_W - otherX, {});
+      const r = chooseCpuShot(right.s, right.cpu, "hard", steady);
+      const l = chooseCpuShot(left.s, left.cpu, "hard", steady);
+      // Among the shots that hit, the flattest: not a lob, which aim error and wind throw off more.
+      expect(r.angle).toBeLessThan(45);
+      expect(180 - l.angle).toBe(r.angle);
+      expect(l.power).toBe(r.power);
+    }
+  });
+
   it("send a sandhog through a hill at a tank hiding behind it", () => {
     const hill = Array.from({ length: WORLD_W }, (_, x) => 200 + Math.max(0, 120 - Math.abs(x - 600)));
     const { aim, self, other } = play(board(hill, 400, 700, { sandhog: 3 }));

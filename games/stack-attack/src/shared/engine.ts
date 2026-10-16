@@ -335,7 +335,11 @@ export class Lane {
     return { piece, cleared, spin, combo: this.combo, b2b, pc, attack, cancelled, sent, inserted, out };
   }
 
-  /** Everything that decides how this lane plays from here, hashed. */
+  /**
+   * Everything that decides how this lane plays from here, hashed. Garbage newer than `ack` is
+   * left out: the server can queue it while a lock is on its way in, before the browser has
+   * seen it, and no lock touches it until a later one reports it known.
+   */
   checksum(): number {
     let h = 0x811c9dc5;
     const mix = (v: number) => {
@@ -351,6 +355,7 @@ export class Lane {
     mix(this.b2b ? 1 : 0);
     mix(this.ack);
     for (const g of this.queue) {
+      if (g.id > this.ack) break;
       mix(g.id);
       mix(g.lines);
       mix(g.hole);

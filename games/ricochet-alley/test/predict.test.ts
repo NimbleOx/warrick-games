@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Predictor, BulletField, ServerClock, Timeline, pointAlong } from "../src/client/predict";
 import { MAZE_LOOPINESS, TICK_MS } from "../src/shared/constants";
 import { generateMaze, pickSpawns } from "../src/shared/maze";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { World, startingTanks } from "../src/shared/sim";
 
 /**

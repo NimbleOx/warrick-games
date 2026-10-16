@@ -43,7 +43,7 @@ That creates a Worker called `ricochet-alley` with the `GameRoom` Durable Object
 
 It's served at **https://warrick.games/ricochet-alley/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/ricochet-alley*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
 
-Everything lives under the base path `/ricochet-alley/`. `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/ricochet-alley/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so a small plugin in `vite.config.ts` moves the client build into `dist/client/ricochet-alley/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
+Everything lives under the base path `/ricochet-alley/`. `vite.config.ts` is the kit's `gameConfig("ricochet-alley")`: it sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/ricochet-alley/api/...` (the kit's `gameWorker("ricochet-alley")`), and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so `gameConfig` moves the client build into `dist/client/ricochet-alley/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -59,7 +59,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 
 - **One Durable Object per game code.** It holds the game state, each player's secret token, and the chat/event log in storage. It talks to browsers over hibernatable WebSockets.
 - **No logins.** Each browser generates a random token and keeps it in `localStorage`. The room maps tokens to player slots, which is how a reload or reconnect gets you your tank back. Other players never see tokens.
-- **A 30 Hz loop, only during a round.** While a round is live and someone is connected, the room steps the shared simulation on a `setInterval` and broadcasts a small frame every tick. If it falls behind, it catches up a few ticks at most, then skips ahead. Between rounds the loop stops. The countdown, the round-over pause and cleanup run off the Durable Object alarm, so an idle game can hibernate. A game with no connections for 12 hours is deleted.
+- **A 30 Hz loop, only during a round.** While a round is live and someone is connected, the room steps the shared simulation on the kit's tick loop and broadcasts a small frame every tick. If it falls behind, it catches up a few ticks at most, then skips ahead. Between rounds the loop stops. The countdown, the round-over pause and cleanup run off the Durable Object alarm, so an idle game can hibernate. A game with no connections for 12 hours is deleted.
 - **State is saved at round boundaries, not every tick.** The round itself (tank positions, bullets) lives only in memory. Deploying restarts every Durable Object and drops every socket. Clients reconnect on their own, and the interrupted round starts again from its saved starting positions with a fresh countdown.
 - **Clients send only input changes:** the four held keys as a bitmask, with a sequence number, plus fire presses.
 - **Frames are compact.** Each frame carries every tank's position and heading. For human players it also carries the last input change the server applied, and for how many ticks. Bullets aren't in frames. The server announces each new bullet once, with its exact position and velocity, and says when one hits a tank. Every client flies bullets itself with the same code. A bullet's flight uses only `+ − × ÷` (and tank headings come from a table built the same way), so the result is bit-identical on the server and in every browser.
@@ -70,12 +70,15 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 
 ```
 src/shared/    code used by both sides: constants, heading table, maze, geometry, the simulation, CPU AI, protocol types
-src/worker/    index.ts (routes), room.ts (Durable Object + tick loop), game.ts (rules)
-src/client/    main.ts (UI + networking glue), round.ts (one networked round), predict.ts (prediction, interpolation,
-               client-side bullets), input.ts (keyboard + touch), render.ts (canvas), local.ts (offline matches:
-               home-screen demo and sandbox), net.ts, audio.ts, themes.ts
+src/worker/    index.ts (routes), room.ts (Durable Object: input messages, the tick loop, picking a stalled round
+               back up), game.ts (match rules)
+src/client/    main.ts (the game screen and its hooks into the shell), round.ts (one networked round), predict.ts
+               (prediction, interpolation, client-side bullets), input.ts (keyboard + touch), render.ts (canvas),
+               local.ts (offline matches: home-screen demo and sandbox), audio.ts (sounds), themes.ts
 test/          Vitest tests for the maze, the simulation, the AI, prediction and the game flow
 ```
+
+The room, lobby rules, router, socket (with the `?lag=` dev aid, and the heartbeat that keeps a round's room within its CPU budget), home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).
 
 ### Adding power-ups or teams later
 

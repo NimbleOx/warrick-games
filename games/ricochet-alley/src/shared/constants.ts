@@ -38,22 +38,5 @@ export const REFIRE_TICKS = 5;
 /** Once one tank (or none) is left, the round runs on this long so bullets still in flight count. */
 export const HANG_TICKS = 2 * TICK_HZ;
 
-export const MAX_PLAYERS = 8;
-
-export const PLAYER_COLORS = [
-  "#ff4d4d", // red
-  "#4da6ff", // blue
-  "#5ce65c", // green
-  "#ffd23f", // yellow
-  "#ff6bd6", // pink
-  "#3ff0e0", // cyan
-  "#ff9a3c", // orange
-  "#e8e8e8", // white
-] as const;
-
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const CODE_LENGTH = 5;
-export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
-
 /** Number of floor/wall palettes the client knows how to draw. */
 export const THEME_COUNT = 5;

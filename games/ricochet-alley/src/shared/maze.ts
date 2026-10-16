@@ -1,5 +1,5 @@
 import { CELL, WALL_T } from "./constants";
-import { randInt, shuffle, type Rng } from "./rng";
+import { randInt, shuffle, type Rng } from "@warrick/kit/shared/rng";
 
 /**
  * A grid maze. 1 = wall, 0 = open.

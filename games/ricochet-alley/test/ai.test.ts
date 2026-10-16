@@ -3,7 +3,7 @@ import { CpuBrain, traceShot, type CpuLevel } from "../src/shared/ai";
 import { MAZE_LOOPINESS, MAZE_SIZES } from "../src/shared/constants";
 import { HEADINGS } from "../src/shared/headings";
 import { generateMaze, pickSpawns, type Maze } from "../src/shared/maze";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { World, startingTanks, type Tank } from "../src/shared/sim";
 
 function openMaze(cols: number, rows: number): Maze {

@@ -10,7 +10,7 @@ import {
 import { castPath, pointInRects, rectsOverlapCircle, segmentHitsCircle } from "../src/shared/geom";
 import { HEADINGS } from "../src/shared/headings";
 import { generateMaze, mazeHeight, mazeWidth, pickSpawns, type Maze, type Rect } from "../src/shared/maze";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import {
   IN_LEFT,
   IN_RIGHT,

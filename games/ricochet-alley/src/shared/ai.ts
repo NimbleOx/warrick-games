@@ -2,7 +2,7 @@ import { BULLET_LIFE, BULLET_SPEED, CELL, MAX_BULLETS, MUZZLE, TANK_R } from "./
 import { castPath, segmentHitsCircle } from "./geom";
 import { COS, SIN, headingDiff, headingTo, wrapHeading } from "./headings";
 import { bfs, cellAt, cellCenter } from "./maze";
-import type { Rng } from "./rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 import { IN_DOWN, IN_LEFT, IN_RIGHT, IN_UP, type World } from "./sim";
 
 export type CpuLevel = "easy" | "normal" | "hard";

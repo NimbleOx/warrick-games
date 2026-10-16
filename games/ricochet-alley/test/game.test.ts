@@ -1,5 +1,6 @@
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { describe, expect, it } from "vitest";
-import { MAX_PLAYERS, TICK_MS } from "../src/shared/constants";
+import { TICK_MS } from "../src/shared/constants";
 import { EV_FIRE, type Frame } from "../src/shared/protocol";
 import { IN_UP } from "../src/shared/sim";
 import { COUNTDOWN_MS, Game, GameError, newGameState, newLive } from "../src/worker/game";
@@ -211,6 +212,26 @@ describe("match", () => {
     t.game().recover();
     expect(t.s.phase).toBe("countdown");
     expect(t.live.round!.world.snapshot()).toEqual(start);
+  });
+
+  it("keeps players' tanks for a while after a restart, until they come back", () => {
+    const t = setup();
+    const a = t.join("A");
+    const b = t.join("B");
+    t.game().addCpu(a.id, "easy");
+    t.game().start(a.id);
+    t.run(1, () => t.s.phase === "playing");
+    // A deploy: the round is gone, and the room finds B's socket gone too.
+    t.live.round = null;
+    t.s.players.find((p) => p.id === b.id)!.connected = false;
+    t.connected.delete(b.id);
+    t.game().wake(false);
+    expect(t.s.phase).toBe("countdown");
+    // A wins the round; B is still in the next one, within the grace period.
+    t.run(1, () => t.s.phase === "playing");
+    t.live.round!.world.tanks.forEach((k) => (k.alive = k.id === a.id));
+    t.run(30 * 60, () => t.s.round === 2);
+    expect(t.s.setup!.tanks).toContain(b.id);
   });
 
   it("resumes a paused round where it was", () => {

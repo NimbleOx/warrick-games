@@ -48,6 +48,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/pill-panic", "--", "--port", "5179", "--strictPort"],
       "port": 5179
+    },
+    {
+      "name": "stack-attack",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/stack-attack", "--", "--port", "5180", "--strictPort"],
+      "port": 5180
     }
   ]
 }

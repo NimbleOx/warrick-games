@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Corner Shop</title>
+    <meta name="description" content="Fit your pieces in, corner to corner. A Blokus-style game for 2–4 friends. No accounts — create a game and share the code." />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">CORNER SHOP <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="board-col">
+          <div class="hud" id="hud">
+            <div class="hud-turn" id="hud-turn"></div>
+            <div class="hud-me" id="hud-me"></div>
+          </div>
+          <div class="stage" id="stage">
+            <canvas id="board" aria-label="The board"></canvas>
+            <div class="banner" id="banner" hidden></div>
+          </div>
+          <p class="hint-line" id="hint" role="status"></p>
+        </div>
+
+        <div class="tray-col">
+          <div class="panel tray-panel">
+            <div class="panel-head">
+              <h2>Your pieces</h2>
+              <span class="muted small" id="tray-count"></span>
+            </div>
+            <div class="tray" id="tray" role="group" aria-label="Your pieces"></div>
+            <div class="tools" id="tools">
+              <button class="btn" id="tool-rotate" title="Rotate (R, right-click or mouse wheel)">⟳ <span>Rotate</span></button>
+              <button class="btn" id="tool-flip" title="Flip (F)">⇋ <span>Flip</span></button>
+              <button class="btn btn-ghost" id="tool-cancel" title="Put it back (Esc)">✕</button>
+              <button class="btn btn-primary" id="tool-place" title="Place it (click the board, or Enter)">Place</button>
+            </div>
+            <p class="keys-hint">
+              Pick a piece · <kbd>R</kbd> or wheel rotates · <kbd>F</kbd> flips · arrows move ·
+              click or <kbd>Enter</kbd> places · <kbd>Esc</kbd> puts it back
+            </p>
+          </div>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel">
+            <div class="panel-head"><h2>Players</h2></div>
+            <ul id="game-players" class="game-players"></ul>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Shop talk</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Say something…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Final scores -->
+      <div class="modal-back" id="gameover" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="gameover-title">
+          <h2 id="gameover-title" class="results-title">Game over</h2>
+          <p class="winner-line" id="gameover-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Player</th><th>Score</th><th>Pieces left</th><th>Squares left</th></tr>
+            </thead>
+            <tbody id="gameover-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" id="gameover-board">See the board</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <button id="gameover-lobby" class="btn btn-primary" data-action="lobby">Back to lobby</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

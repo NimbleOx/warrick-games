@@ -9,7 +9,6 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Hub page | `/` | `hub` | ready | 5170 |
 | Crater Club | `/crater-club/` | `games/crater-club` | live | 5173 |
 | Light Cycles | `/light-cycles/` | `games/light-cycles` | live | 5174 |
-| Curve Ball | `/curve-ball/` | `games/curve-ball` | live | 5175 |
 | Ricochet Alley | `/ricochet-alley/` | `games/ricochet-alley` | live | 5176 |
 | Boom Room | `/boom-room/` | `games/boom-room` | live | 5177 |
 | Turf War | `/turf-war/` | `games/turf-war` | live | 5178 |

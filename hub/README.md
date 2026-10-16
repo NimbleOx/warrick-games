@@ -33,7 +33,7 @@ Each game has a 32×32 SVG in `public/icons/<name>.svg`. They're one set, so a n
 | blue | `#0a192b` | `#1a3453` | `#2366b4` | `#53a0ff` | `#b3d4fe` | Liar's Dice |
 | indigo | `#14162b` | `#2b2f53` | `#585db7` | `#8c95ff` | `#cad1fe` | Ricochet Alley |
 | violet | `#1c1328` | `#392a4e` | `#7c54ae` | `#ba86fe` | `#e0cdfe` | Stack Attack |
-| magenta | `#241020` | `#472540` | `#a14d92` | `#ec7bd6` | `#feccf2` | Curve Ball |
+| magenta | `#241020` | `#472540` | `#a14d92` | `#ec7bd6` | `#feccf2` | |
 | rose | `#280f15` | `#4e232c` | `#a83f59` | `#f96b8d` | `#ffc1cb` | Pill Panic |
 
 Neutrals: ink `#0b0d17` (pips, eyes), `#20263f`, `#3a4370`, `#8d94b8`, paper `#eef0fa` (dice, dots).

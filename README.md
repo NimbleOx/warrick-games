@@ -19,7 +19,7 @@ The dev ports are the ones in `.claude/launch.json`, so every game can run at th
 ## Layout
 
 ```
-hub/            the page at warrick.games/: static files on the route warrick.games/*
+hub/            the page at warrick.games/: static files on the Custom Domain warrick.games
 games/<name>/   one game: Vite client, Worker, one Durable Object per room, on the route warrick.games/<name>*
 ```
 
@@ -38,11 +38,9 @@ npm run deploy -w hub
 
 ## How the routing works
 
-- The hub's Worker has the zone route `warrick.games/*`.
-- Each game's Worker has a route like `warrick.games/crater-club*`. When several routes match a request, Cloudflare uses the most specific one, so a game's route beats the hub's catch-all.
+- The hub's Worker has `warrick.games` as a Custom Domain. Cloudflare creates the apex DNS record and certificate for it on deploy, which is also what lets the game routes run: routes only work on a hostname with a proxied DNS record.
+- Each game's Worker has a zone route on the same hostname, like `warrick.games/crater-club*`. Routes take precedence over a Custom Domain, so each game gets its own paths.
 - Anything no game claims goes to the hub. Paths that don't match a file get `hub/public/404.html` with a 404 status. That includes games that aren't deployed yet.
-
-Routes only run on hostnames that have a proxied (orange-cloud) DNS record. The `warrick.games` apex needs one before any of this works. Cloudflare's placeholder for a hostname served only by Workers is `AAAA @ 100::`, proxied.
 
 ## Adding a game
 

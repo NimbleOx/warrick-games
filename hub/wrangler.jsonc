@@ -2,10 +2,11 @@
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "warrick-games",
   "compatibility_date": "2026-10-01",
-  // The hub at the root of warrick.games. Each game is its own Worker with a more specific route,
-  // such as warrick.games/crater-club*. Cloudflare sends each request to the most specific matching
-  // route, so this Worker only gets the paths no game claims.
-  "routes": [{ "pattern": "warrick.games/*", "zone_name": "warrick.games" }],
+  // The hub owns warrick.games as a Custom Domain, so Cloudflare creates the apex DNS record and
+  // certificate on deploy. Each game is its own Worker with a route on the same hostname, such as
+  // warrick.games/crater-club*. Routes take precedence over a Custom Domain, so this Worker only
+  // gets the paths no game claims.
+  "routes": [{ "pattern": "warrick.games", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false,
   // No script: the hub is just static files.

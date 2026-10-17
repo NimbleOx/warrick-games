@@ -33,7 +33,7 @@ npm run deploy     # vite build && wrangler deploy
 
 That creates a Worker called `crater-club` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
 
-It's served at **https://warrick.games/crater-club/**, one path on a site shared with other games. The hub page at the root is a separate Worker in `../../hub` on the route `warrick.games/*`. This Worker has the zone route `warrick.games/crater-club*` in `wrangler.jsonc`, and Cloudflare sends each request to the most specific matching route. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+It's served at **https://warrick.games/crater-club/**, one path on a site shared with other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/crater-club*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
 
 Everything lives under the base path `/crater-club/`:
 

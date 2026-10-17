@@ -6,7 +6,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Playing
 
-- **Create game** gives you a code like `K7Q2M` and a link like `https://…/g/K7Q2M`. Send either one to your friends.
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/ricochet-alley/g/K7Q2M`. Send either one to your friends.
 - The host picks the target score (first to 3, 5, 10, 15 or 20) and the maze size, and can add CPU opponents (easy, normal or hard).
 - **↑/↓** drive, **←/→** turn, **Space** fires. Tapping a turn key turns just 2°, so you can line up bank shots; holding it spins up to full speed. WASD works too.
 - On a touch screen there's a stick and a Fire button. Push the stick the way you want to go: the tank turns to face that way and drives once it's roughly lined up. Pull it straight back to reverse.
@@ -19,7 +19,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ```bash
 npm install
-npm run dev        # http://localhost:5176 — Vite + the Worker and Durable Object running in workerd
+npm run dev        # http://localhost:5176/ricochet-alley/ — Vite + the Worker and Durable Object running in workerd
 npm test           # simulation, AI, prediction and game-rule tests (Node)
 npm run typecheck
 ```
@@ -41,7 +41,9 @@ npm run deploy     # vite build && wrangler deploy
 
 That creates a Worker called `ricochet-alley` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
 
-It's set up to serve at **https://ricochet-alley.warrick.games**, as a Worker Custom Domain in `wrangler.jsonc` (`routes` with `custom_domain: true`). Cloudflare creates the DNS record and certificate on deploy, provided the zone is in the same account. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at the custom domain. To host it somewhere else, change the `pattern`. To get the `workers.dev` URL back, set `workers_dev` to `true`. Before attaching a domain, check DNS against the zone's authoritative nameservers (`dig @<zone nameserver> ricochet-alley.warrick.games`) rather than the local resolver, which caches "doesn't exist" for a while.
+It's served at **https://warrick.games/ricochet-alley/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/ricochet-alley*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+
+Everything lives under the base path `/ricochet-alley/`. `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/ricochet-alley/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so a small plugin in `vite.config.ts` moves the client build into `dist/client/ricochet-alley/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -50,9 +52,9 @@ If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenera
 ```
 browser ──HTTP──▶ Worker ──▶ static assets (client)
    │                │
-   │   POST /api/games            → allocate a code, initialize that room
-   │   GET  /api/games/:code      → does the game exist?
-   └─WS─ /api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+   │   POST /ricochet-alley/api/games            → allocate a code, initialize that room
+   │   GET  /ricochet-alley/api/games/:code      → does the game exist?
+   └─WS─ /ricochet-alley/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
 ```
 
 - **One Durable Object per game code.** It holds the game state, each player's secret token, and the chat/event log in storage. It talks to browsers over hibernatable WebSockets.

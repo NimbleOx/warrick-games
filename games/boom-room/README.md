@@ -6,7 +6,7 @@ It's a sibling of [Crater Club](../crater-club) and is built the same way: a Clo
 
 ## Playing
 
-- **Create game** gives you a code like `K7Q2M` and a link like `https://…/g/K7Q2M`. Send either one to your friends.
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/boom-room/g/K7Q2M`. Send either one to your friends.
 - The host picks how many round wins take the game, when the walls start closing in, how many crates and power-ups there are, and whether skulls are in play. The host can also add CPU bombers (easy, normal or hard).
 - Move with the arrow keys or WASD; drop a bomb with Space or X. Gamepads work too, and phones get an on-screen D-pad and bomb button.
 - Blow up crates to find power-ups: **+1 Bomb**, **+1 Fire**, **Speed**, **Kick** (walk into a bomb to send it sliding) and the rare **Max Fire**. **Skulls** curse you for a while (slow, zoomies, backwards controls, no bombs, leaky bombs, short fuses, weak fire), and the curse jumps to whoever you bump into.
@@ -18,12 +18,12 @@ It's a sibling of [Crater Club](../crater-club) and is built the same way: a Clo
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 — Vite + the Worker and Durable Object running in workerd
+npm run dev        # http://localhost:5173/boom-room/ — Vite + the Worker and Durable Object running in workerd
 npm test           # arena, CPU and game-rule tests (Node)
 npm run typecheck
 ```
 
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. To try two players on one machine, open the second one at `http://p2.localhost:5173`; it's a different origin, so it gets its own player identity.
+`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. To try two players on one machine, open the second one at `http://p2.localhost:5173/boom-room/`; it's a different origin, so it gets its own player identity.
 
 ## Deploying to Cloudflare
 
@@ -34,7 +34,9 @@ npm run deploy     # vite build && wrangler deploy
 
 That creates a Worker called `boom-room` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
 
-It's set up to be served at **https://boom-room.warrick.games**, a Worker Custom Domain in `wrangler.jsonc` (`routes` with `custom_domain: true`). Cloudflare creates the DNS record and certificate on deploy, provided the zone is in the same account. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at the custom domain. To host it somewhere else, change the `pattern`. To get the `workers.dev` URL back, set `workers_dev` to `true`.
+It's served at **https://warrick.games/boom-room/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/boom-room*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+
+Everything lives under the base path `/boom-room/`. `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/boom-room/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so a small plugin in `vite.config.ts` moves the client build into `dist/client/boom-room/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -43,9 +45,9 @@ If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenera
 ```
 browser ──HTTP──▶ Worker ──▶ static assets (client)
    │                │
-   │   POST /api/games            → allocate a code, initialize that room
-   │   GET  /api/games/:code      → does the game exist?
-   └─WS─ /api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+   │   POST /boom-room/api/games            → allocate a code, initialize that room
+   │   GET  /boom-room/api/games/:code      → does the game exist?
+   └─WS─ /boom-room/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
 ```
 
 - **One Durable Object per game code.** It holds the game state, each player's secret token, and the chat/event log in storage. It talks to browsers over hibernatable WebSockets, so idle games cost nothing.

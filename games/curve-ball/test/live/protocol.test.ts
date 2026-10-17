@@ -4,7 +4,7 @@ import { Round } from "../../src/shared/sim";
 
 // No Node types in this project, so reach process.env the long way round.
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
-const BASE = env.CURVE_BALL_URL ?? "http://localhost:5175";
+const BASE = env.CURVE_BALL_URL ?? "http://localhost:5175/curve-ball";
 
 /** A headless player that rebuilds rounds from snapshots and frames, exactly like the browser does. */
 class Bot {

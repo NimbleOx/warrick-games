@@ -6,7 +6,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Playing
 
-- **Create game** gives you a code like `K7Q2M` and a link like `https://…/g/K7Q2M`. Send either one to your friends.
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/curve-ball/g/K7Q2M`. Send either one to your friends.
 - The host picks the target score (default 10 × (players − 1)) and the speed, and can add CPU players (easy, normal or hard).
 - Steer with <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd>. On a touch screen, hold the left or right half of the screen.
 - Each round starts with a 3-second countdown showing where everyone is and which way they're heading.
@@ -18,13 +18,13 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ```bash
 npm install
-npm run dev        # http://localhost:5175 — Vite + the Worker and Durable Object running in workerd
+npm run dev        # http://localhost:5175/curve-ball/ — Vite + the Worker and Durable Object running in workerd
 npm test           # simulation, CPU and game-rule tests (Node)
 npm run typecheck
 npm run test:live  # end-to-end protocol check against the running dev server
 ```
 
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. `npm run test:live` expects the dev server on port 5175; set `CURVE_BALL_URL` if it's elsewhere.
+`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. `npm run test:live` expects the game at `http://localhost:5175/curve-ball`; set `CURVE_BALL_URL` if it's elsewhere.
 
 Add `?predict=0` to a game URL to turn off client-side prediction of your own line, to compare.
 
@@ -37,7 +37,9 @@ npm run deploy     # vite build && wrangler deploy
 
 That creates a Worker called `curve-ball` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
 
-It's set up to serve at **https://curve-ball.warrick.games** as a Worker Custom Domain in `wrangler.jsonc` (`routes` with `custom_domain: true`). Cloudflare creates the DNS record and certificate on deploy, provided the zone is in the same account. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at the custom domain. Before checking that the new hostname resolves, ask the zone's authoritative nameservers (`dig @mina.ns.cloudflare.com curve-ball.warrick.games`); the local resolver caches the "doesn't exist" answer for 30 minutes.
+It's served at **https://warrick.games/curve-ball/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/curve-ball*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+
+Everything lives under the base path `/curve-ball/`. `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/curve-ball/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so a small plugin in `vite.config.ts` moves the client build into `dist/client/curve-ball/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -46,9 +48,9 @@ If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenera
 ```
 browser ──HTTP──▶ Worker ──▶ static assets (client)
    │                │
-   │   POST /api/games            → allocate a code, initialize that room
-   │   GET  /api/games/:code      → does the game exist?
-   └─WS─ /api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+   │   POST /curve-ball/api/games            → allocate a code, initialize that room
+   │   GET  /curve-ball/api/games/:code      → does the game exist?
+   └─WS─ /curve-ball/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
 ```
 
 - **One Durable Object per game code.** It holds the game state, each player's secret token, and the chat/event log in storage, and talks to browsers over hibernatable WebSockets.

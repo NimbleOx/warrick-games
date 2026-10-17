@@ -6,7 +6,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Playing
 
-- **Create game** gives you a code like `K7Q2M` and a link like `https://…/g/K7Q2M`. Send either one to your friends.
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/light-cycles/g/K7Q2M`. Send either one to your friends.
 - The host picks the rounds, arena size, speed, boosts, walls (solid or wrap-around) and sudden death, and can add CPU riders (easy, normal or hard).
 - Steer with the arrow keys or WASD. On a phone, swipe on the grid or use the on-screen pad. You can steer during the countdown to pick your opening line.
 - **Space** (or the Boost button) doubles your speed for a moment. You get a few boosts per round.
@@ -19,7 +19,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 — Vite + the Worker and Durable Object running in workerd
+npm run dev        # http://localhost:5173/light-cycles/ — Vite + the Worker and Durable Object running in workerd
 npm test           # arena, CPU and game-rule tests (Node)
 npm run typecheck
 ```
@@ -35,7 +35,9 @@ npm run deploy     # vite build && wrangler deploy
 
 That creates a Worker called `light-cycles` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
 
-`wrangler.jsonc` serves it at **https://light-cycles.warrick.games** as a Worker Custom Domain (`routes` with `custom_domain: true`), the same way Crater Club is set up. Cloudflare creates the DNS record and certificate on deploy, provided the zone is in the same account. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at the custom domain. To host it somewhere else, change the `pattern`. To get the `workers.dev` URL back, set `workers_dev` to `true`.
+It's served at **https://warrick.games/light-cycles/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/light-cycles*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+
+Everything lives under the base path `/light-cycles/`. `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/light-cycles/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so a small plugin in `vite.config.ts` moves the client build into `dist/client/light-cycles/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -44,9 +46,9 @@ If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenera
 ```
 browser ──HTTP──▶ Worker ──▶ static assets (client)
    │                │
-   │   POST /api/games            → allocate a code, initialize that room
-   │   GET  /api/games/:code      → does the game exist?
-   └─WS─ /api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+   │   POST /light-cycles/api/games            → allocate a code, initialize that room
+   │   GET  /light-cycles/api/games/:code      → does the game exist?
+   └─WS─ /light-cycles/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
 ```
 
 - **One Durable Object per game code.** It holds the game state, each player's secret token, and the chat/event log in storage. It talks to browsers over hibernatable WebSockets, so idle games cost nothing.

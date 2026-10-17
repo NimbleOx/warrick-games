@@ -6,7 +6,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Playing
 
-- **Create game** gives you a code like `K7Q2M` and a link like `https://…/g/K7Q2M`. Send either one to your friends.
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/crater-club/g/K7Q2M`. Send either one to your friends.
 - The host picks the rounds, starting cash, wind, wall behavior and turn timer, and can add CPU opponents (easy, normal or hard).
 - On your turn, aim with the sliders, the arrow keys (hold Shift for bigger steps), or by dragging on the map. Press **Fire** or Space.
 - Damaged tanks can't fire at full power (the HUD shows your current max). Switch weapons with the Weapon menu or Tab. Tanks take damage when the ground under them is blown away.
@@ -17,7 +17,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 — Vite + the Worker and Durable Object running in workerd
+npm run dev        # http://localhost:5173/crater-club/ — Vite + the Worker and Durable Object running in workerd
 npm test           # simulation and game-rule tests (Node)
 npm run typecheck
 ```
@@ -33,7 +33,15 @@ npm run deploy     # vite build && wrangler deploy
 
 That creates a Worker called `crater-club` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
 
-It's served at **https://crater-club.warrick.games**, set as a Worker Custom Domain in `wrangler.jsonc` (`routes` with `custom_domain: true`). Cloudflare creates the DNS record and certificate on deploy, provided the zone is in the same account. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at the custom domain. To host it somewhere else, change the `pattern`. To get the `workers.dev` URL back, set `workers_dev` to `true`.
+It's served at **https://warrick.games/crater-club/**, one path on a site shared with other games. The hub page at the root is a separate Worker in `../../hub` on the route `warrick.games/*`. This Worker has the zone route `warrick.games/crater-club*` in `wrangler.jsonc`, and Cloudflare sends each request to the most specific matching route. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+
+Everything lives under the base path `/crater-club/`:
+
+- `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`.
+- The Worker's API is at `/crater-club/api/...`, and `run_worker_first` matches that.
+- Workers static assets are looked up by request path and ignore Vite's `base`. So a small plugin in `vite.config.ts` moves the client build into `dist/client/crater-club/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
+
+To move the game to another path, change `base` in `vite.config.ts`, the route `pattern`, `run_worker_first`, and the paths in `src/worker/index.ts`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -42,9 +50,9 @@ If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenera
 ```
 browser ──HTTP──▶ Worker ──▶ static assets (client)
    │                │
-   │   POST /api/games            → allocate a code, initialize that room
-   │   GET  /api/games/:code      → does the game exist?
-   └─WS─ /api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+   │   POST /crater-club/api/games            → allocate a code, initialize that room
+   │   GET  /crater-club/api/games/:code      → does the game exist?
+   └─WS─ /crater-club/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
 ```
 
 - **One Durable Object per game code.** It holds the game state, each player's secret token, and the chat/event log in storage. It talks to browsers over hibernatable WebSockets, so idle games cost nothing.

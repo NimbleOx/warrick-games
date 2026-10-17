@@ -1,0 +1,17 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "warrick-games",
+  "compatibility_date": "2026-10-01",
+  // The hub at the root of warrick.games. Each game is its own Worker with a more specific route,
+  // such as warrick.games/crater-club*. Cloudflare sends each request to the most specific matching
+  // route, so this Worker only gets the paths no game claims.
+  "routes": [{ "pattern": "warrick.games/*", "zone_name": "warrick.games" }],
+  "workers_dev": false,
+  "preview_urls": false,
+  // No script: the hub is just static files.
+  "assets": {
+    "directory": "./public",
+    // Unknown paths, including games that aren't deployed yet, get public/404.html.
+    "not_found_handling": "404-page"
+  }
+}

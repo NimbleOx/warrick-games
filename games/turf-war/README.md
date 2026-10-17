@@ -1,0 +1,81 @@
+# Turf War
+
+A multiplayer, browser-based territory-capture game in the style of *Paper.io* and *Splix.io*, for up to 8 players. There are no accounts: one person creates a game, shares the 5-character code (or the link), and everyone else joins with just a name.
+
+It runs entirely on Cloudflare: a Worker serves the client and the API, and each game is one Durable Object that runs the game in real time.
+
+## Playing
+
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/turf-war/g/K7Q2M`. Send either one to your friends.
+- The host picks the round length (1, 2, 3 or 5 minutes) and the board size (80 × 56, 100 × 70 or 130 × 90), and can add CPU players (easy, normal or hard).
+- Everyone starts with a 3 × 3 patch of land. Steer with the arrow keys or WASD, or swipe on a touch screen. You move one cell every tick (10 a second) and can't turn straight back.
+- Leave your land and you draw a trail. Get back onto your land and the trail, plus everything it encloses, becomes yours, including other players' land.
+- If someone crosses your trail while you're out, you're gone, and they get your trail as land. You also go out if you cross your own trail, hit the edge of the board, meet someone head-on, or have all your land taken.
+- You respawn 3 seconds later with a fresh home patch. Your old land is gone.
+- The biggest share of the board when the clock runs out wins. The scoreboard shows everyone's share live.
+- Reloading the page puts you back in your seat. Players who join mid-round drop straight in if there's a free seat. If you lose your connection, your head goes home and circles inside your land until you're back.
+
+## Development
+
+```bash
+npm install
+npm run dev        # http://localhost:5178/turf-war/: Vite + the Worker and Durable Object running in workerd
+npm test           # board, claiming, tick rules, replay, CPU and game-flow tests (Node)
+npm run typecheck
+```
+
+`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. Editing worker code restarts the Durable Object, which also tests what a deploy does to a round in progress.
+
+## Deploying to Cloudflare
+
+```bash
+npx wrangler login
+npm run deploy     # vite build && wrangler deploy
+```
+
+That creates a Worker called `turf-war` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
+
+It's served at **https://warrick.games/turf-war/**, one path on a site shared with the other games. The hub page at the root is its own Worker (`../../hub`, route `warrick.games/*`). This Worker has the more specific zone route `warrick.games/turf-war*` in `wrangler.jsonc`, and Cloudflare sends each request to the most specific match. The `workers.dev` address is off (`workers_dev: false`).
+
+- Vite's `base` is `/turf-war/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/turf-war/api/`.
+- Workers static assets are looked up by request path and know nothing about Vite's `base`. The `nestClientUnderBase` plugin in `vite.config.ts` moves the client build into `dist/client/turf-war/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/turf-war/assets/*.js` and `/turf-war/g/ABCDE` both return 200.
+- All the games share one origin, so `localStorage` keys start with `tw.`.
+- After the first deploy, turn Turf War's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
+
+If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+
+## How it works
+
+```
+browser ──HTTP──▶ Worker ──▶ static assets (client)
+   │                │
+   │   POST /turf-war/api/games            → allocate a code, initialize that room
+   │   GET  /turf-war/api/games/:code      → does the game exist?
+   └─WS─ /turf-war/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+```
+
+- **One Durable Object per game code.** It holds the lobby and match state, each player's secret token, and the chat/event log in storage, and talks to browsers over hibernatable WebSockets.
+- **No logins.** Each browser keeps a random token in `localStorage`. The room maps tokens to players, which is how a reload or reconnect gets you your seat back.
+- **The server runs the game.** While a round is on and someone is connected, the room steps the simulation every 100 ms with a self-correcting `setTimeout` chain (scheduled from the loop's start, so it doesn't drift or bunch up). The loop stops when the round ends or everyone leaves, so idle games can hibernate. Round time is counted in ticks, so it pauses too.
+- **Clients send only turns** (`{t: "dir", d}`), and only real changes: the client keeps a copy of the turns the server is still holding and drops repeats and reversals.
+- **Every tick the server sends one frame of ops.** The server changes its board only through `Board.apply(op)` and records every op it applies. Clients run the same `apply` on their copy, so the boards can't drift apart. There are four ops: head moves, claims (as `[start, length]` runs of cells), deaths, and spawns. A typical frame is under 100 bytes. Every 50 ticks a frame carries a checksum of the board; a mismatch, or a gap in tick numbers, makes the client ask for a fresh snapshot.
+- **Snapshots** (the board run-length encoded, about 1–4 KB) go out at round start, in the welcome message when someone joins or reconnects, and on request.
+- **Persistence happens at round boundaries, not per tick.** The board lives only in memory. A deploy restarts every Durable Object; the first player to reconnect finds the round's board gone, and the round starts over.
+- **Claiming** is a flood fill. Within the player's bounding box (plus a one-cell margin), it fills from the edges in four directions without crossing the player's land or trail. Anything the fill can't reach is enclosed and becomes theirs.
+- **CPU players** plan a short rectangular loop out of their land, take the shortest safe way home, and turn back early when an enemy head gets close to their trail. Normal and hard CPUs also go after trails they can reach before the owner gets home. Disconnected humans get the same code's autopilot.
+
+### Layout
+
+```
+src/shared/    code used by both sides
+  board.ts       the grid, ops and Board.apply (the only code that changes a board)
+  claim.ts       the flood-fill claim
+  sim.ts         Round: one tick of movement, collisions, kills, claims and respawns; client frame replay
+  ai.ts          CPU players and the disconnected-player autopilot
+  codec.ts       run-length encoding, cell runs, checksums
+  protocol.ts    settings, game state and message types
+src/worker/    index.ts (routes), room.ts (Durable Object + tick loop), game.ts (lobby and match rules)
+src/client/    main.ts (UI + networking glue), render.ts (canvas), input.ts (keys + swipes), net.ts,
+               audio.ts, attract.ts (home-screen CPU demo)
+test/          Vitest tests: claiming, tick rules, client replay, CPUs, game flow
+```

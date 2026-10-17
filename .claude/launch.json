@@ -1,0 +1,47 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hub",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "hub", "--", "--port", "5170"],
+      "port": 5170
+    },
+    {
+      "name": "crater-club",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/crater-club", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    },
+    {
+      "name": "light-cycles",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/light-cycles", "--", "--port", "5174", "--strictPort"],
+      "port": 5174
+    },
+    {
+      "name": "curve-ball",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/curve-ball", "--", "--port", "5175", "--strictPort"],
+      "port": 5175
+    },
+    {
+      "name": "ricochet-alley",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/ricochet-alley", "--", "--port", "5176", "--strictPort"],
+      "port": 5176
+    },
+    {
+      "name": "boom-room",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/boom-room", "--", "--port", "5177", "--strictPort"],
+      "port": 5177
+    },
+    {
+      "name": "turf-war",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/turf-war", "--", "--port", "5178", "--strictPort"],
+      "port": 5178
+    }
+  ]
+}

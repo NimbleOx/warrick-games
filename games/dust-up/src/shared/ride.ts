@@ -14,6 +14,14 @@ export interface Course {
   /** Checkpoint x positions in order; the first is the start gate. Each is on flat ground. */
   checkpoints: number[];
   finishX: number;
+  /** The pits under gaps: a bike whose centre drops below y between x0 and x1 has crashed. */
+  pits?: readonly Pit[];
+}
+
+export interface Pit {
+  x0: number;
+  x1: number;
+  y: number;
 }
 
 /** Input for a ride: the bike's, plus respawn (0 or 1; held, it holds you at the checkpoint). */
@@ -73,6 +81,7 @@ export function stepRide(ride: Ride, input: Readonly<RideInput>, course: Course)
   else if (ride.bike.crashed && ++ride.crashTicks >= RESPAWN_TICKS) respawn(ride, course);
   else {
     stepBike(ride.bike, input, course.ground);
+    if (!ride.bike.crashed && course.pits && inPit(ride.bike, course.pits)) ride.bike.crashed = 1;
     if (!ride.bike.crashed) {
       const cps = course.checkpoints;
       while (ride.checkpoint + 1 < cps.length && ride.bike.x >= cps[ride.checkpoint + 1]) ride.checkpoint++;
@@ -80,6 +89,46 @@ export function stepRide(ride: Ride, input: Readonly<RideInput>, course: Course)
     }
   }
   ride.tick++;
+}
+
+function inPit(b: Bike, pits: readonly Pit[]): boolean {
+  for (const pit of pits) if (b.x > pit.x0 && b.x < pit.x1 && b.y < pit.y) return true;
+  return false;
+}
+
+/** Every number in a ride's state, in a fixed order: for snapshots sent over the wire. */
+export function rideNumbers(ride: Ride): number[] {
+  return bikeNumbers(ride.bike, [ride.tick, ride.checkpoint, ride.crashTicks, ride.finishTick]);
+}
+
+/** The ride a snapshot from `rideNumbers` describes, bit for bit (JSON keeps every double exactly). */
+export function rideFromNumbers(nums: readonly number[], into = new Ride()): Ride {
+  let i = 0;
+  const next = () => nums[i++];
+  into.tick = next();
+  into.checkpoint = next();
+  into.crashTicks = next();
+  into.finishTick = next();
+  const b = into.bike;
+  b.x = next();
+  b.y = next();
+  b.vx = next();
+  b.vy = next();
+  b.c = next();
+  b.s = next();
+  b.w = next();
+  b.lean = next();
+  b.crashed = next();
+  for (const wh of [b.rear, b.front]) {
+    wh.x = next();
+    wh.y = next();
+    wh.vx = next();
+    wh.vy = next();
+    wh.a = next();
+    wh.w = next();
+  }
+  for (let k = 0; k < b.warm.length; k++) b.warm[k] = next();
+  return into;
 }
 
 /** Rides `ticks` ticks from the start gate with the inputs in `log` (sorted by tick). */
@@ -113,9 +162,13 @@ export function randomInputs(seed: number, ticks: number): InputEvent[] {
 
 /** FNV-1a over the bits of every number in the ride, as 8 hex digits. */
 export function rideHash(ride: Ride): string {
-  const nums = bikeNumbers(ride.bike, [ride.tick, ride.checkpoint, ride.crashTicks, ride.finishTick]);
-  const bytes = new Uint8Array(new Float64Array(nums).buffer);
+  return rideHash32(ride).toString(16).padStart(8, "0");
+}
+
+/** The same hash as a number, to send in frames. */
+export function rideHash32(ride: Ride): number {
+  const bytes = new Uint8Array(new Float64Array(rideNumbers(ride)).buffer);
   let h = 0x811c9dc5;
   for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i], 0x01000193);
-  return (h >>> 0).toString(16).padStart(8, "0");
+  return h >>> 0;
 }

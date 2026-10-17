@@ -21,6 +21,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Liar's Dice | `/liars-dice/` | `games/liars-dice` | live | 5185 |
 | Pocket Wars | `/pocket-wars/` | `games/pocket-wars` | live | 5186 |
 | Base Jump | `/base-jump/` | `games/base-jump` | live | 5187 |
+| Dust Up | `/dust-up/` | `games/dust-up` | ready | 5188 |
 
 The dev ports are the ones in `.claude/launch.json`, so every game can run at the same time.
 

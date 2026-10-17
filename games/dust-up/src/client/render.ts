@@ -3,6 +3,7 @@
  * physics bodies. Drawing isn't part of the sim, so it may use trig freely.
  */
 
+import { hexToRgb, mix } from "@warrick/kit/client/color";
 import { Bike, TUNE, riderX, riderY, suspension, type Wheel } from "../shared/bike";
 import type { Course } from "../shared/ride";
 
@@ -22,7 +23,19 @@ export interface BikeLook {
   alpha: number;
 }
 
-export const YOU: BikeLook = { color: "#ff7a1a", jersey: "#1f5fbf", alpha: 1 };
+/** A rider's colours: plastics in their colour, a jersey in a darker shade of it. */
+export function lookFor(color: string, alpha = 1): BikeLook {
+  const [r, g, b] = hexToRgb(color);
+  const dark = mix([r, g, b], [24, 20, 30], 0.55).map(Math.round);
+  return { color, jersey: `rgb(${dark[0]}, ${dark[1]}, ${dark[2]})`, alpha };
+}
+
+/** One bike to draw: see-through ones are other riders, drawn behind and labelled with `name`. */
+export interface DrawBike {
+  bike: Bike;
+  look: BikeLook;
+  name?: string;
+}
 
 export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
@@ -33,15 +46,16 @@ export class Renderer {
   /** A dev aid: draws closer (2) or further out (0.5). */
   zoom = 1;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no 2d context");
     this.ctx = ctx;
     this.resize();
-    window.addEventListener("resize", () => this.resize());
+    new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
-  private resize(): void {
+  /** Match the canvas to its size on the page. */
+  resize(): void {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.w = this.canvas.clientWidth;
     this.h = this.canvas.clientHeight;
@@ -49,12 +63,16 @@ export class Renderer {
     this.canvas.height = Math.round(this.h * this.dpr);
   }
 
-  /** Moves the camera towards the bike: it looks ahead and pulls back a little at speed. */
-  follow(b: Bike, dt: number): void {
+  /**
+   * Moves the camera towards the bike: it looks ahead and pulls back a little at speed. High in
+   * the air it drops towards the ground (at `groundY`, if given), so you can see where you'll land.
+   */
+  follow(b: Bike, dt: number, groundY?: number): void {
     const speed = Math.hypot(b.vx, b.vy);
     const lookAhead = Math.max(-2, Math.min(6, b.vx * 0.35));
     const tx = b.x + lookAhead;
-    const ty = b.y + 0.6;
+    const above = groundY === undefined || !Number.isFinite(groundY) ? 0 : Math.max(0, b.y - groundY - 1.5);
+    const ty = b.y + 0.6 - Math.min(above * 0.45, 6);
     // About 10 m of ground across the shorter side at a standstill, 16 m at top speed.
     const span = 10 + Math.min(speed, 20) * 0.3;
     const ppm = Math.min(this.w / (span * 1.6), this.h / span) * this.zoom;
@@ -72,8 +90,13 @@ export class Renderer {
     cam.ppm += (ppm - cam.ppm) * (1 - Math.exp(-dt * 1.5));
   }
 
-  draw(course: Course, bike: Bike, passed: number): void {
+  /**
+   * The course and its bikes, with `passed` checkpoints shown as passed. See-through bikes (other
+   * riders, your best run) go behind, with their names over them.
+   */
+  draw(course: Course, bikes: DrawBike[], passed: number): void {
     const { ctx, w, h, dpr, cam } = this;
+    if (!w || !h) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.drawSky();
 
@@ -87,7 +110,30 @@ export class Renderer {
 
     this.drawMarkers(course, passed, left, right);
     this.drawGround(course, left, right, bottom);
-    drawBike(ctx, bike, YOU);
+    const behind = bikes.filter((b) => b.look.alpha < 1);
+    for (const b of behind) if (b.bike.x > left - 3 && b.bike.x < right + 3) drawBike(ctx, b.bike, b.look);
+    for (const b of bikes) if (b.look.alpha >= 1) drawBike(ctx, b.bike, b.look);
+
+    // Names, in screen space.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = "600 12px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    for (const b of bikes) {
+      if (!b.name || b.bike.x < left || b.bike.x > right) continue;
+      const sx = ox + b.bike.x * cam.ppm;
+      const sy = oy - (b.bike.y + 1.5) * cam.ppm;
+      ctx.globalAlpha = Math.min(1, b.look.alpha + 0.35);
+      ctx.fillStyle = "rgb(20 12 6 / 0.6)";
+      const tw = ctx.measureText(b.name).width;
+      ctx.fillRect(sx - tw / 2 - 7, sy - 16, tw + 11, 17);
+      // The rider's colour as a bar, and the name in white, which reads on any colour.
+      ctx.fillStyle = b.look.color;
+      ctx.fillRect(sx - tw / 2 - 7, sy - 16, 3, 17);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(b.name, sx + 2, sy);
+    }
+    ctx.globalAlpha = 1;
   }
 
   private drawSky(): void {

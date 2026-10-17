@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <clipPath id="tile"><rect width="32" height="32" rx="6"/></clipPath>
+  <rect width="32" height="32" rx="6" fill="#2a170b"/>
+  <g clip-path="url(#tile)">
+    <path d="M-1 27C5 27 8 21 13 21.5V33H-1Z" fill="#8a5631"/>
+    <path d="M20 33V27.5C24 27.5 27 29 33 29V33Z" fill="#8a5631"/>
+    <path d="M-1 27C5 27 8 21 13 21.5M20 27.5C24 27.5 27 29 33 29" stroke="#c08a4f" stroke-width="1.6" fill="none"/>
+    <circle cx="4" cy="23.5" r="1.6" fill="#d9b48a" opacity=".7"/>
+    <circle cx="7" cy="21" r="1.1" fill="#d9b48a" opacity=".5"/>
+  </g>
+  <g transform="rotate(-14 17 13)">
+    <circle cx="11" cy="16" r="3.4" fill="none" stroke="#f6e9d6" stroke-width="1.7"/>
+    <circle cx="23" cy="16" r="3.4" fill="none" stroke="#f6e9d6" stroke-width="1.7"/>
+    <path d="M11 16L14.5 12H20L23 16" stroke="#ff7a1a" stroke-width="2" fill="none" stroke-linejoin="round"/>
+    <path d="M12.5 11H19L21 9" stroke="#ff7a1a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M15.5 11L17 7.5L20 9.5" stroke="#2f7dff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="17.6" cy="5.6" r="1.8" fill="#ff7a1a"/>
+  </g>
+</svg>

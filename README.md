@@ -9,8 +9,8 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 - **Create game** gives you a code like `K7Q2M` and a link like `https://…/g/K7Q2M`. Send either one to your friends.
 - The host picks the rounds, starting cash, wind, wall behavior and turn timer, and can add CPU opponents (easy, normal or hard).
 - On your turn, aim with the sliders, the arrow keys (hold Shift for bigger steps), or by dragging on the map. Press **Fire** or Space.
-- Damaged tanks can't fire at full power. Tanks take damage when the ground under them is blown away.
-- Between rounds there's a shop with Missiles, Nukes, MIRVs, Death's Heads, Funky Bombs, Leapfrogs, Rollers, Dirt Clods, Tracers, Shields and Parachutes. You earn cash for damage, kills, surviving and winning rounds.
+- Damaged tanks can't fire at full power (the HUD shows your current max). Switch weapons with the Weapon menu or Tab. Tanks take damage when the ground under them is blown away.
+- Before the first round and between rounds there's a shop with Missiles, Nukes, MIRVs, Death's Heads, Funky Bombs, Leapfrogs, Rollers, Dirt Clods, Tracers, Shields and Parachutes. You earn cash for damage, kills, surviving and winning rounds.
 - Reloading the page puts you back in your seat. Anyone who joins mid-game watches until the next game.
 
 ## Development

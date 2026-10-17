@@ -237,7 +237,9 @@ export class Game {
     this.s.round = 0;
     this.s.shotCount = 0;
     this.event(`Game on! ${this.s.settings.rounds} round${this.s.settings.rounds > 1 ? "s" : ""}.`);
-    this.startRound();
+    // Starting cash is spent before round 1, as in the original.
+    if (this.s.settings.startCash > 0) this.openShop();
+    else this.startRound();
   }
 
   backToLobby(byId: string): void {
@@ -454,6 +456,12 @@ export class Game {
       this.touch();
       return;
     }
+    this.openShop();
+  }
+
+  /** Arms dealer: before the first round (if there's cash to spend) and between rounds. */
+  private openShop(): void {
+    const s = this.s;
     s.phase = "shop";
     s.phaseDeadline = this.io.now() + SHOP_MS;
     s.timer = { kind: "shop", at: s.phaseDeadline };

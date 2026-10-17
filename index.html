@@ -128,7 +128,11 @@
             <div class="hud-turn" id="hud-turn"></div>
             <div class="hud-stat"><span class="label">Angle</span><b id="hud-angle">—</b></div>
             <div class="hud-stat"><span class="label">Power</span><b id="hud-power">—</b></div>
-            <div class="hud-stat hud-weapon"><span class="label">Weapon</span><b id="hud-weapon">—</b></div>
+            <div class="hud-stat hud-weapon">
+              <button type="button" id="hud-weapon-btn" class="hud-weapon-btn" aria-haspopup="menu" aria-expanded="false">
+                <span class="label">Weapon <span class="caret" aria-hidden="true">▾</span></span><b id="hud-weapon">—</b>
+              </button>
+            </div>
             <div class="hud-stat"><span class="label">Wind</span><b id="hud-wind">—</b></div>
             <div class="hud-stat"><span class="label">Round</span><b id="hud-round">—</b></div>
           </div>
@@ -146,7 +150,7 @@
               <button class="btn btn-step" data-step="angle" data-delta="-1" aria-label="Angle right">▶</button>
             </div>
             <div class="ctl">
-              <span class="label">Power</span>
+              <span class="label" id="ctl-power-label">Power</span>
               <button class="btn btn-step" data-step="power" data-delta="-10" aria-label="Less power">−</button>
               <input type="range" id="ctl-power" min="0" max="1000" step="5" aria-label="Power" />
               <button class="btn btn-step" data-step="power" data-delta="10" aria-label="More power">+</button>
@@ -178,6 +182,9 @@
           </div>
         </aside>
       </div>
+
+      <!-- Weapon picker opened from the HUD -->
+      <div class="weapon-menu" id="weapon-menu" role="menu" aria-label="Weapons" hidden></div>
 
       <!-- Between-round shop -->
       <div class="modal-back" id="shop" hidden>

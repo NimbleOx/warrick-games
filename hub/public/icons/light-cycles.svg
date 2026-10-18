@@ -1,8 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0b0d17"/>
-  <path d="M0 8H32M0 16H32M0 24H32M8 0V32M16 0V32M24 0V32" stroke="#1f2747" stroke-width="1"/>
-  <path d="M4 28V12H13V20H19" stroke="#36e0ff" stroke-width="2.5" fill="none"/>
-  <path d="M28 4V13H24V24" stroke="#ff8a3d" stroke-width="2.5" fill="none"/>
-  <rect x="18" y="18.5" width="3" height="3" fill="#e6fbff"/>
-  <rect x="22.5" y="23" width="3" height="3" fill="#ffe3cf"/>
+  <clipPath id="tile"><rect width="32" height="32" rx="6"/></clipPath>
+  <rect width="32" height="32" rx="6" fill="#001d21"/>
+  <g clip-path="url(#tile)">
+    <path d="M0 8H32M0 16H32M0 24H32M8 0V32M16 0V32M24 0V32" stroke="#013a42" stroke-width="1"/>
+  </g>
+  <path d="M5 28V12H13V20H18.5" stroke="#04c7df" stroke-width="2.5" fill="none"/>
+  <path d="M27 4V13H23V23.5" stroke="#ff8c2b" stroke-width="2.5" fill="none"/>
+  <rect x="18" y="18" width="4" height="4" fill="#adf2ff"/>
+  <rect x="21" y="22.5" width="4" height="4" fill="#ffd9c1"/>
 </svg>

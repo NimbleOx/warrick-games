@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0b0d17"/>
-  <g transform="rotate(-35 16 16)">
-    <path d="M16 9.5h-5.5a6.5 6.5 0 0 0 0 13H16z" fill="#ff4d6d"/>
-    <path d="M16 9.5h5.5a6.5 6.5 0 0 1 0 13H16z" fill="#4da6ff"/>
-    <ellipse cx="10" cy="13.2" rx="2.2" ry="1.1" fill="#ffc2cf" opacity=".8"/>
+  <rect width="32" height="32" rx="6" fill="#280f15"/>
+  <g transform="rotate(-35 15 15)">
+    <path d="M15 8.5h-5.5a6.5 6.5 0 0 0 0 13H15z" fill="#f96b8d"/>
+    <path d="M15 8.5h5.5a6.5 6.5 0 0 1 0 13H15z" fill="#53a0ff"/>
+    <path d="M7.5 12.4a3.5 3.5 0 0 1 2.4-1.4" stroke="#ffc1cb" stroke-width="1.6" stroke-linecap="round" fill="none"/>
   </g>
-  <circle cx="25" cy="25" r="4.2" fill="#ffd23f"/>
-  <circle cx="23.6" cy="24.4" r="1" fill="#fff"/>
-  <circle cx="26.4" cy="24.4" r="1" fill="#fff"/>
+  <path d="M24.50 19.50L25.88 21.17L28.04 20.96L27.83 23.12L29.50 24.50L27.83 25.88L28.04 28.04L25.88 27.83L24.50 29.50L23.12 27.83L20.96 28.04L21.17 25.88L19.50 24.50L21.17 23.12L20.96 20.96L23.12 21.17Z" fill="#f7b503"/>
+  <circle cx="23" cy="24" r="1" fill="#0b0d17"/>
+  <circle cx="26" cy="24" r="1" fill="#0b0d17"/>
 </svg>

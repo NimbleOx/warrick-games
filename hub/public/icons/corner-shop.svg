@@ -1,23 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0b0d17"/>
-  <g fill="#4da6ff">
-    <rect x="3" y="3" width="6" height="6" rx="1"/>
-    <rect x="3" y="9" width="6" height="6" rx="1"/>
-    <rect x="9" y="9" width="6" height="6" rx="1"/>
-    <rect x="15" y="15" width="6" height="6" rx="1"/>
+  <rect width="32" height="32" rx="6" fill="#131c06"/>
+  <g fill="#91c639">
+    <rect x="3.5" y="3.5" width="6" height="6" rx="1"/>
+    <rect x="3.5" y="9.5" width="6" height="6" rx="1"/>
+    <rect x="9.5" y="9.5" width="6" height="6" rx="1"/>
+    <rect x="15.5" y="15.5" width="6" height="6" rx="1"/>
   </g>
-  <g fill="#ffd23f">
-    <rect x="23" y="3" width="6" height="6" rx="1"/>
-    <rect x="17" y="3" width="6" height="6" rx="1"/>
-    <rect x="17" y="9" width="6" height="6" rx="1"/>
+  <g fill="#f7b503">
+    <rect x="22.5" y="3.5" width="6" height="6" rx="1"/>
+    <rect x="16.5" y="3.5" width="6" height="6" rx="1"/>
+    <rect x="16.5" y="9.5" width="6" height="6" rx="1"/>
   </g>
-  <g fill="#5ce65c">
-    <rect x="3" y="23" width="6" height="6" rx="1"/>
-    <rect x="9" y="23" width="6" height="6" rx="1"/>
-    <rect x="9" y="17" width="6" height="6" rx="1"/>
+  <g fill="#53a0ff">
+    <rect x="3.5" y="22.5" width="6" height="6" rx="1"/>
+    <rect x="9.5" y="22.5" width="6" height="6" rx="1"/>
+    <rect x="9.5" y="16.5" width="6" height="6" rx="1"/>
   </g>
-  <g fill="#ff5c5c">
-    <rect x="23" y="23" width="6" height="6" rx="1"/>
-    <rect x="23" y="17" width="6" height="6" rx="1"/>
+  <g fill="#ed6257">
+    <rect x="22.5" y="22.5" width="6" height="6" rx="1"/>
+    <rect x="22.5" y="16.5" width="6" height="6" rx="1"/>
   </g>
 </svg>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Box Office</title>
+    <meta name="description" content="Dots and boxes for up to 8 friends. No accounts — create a game and share the code." />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">BOX OFFICE <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="stage-col">
+          <div class="hud">
+            <div class="hud-turn" id="hud-turn"></div>
+            <span class="hud-left" id="hud-left"></span>
+          </div>
+          <ol class="scores" id="scores" aria-label="Scores"></ol>
+          <div class="stage" id="stage">
+            <canvas id="board" aria-label="Board"></canvas>
+            <div class="banner" id="banner" hidden></div>
+          </div>
+          <div class="actions">
+            <p class="hint" id="hint" role="status"></p>
+            <button id="take-all" class="btn btn-primary" hidden>Take all</button>
+            <button id="show-results" class="btn" hidden>Results</button>
+          </div>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Box office log</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Say something…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Final scores -->
+      <div class="modal-back" id="results" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="results-title">
+          <h2 id="results-title" class="results-title">Final scores</h2>
+          <p class="winner-line" id="results-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Player</th><th>Boxes</th></tr>
+            </thead>
+            <tbody id="results-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button id="results-board" class="btn btn-ghost">See the board</button>
+            <span class="spacer"></span>
+            <span class="hint" id="results-wait"></span>
+            <button id="results-lobby" class="btn" data-action="lobby">Back to lobby</button>
+            <button id="results-again" class="btn btn-primary" data-action="start">Play again</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

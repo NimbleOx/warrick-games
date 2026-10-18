@@ -18,6 +18,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Dice Dominion | `/dice-dominion/` | `games/dice-dominion` | not deployed | 5181 |
 | Double Trouble | `/double-trouble/` | `games/double-trouble` | live | 5182 |
 | Corner Shop | `/corner-shop/` | `games/corner-shop` | not deployed | 5183 |
+| Box Office | `/box-office/` | `games/box-office` | not deployed | 5184 |
 | Liar's Dice | `/liars-dice/` | `games/liars-dice` | not deployed | 5185 |
 | Pocket Wars | `/pocket-wars/` | `games/pocket-wars` | not deployed | 5186 |
 

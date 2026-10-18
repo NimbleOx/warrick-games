@@ -183,8 +183,10 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     const seated = this.participants.filter((p) => p.cpu || p.connected);
     if (seated.length < 2) return this.endMatch(null, "Not enough players left to carry on.");
     seated.forEach((p, i) => (p.slot = i));
+    // Its own stream, apart from the seed everyone sees, so the seed doesn't give away where
+    // attacks will land or how the CPUs will play.
     const rng = mulberry32(randomSeed());
-    const seed = Math.floor(rng() * 0xffffffff) >>> 0;
+    const seed = randomSeed();
     const { level, speed, aim } = s.settings;
     const round = new Round({ seed, level, speed, aim, seats: seated.map((p) => ({ slot: p.slot, cpu: p.cpu })) }, rng);
     this.live = { round, rng };

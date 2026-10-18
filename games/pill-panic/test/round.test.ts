@@ -226,6 +226,39 @@ describe("a round", () => {
     expect(round.bottle(0)!.pending.length + round.bottle(0)!.count).toBeGreaterThan(0);
   });
 
+  it("lands attacks a browser claims to take at the end of time", () => {
+    // The browser takes each attack on a tick it hasn't reached, or (when it has one to take)
+    // claims to have reached that far tick too.
+    for (const claim of ["drop", "both"] as const) {
+      const round = makeRound([null, "hard"], { level: 10 });
+      const ann = new Browser(0, round.snapshot(1).lanes[0], newBrain("normal", 3));
+      const sentAt = new Map<number, number>();
+      const landed = new Set<number>();
+      const far = Number.MAX_SAFE_INTEGER;
+      let wall = 0;
+      for (let i = 0; i < 300; i++) {
+        if (i % 40 === 0 && i < 240) (round as unknown as { attack(from: unknown, colors: number[]): void }).attack(round.lanes[1], [RED, BLUE]);
+        wall += 3;
+        ann.play(wall);
+        ann.drops = ann.drops.map(([, id]) => [far, id]);
+        const n = claim === "both" && ann.drops.length ? far : ann.b.tick;
+        round.feed(ann.slot, ann.e, n, ann.keys, ann.drops, wall);
+        ann.keys = [];
+        ann.drops = [];
+        round.step(wall, () => true);
+        const f = round.collect();
+        if (!f) continue;
+        for (const a of f.a ?? []) if (a.to === 0) sentAt.set(a.id, wall);
+        for (const seg of f.s) if (seg.s === 0) for (const [, id] of seg.g) landed.add(id);
+        ann.receive(f);
+      }
+      // Every attack landed on the server's copy of the bottle, two seconds after it was sent at most.
+      for (const id of sentAt.keys()) expect(landed.has(id), `attack ${id} (${claim})`).toBe(true);
+      expect(sentAt.size).toBeGreaterThanOrEqual(6);
+      expect(round.outcome).toBeNull();
+    }
+  });
+
   it("aims attacks at whoever has the fewest viruses left", () => {
     const round = makeRound([null, null, null, null], { aim: "leader" });
     round.bottle(0)!.viruses = 9;

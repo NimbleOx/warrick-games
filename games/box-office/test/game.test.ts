@@ -34,11 +34,11 @@ function setup() {
 }
 
 /** Two humans on a fresh board; `first` and `second` are the seats in turn order. */
-function twoHumans(turnSeconds = 20) {
+function twoHumans(turnSeconds = 20, hints = false) {
   const t = setup();
   const a = t.human("Ann");
   t.human("Bo");
-  t.game().updateSettings(a.id, { size: "small", turnSeconds });
+  t.game().updateSettings(a.id, { size: "small", turnSeconds, hints });
   t.game().start(a.id);
   const first = t.s.seats[0];
   const second = t.s.seats[1];
@@ -104,20 +104,62 @@ describe("turns", () => {
     expect(t.s.turn).toBe(0);
   });
 
-  it("takes every box on offer in one go", () => {
-    const t = twoHumans();
-    // A chain of three along the top, opened at the left.
+  /** A chain of three along the top, opened at the left: the player to move can take it all. */
+  function chainOnOffer(s: GameState): void {
     for (let c = 0; c < 3; c++) {
-      playLine(t.s, hEdge(t.s, 0, c), 0);
-      playLine(t.s, hEdge(t.s, 1, c), 0);
+      playLine(s, hEdge(s, 0, c), 0);
+      playLine(s, hEdge(s, 1, c), 0);
     }
-    playLine(t.s, vEdge(t.s, 0, 3), 0);
-    playLine(t.s, vEdge(t.s, 0, 0), 0);
+    playLine(s, vEdge(s, 0, 3), 0);
+    playLine(s, vEdge(s, 0, 0), 0);
+  }
+
+  it("takes every box on offer in one go, with hints on", () => {
+    const t = twoHumans(20, true);
+    chainOnOffer(t.s);
     expect(() => t.game().takeAll(t.second)).toThrow("turn");
     t.game().takeAll(t.first);
     expect(t.s.boxes.slice(0, 3)).toEqual([0, 0, 0]);
     expect(t.s.turn).toBe(0);
     expect(() => t.game().takeAll(t.first)).toThrow("no boxes");
+  });
+
+  it("has no Take all with hints off, whether or not there are boxes to take", () => {
+    const t = twoHumans();
+    expect(t.s.settings.hints).toBe(false);
+    // Refused before it looks at the board, so it can't be used to find a box either.
+    expect(() => t.game().takeAll(t.first)).toThrow("hints");
+    chainOnOffer(t.s);
+    expect(() => t.game().takeAll(t.first)).toThrow("hints");
+    expect(t.s.boxes.slice(0, 3)).toEqual([-1, -1, -1]);
+    // Drawing the last sides one at a time still works.
+    for (const b of capturable(t.s).slice()) t.game().line(t.first, lastSide(t.s, b));
+    expect(t.s.boxes.slice(0, 3)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("the hints setting", () => {
+  it("is off for a new game, and only the host can turn it on, before the game", () => {
+    const t = setup();
+    const a = t.human("Ann");
+    const b = t.human("Bo");
+    expect(t.s.settings.hints).toBe(false);
+    expect(() => t.game().updateSettings(b.id, { hints: true })).toThrow();
+    t.game().updateSettings(a.id, { hints: "yes" });
+    expect(t.s.settings.hints).toBe(false);
+    t.game().updateSettings(a.id, { hints: true });
+    expect(t.s.settings.hints).toBe(true);
+    t.game().start(a.id);
+    expect(() => t.game().updateSettings(a.id, { hints: false })).toThrow();
+    expect(t.s.settings.hints).toBe(true);
+  });
+
+  it("reads as off in a room saved before it existed", () => {
+    const t = twoHumans(20, true);
+    delete (t.s.settings as Partial<GameState["settings"]>).hints;
+    t.game();
+    expect(t.s.settings.hints).toBe(false);
+    expect(() => t.game().takeAll(t.first)).toThrow("hints");
   });
 });
 

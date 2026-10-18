@@ -66,6 +66,7 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   settings: {
     size: { label: "Board", fmt: (v: BoardSize) => SIZE_NAMES[v] ?? v },
     turnSeconds: { label: "Turn timer", fmt: (v: number) => (v ? `${v} seconds` : "No limit") },
+    hints: { label: "Hints", fmt: (v: boolean) => (v ? "Show boxes you can close" : "Off") },
   },
   choices: SETTING_CHOICES,
   onWelcome: () => {
@@ -92,6 +93,11 @@ const mySeat = (s = shell.state) => (s ? s.seats.indexOf(shell.me) : -1);
 const isMyTurn = (s = shell.state) => !!s && s.phase === "playing" && s.turn >= 0 && s.seats[s.turn] === shell.me;
 const canDraw = () => isMyTurn() && app.pending < 0;
 const seatPlayer = (s: GameState, seat: number) => shell.player(s.seats[seat]);
+/**
+ * The host's hints setting, the same for everyone in the game: the boxes you can close pulse,
+ * the hint line says so, and Take all (and T) is there. A room from before the setting has none.
+ */
+const hintsOn = (s = shell.state) => s?.settings.hints === true;
 
 // ------------------------------------------------------------------ shell hooks
 
@@ -211,7 +217,7 @@ function frame(now: number): void {
   if (!s || !app.view) return;
   step(now);
   const mine = isMyTurn(s) && !app.queue.length;
-  const pulse = mine ? app.caps : [];
+  const pulse = mine && hintsOn(s) ? app.caps : [];
   // Idle, nothing moves: the last drawing still stands. Pulsing boxes and a preview line throb.
   // Once they stop, one more frame draws where they ended, however late it comes.
   const moving = now < app.settleUntil || pulse.length > 0 || (mine && app.preview >= 0);
@@ -289,6 +295,13 @@ function renderHud(s: GameState): void {
     el.innerHTML = html;
     el.dataset.html = html;
   }
+  const hints = $("hud-hints");
+  hints.hidden = s.phase !== "playing";
+  hints.classList.toggle("on", hintsOn(s));
+  $("hud-hints-state").textContent = hintsOn(s) ? "on" : "off";
+  hints.title = hintsOn(s)
+    ? "The host turned hints on: boxes you can close pulse on your turn, and Take all is there"
+    : "The host turned hints off for this game: no box shows it can be closed, and there's no Take all";
   $("hud-left").innerHTML =
     s.phase === "playing" ? `<span class="aside">${s.w} × ${s.h} · </span>${boxesLeft(s)} left` : `${s.w} × ${s.h}`;
 }
@@ -320,7 +333,7 @@ function renderScores(s: GameState): void {
 
 function renderActions(s: GameState): void {
   const mine = isMyTurn(s);
-  const caps = mine ? app.caps : [];
+  const caps = mine && hintsOn(s) ? app.caps : [];
   const take = $<HTMLButtonElement>("take-all");
   take.hidden = !caps.length;
   if (caps.length) take.textContent = `Take all (${takeAll(cloneBoard(s), 0).taken.length})`;
@@ -494,7 +507,7 @@ function wireInput(): void {
 
   $("take-all").addEventListener("click", (e) => {
     (e.currentTarget as HTMLElement).blur();
-    if (canDraw()) shell.send({ t: "takeAll" });
+    if (canDraw() && hintsOn()) shell.send({ t: "takeAll" });
   });
   $("results-board").addEventListener("click", () => {
     app.resultsClosed = true;
@@ -516,8 +529,10 @@ function wireInput(): void {
       app.preview = -1;
       redraw();
       if (shell.state) renderActions(shell.state);
-    } else if ((e.key === "t" || e.key === "T") && canDraw() && app.caps.length) {
-      shell.send({ t: "takeAll" });
+    } else if ((e.key === "t" || e.key === "T") && canDraw()) {
+      // Without hints, T says why it does nothing, whether or not there are boxes to take.
+      if (!hintsOn()) toast("Take all comes with hints, and they're off in this game", "info");
+      else if (app.caps.length) shell.send({ t: "takeAll" });
     }
   });
 }

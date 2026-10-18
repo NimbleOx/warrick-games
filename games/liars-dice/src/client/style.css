@@ -1,0 +1,720 @@
+@import "@warrick/kit/style.css";
+
+/* Liar's Dice's colours: cornflower blue, with ivory dice. */
+:root {
+  --accent: #6c9bff;
+  --accent-edge: #a9c4ff;
+  --accent-ink: #06122e;
+  --accent-hi: #85adff;
+  --accent-hi-edge: #d3e1ff;
+  --logo: #f4ead8;
+  --logo-shade: #3e64c9;
+  --logo-deep: #142560;
+  --code-shade: #2c4aa0;
+  --die-face: #f4ead8;
+  --die-edge: #c9b996;
+  --pip: #1a1206;
+  --pip-one: #d23a4e;
+  --lit: #ffd23f;
+  --wild: #ff9df0;
+}
+
+/* ------------------------------------------------------------ dice */
+
+.die {
+  width: var(--d, 26px);
+  height: var(--d, 26px);
+  flex: none;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.die rect {
+  fill: var(--die-face);
+  stroke: var(--die-edge);
+  stroke-width: 4;
+}
+
+.die circle {
+  fill: var(--pip);
+}
+
+.die.f1 circle {
+  fill: var(--pip-one);
+}
+
+.die-hidden {
+  border-radius: 22%;
+  background:
+    radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.14), transparent 55%),
+    linear-gradient(160deg, #2b3a73, #18214a);
+  border: 2px solid #3a4c8f;
+}
+
+.die-hidden.rolling {
+  animation: rattle 0.5s steps(4) infinite;
+}
+
+@keyframes rattle {
+  25% {
+    transform: rotate(-8deg) translateY(-1px);
+  }
+  75% {
+    transform: rotate(8deg) translateY(1px);
+  }
+}
+
+/* ------------------------------------------------------------ game layout */
+
+.screen-game {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-topbar {
+  padding: 6px 16px;
+}
+
+.game-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 14px;
+  padding: 12px 16px 16px;
+  align-items: start;
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.table-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  min-height: 26px;
+}
+
+.status b {
+  color: var(--accent-2);
+}
+
+.status-rules {
+  display: flex;
+  gap: 6px;
+}
+
+.clock {
+  margin-left: auto;
+  font-family: var(--pixel);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.clock.low {
+  color: var(--danger);
+  animation: blink 0.8s steps(2) infinite;
+}
+
+/* ------------------------------------------------------------ seats */
+
+.seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 8px;
+}
+
+.seat {
+  --d: 22px;
+  position: relative;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-left: 4px solid var(--pc);
+  border-radius: 6px;
+  padding: 7px 9px 6px;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  transition:
+    border-color 0.2s,
+    opacity 0.2s,
+    box-shadow 0.2s;
+}
+
+.seat.me {
+  background: var(--panel-2);
+}
+
+.seat.turn {
+  border-color: var(--pc);
+  box-shadow: 0 0 0 1px var(--pc), 0 0 18px -4px var(--pc);
+}
+
+.seat.out {
+  opacity: 0.4;
+}
+
+.seat.offline .pname {
+  color: var(--muted);
+}
+
+.seat-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.seat-head .tag {
+  font-size: 10px;
+}
+
+.seat-clock {
+  font-family: var(--pixel);
+  font-size: 9px;
+  color: var(--accent-2);
+}
+
+.seat-dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: var(--d);
+  align-items: center;
+}
+
+.seat-note {
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+}
+
+.seat-note .call {
+  font-family: var(--pixel);
+  font-size: 10px;
+  color: var(--danger);
+}
+
+.seat-note .call.spot {
+  color: var(--accent-2);
+}
+
+.watchers {
+  grid-column: 1 / -1;
+  font-size: 13px;
+}
+
+/* The reveal: the cups come up, then the dice that count light up one by one. */
+.seats .seat-dice .counted,
+.seats .seat-dice .uncounted {
+  transform: translateY(-10px) scale(0.85);
+  opacity: 0;
+  transition:
+    transform 0.35s cubic-bezier(0.2, 1.4, 0.4, 1),
+    opacity 0.3s,
+    filter 0.3s;
+}
+
+.seats.lifted .seat-dice .counted,
+.seats.lifted .seat-dice .uncounted {
+  transform: none;
+  opacity: 1;
+}
+
+.seats.counting .seat-dice .uncounted {
+  opacity: 0.3;
+}
+
+.die.counted.lit {
+  filter: drop-shadow(0 0 5px var(--lit));
+  transform: scale(1.12) !important;
+}
+
+.die.counted.lit rect {
+  stroke: var(--lit);
+  stroke-width: 8;
+}
+
+.die.wild.lit rect {
+  stroke: var(--wild);
+  stroke-dasharray: 14 8;
+}
+
+.die.wild.lit {
+  filter: drop-shadow(0 0 4px var(--wild));
+}
+
+.seats.settled .seat.loser {
+  border-color: var(--danger);
+  animation: shake 0.45s;
+}
+
+.seats.settled .seat.gainer {
+  border-color: var(--ok);
+  box-shadow: 0 0 16px -4px var(--ok);
+}
+
+.seat.winner {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 18px -4px var(--accent-2);
+}
+
+@keyframes shake {
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+/* ------------------------------------------------------------ the current bid */
+
+.bid {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.bid .times {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+
+.bid.small {
+  --d: 18px;
+  font-size: 14px;
+}
+
+.bid.big {
+  --d: 46px;
+  font-size: 38px;
+  gap: 8px;
+  font-family: var(--pixel);
+}
+
+.bid.big b {
+  color: var(--accent-2);
+  text-shadow: 3px 3px 0 var(--code-shade);
+}
+
+.bidbox {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 14px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(108 155 255 / 0.16), transparent 70%),
+    var(--panel);
+}
+
+.bidbox .chip {
+  display: inline-block;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
+
+.bid-by,
+.bid-note {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.bid-note b,
+.bid-by b {
+  color: var(--text);
+}
+
+.bid-empty {
+  font-family: var(--pixel);
+  font-size: 15px;
+  color: var(--muted);
+  padding: 10px 0;
+}
+
+.count-line {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.count-line .count {
+  font-family: var(--pixel);
+  font-size: 18px;
+  color: var(--lit);
+  margin-left: 4px;
+}
+
+.result {
+  font-size: 15px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+}
+
+.result.shown {
+  opacity: 1;
+  transform: none;
+}
+
+.result b {
+  color: var(--accent-2);
+}
+
+/* ------------------------------------------------------------ my cup and the picker */
+
+.cup {
+  --d: 48px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--panel-2);
+  border: 2px solid var(--line-2);
+  border-radius: 8px;
+}
+
+.my-dice {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.my-dice .uncounted {
+  opacity: 0.35;
+}
+
+.picker {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.picker.active {
+  border-color: var(--accent);
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qty output {
+  min-width: 2.2ch;
+  text-align: center;
+  font-family: var(--pixel);
+  font-size: 22px;
+  color: var(--accent-2);
+}
+
+.btn-step {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.faces {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  flex: 1;
+  min-width: 250px;
+}
+
+.face {
+  --d: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 2px 4px;
+  background: var(--panel-2);
+  border: 2px solid var(--line-2);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.face .min {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.face:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.face[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #1d2a55;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.face:disabled {
+  cursor: not-allowed;
+}
+
+.face:disabled .die {
+  opacity: 0.25;
+}
+
+.actions .btn {
+  flex: 1;
+  min-height: 46px;
+  white-space: nowrap;
+}
+
+.btn-bid {
+  flex: 2 !important;
+}
+
+.btn-liar {
+  background: #3a1219;
+  border-color: var(--danger);
+  color: #ffd6db;
+  font-family: var(--pixel);
+  font-size: 12px;
+}
+
+.btn-liar:hover:not(:disabled) {
+  background: #521a24;
+  border-color: #ff8a96;
+}
+
+.btn-spot {
+  background: #3a3010;
+  border-color: var(--accent-2);
+  color: #fff3c4;
+}
+
+.btn-spot:hover:not(:disabled) {
+  background: #4d4015;
+}
+
+.why {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.waiting {
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--panel);
+  border: 2px dashed var(--line);
+  border-radius: 8px;
+}
+
+.keys-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--panel-2);
+}
+
+/* ------------------------------------------------------------ side panels */
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  scrollbar-width: thin;
+}
+
+.history li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.history .who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history .call-row b {
+  color: var(--danger);
+}
+
+.last-call {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.last-call b {
+  color: var(--text);
+}
+
+.side-col .log {
+  height: 200px;
+}
+
+.modal-foot .spacer {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------ phones */
+
+@media (max-width: 860px) {
+  .game-layout {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .keys-hint {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .game-topbar .brand {
+    font-size: 10px;
+  }
+
+  .seats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .seat {
+    --d: 17px;
+    padding: 5px 7px 4px;
+    gap: 3px;
+  }
+
+  .seat-head {
+    font-size: 13px;
+  }
+
+  .seat-dice {
+    gap: 3px;
+  }
+
+  .bidbox {
+    min-height: 118px;
+    padding: 10px;
+    gap: 5px;
+  }
+
+  .bid.big {
+    --d: 38px;
+    font-size: 30px;
+  }
+
+  .cup {
+    --d: 40px;
+    padding: 8px 10px;
+    gap: 10px;
+  }
+
+  .cup .label {
+    display: none;
+  }
+
+  .my-dice {
+    gap: 6px;
+  }
+
+  .picker {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .picker-row {
+    gap: 8px;
+  }
+
+  .qty {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .faces {
+    min-width: 0;
+    width: 100%;
+    gap: 4px;
+  }
+
+  .face {
+    --d: 30px;
+  }
+
+  .btn-liar {
+    font-size: 11px;
+  }
+
+  .actions .btn {
+    padding: 9px 8px;
+  }
+
+  .standings th:nth-child(3),
+  .standings td:nth-child(3) {
+    display: none;
+  }
+}

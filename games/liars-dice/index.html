@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Liar's Dice</title>
+    <meta name="description" content="A bluffing dice game like Perudo, for friends. No accounts — create a game and share the code." />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">LIAR'S DICE <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <main class="table-col">
+          <div class="status" id="status">
+            <span id="status-round"></span>
+            <span id="status-rules" class="status-rules"></span>
+            <span class="clock" id="clock"></span>
+          </div>
+
+          <ul class="seats" id="seats" aria-label="Players"></ul>
+
+          <div class="bidbox" id="bidbox" aria-live="polite"></div>
+
+          <div class="cup" id="cup">
+            <span class="label">Your dice</span>
+            <div class="my-dice" id="my-dice"></div>
+          </div>
+
+          <div class="picker" id="picker">
+            <div class="picker-row">
+              <div class="qty" role="group" aria-label="Quantity">
+                <button class="btn btn-step" id="qty-down" aria-label="Fewer dice">−</button>
+                <output id="qty" aria-live="polite">1</output>
+                <button class="btn btn-step" id="qty-up" aria-label="More dice">+</button>
+              </div>
+              <div class="faces" id="faces" role="group" aria-label="Face"></div>
+            </div>
+            <div class="picker-row actions">
+              <button class="btn btn-primary btn-bid" id="bid-btn">Bid</button>
+              <button class="btn btn-liar" id="liar-btn">Liar!</button>
+              <button class="btn btn-spot" id="spot-btn">Spot on</button>
+            </div>
+            <p class="why" id="why"></p>
+          </div>
+          <div class="waiting" id="waiting" hidden></div>
+          <p class="keys-hint">
+            <kbd>1</kbd>–<kbd>6</kbd> face · <kbd>↑</kbd><kbd>↓</kbd> quantity · <kbd>Enter</kbd> bid · <kbd>L</kbd> Liar! ·
+            <kbd>S</kbd> Spot on
+          </p>
+        </main>
+
+        <aside class="side-col">
+          <div class="panel history-panel">
+            <div class="panel-head"><h2>Bids this round</h2></div>
+            <ol class="history" id="history"></ol>
+            <p class="last-call" id="last-call" hidden></p>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Table talk</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Say something sly…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Final standings -->
+      <div class="modal-back" id="gameover" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="gameover-title">
+          <h2 id="gameover-title" class="results-title">Game over</h2>
+          <p class="winner-line" id="gameover-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Player</th><th>Out in</th><th>Liar! calls</th><th id="gameover-spot-head">Spot on</th></tr>
+            </thead>
+            <tbody id="gameover-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" id="gameover-close">See the table</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <button id="gameover-lobby" class="btn btn-primary" data-action="lobby">Back to lobby</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

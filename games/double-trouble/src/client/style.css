@@ -1,0 +1,436 @@
+@import "@warrick/kit/style.css";
+
+/* Double Trouble's colours: the gold of a 2048 tile, with coral (a 32) for the highlights. */
+:root {
+  --accent: #f4c238;
+  --accent-2: #ff7a5c;
+  --accent-edge: #ffe08a;
+  --accent-ink: #2b1e00;
+  --accent-hi: #ffd35e;
+  --accent-hi-edge: #fff0c2;
+  --logo: #ffd35e;
+  --logo-shade: #e0642f;
+  --logo-deep: #5a1a0c;
+  --code-shade: #8a3a1c;
+  --tag-host: #4a2a14;
+}
+
+/* ------------------------------------------------------------ game */
+
+.screen-game {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-topbar {
+  padding: 6px 16px;
+}
+
+.game-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  padding: 12px 16px 16px;
+  align-items: start;
+}
+
+.stage-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.hud {
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  background: var(--line);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.hud > div {
+  background: var(--panel);
+  padding: 7px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hud-main {
+  flex: 2.4;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.hud-main .note {
+  font-weight: 400;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud-stat {
+  flex: 1;
+}
+
+.hud b {
+  font-family: var(--pixel);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+#hud-goal {
+  color: var(--accent);
+}
+
+#hud-scale.hot {
+  color: var(--danger);
+  animation: blink 0.9s steps(2) 3;
+}
+
+/* Our board on the left, everyone else's in a grid beside it. */
+.arena {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 24px;
+  min-height: 200px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.arena.stacked {
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Swipes on our board move it, so it mustn't scroll the page. */
+.own {
+  position: relative;
+  flex: none;
+  touch-action: none;
+}
+
+.own canvas,
+.opp canvas {
+  display: block;
+}
+
+/* As wide as the board above it, without widening it. */
+.legend {
+  width: 0;
+  min-width: 100%;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sw {
+  display: inline-block;
+  width: 7px;
+  height: 12px;
+  border-radius: 1px;
+}
+
+.sw-in {
+  background: #ff9a3c;
+}
+
+.sw-armed {
+  background: #ff4d5e;
+}
+
+.sw-power {
+  background: #ff6bd6;
+}
+
+.opps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 12px;
+}
+
+.opp {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.opp-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.opp-head .chip {
+  width: 10px;
+  height: 10px;
+}
+
+.opp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opp-kos {
+  margin-left: auto;
+  color: var(--accent-2);
+  font-size: 11px;
+}
+
+.opps.tiny .opp-head {
+  font-size: 10px;
+  height: 13px;
+}
+
+.opps.tiny .opp-kos {
+  display: none;
+}
+
+.banner {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 18% 16px 16px;
+  gap: 12px;
+  pointer-events: none;
+  line-height: 1.3;
+  text-align: center;
+  text-shadow: 0 2px 8px #000;
+}
+
+.banner .big {
+  font-family: var(--pixel);
+  font-size: clamp(26px, 7vw, 54px);
+  color: var(--accent);
+  text-shadow:
+    3px 3px 0 #000,
+    0 0 24px rgb(0 0 0 / 0.8);
+}
+
+.banner .sub {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgb(8 10 20 / 0.8);
+  max-width: min(340px, 86%);
+}
+
+.feed {
+  position: absolute;
+  left: 0;
+  bottom: 34px;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
+.arena > .feed {
+  bottom: 8px;
+}
+
+.feed li {
+  font-size: 13px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgb(8 10 20 / 0.78);
+  transition: opacity 0.6s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed li.old {
+  opacity: 0;
+}
+
+.feed b {
+  font-weight: 600;
+}
+
+.feed b.t {
+  color: var(--accent);
+}
+
+.keys-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  margin: 0 1px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------ side column */
+
+.side-col {
+  display: grid;
+  gap: 14px;
+}
+
+.scoreboard {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.scoreboard li {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  border: 2px solid transparent;
+  overflow: hidden;
+}
+
+.scoreboard li.me {
+  border-color: var(--line-2);
+}
+
+.scoreboard li.dead {
+  opacity: 0.55;
+}
+
+.scoreboard .pct {
+  font-family: var(--pixel);
+  font-size: 9px;
+  color: var(--accent);
+}
+
+.scoreboard .meta {
+  grid-column: 2 / -1;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.side-col .log {
+  height: 200px;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 980px) {
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .side-col {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .hud > div {
+    padding: 5px 8px;
+  }
+
+  .hud-main {
+    flex-basis: 100% !important;
+  }
+
+  .hud {
+    flex-wrap: wrap;
+  }
+
+  .side-col {
+    grid-template-columns: 1fr;
+  }
+
+  .game-layout {
+    padding: 8px;
+  }
+
+  .standings th:nth-child(6),
+  .standings td:nth-child(6),
+  .standings th:nth-child(8),
+  .standings td:nth-child(8) {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .legend span:nth-child(2) {
+    display: none;
+  }
+
+  /* Score and KOs are in the scoreboard too: leave the HUD room for the rest. */
+  .hud .hud-score,
+  .hud .hud-kos {
+    display: none;
+  }
+
+  /* The name is long: make room for the buttons on a phone. */
+  .game-topbar .brand {
+    font-size: 10px;
+  }
+
+  .game-topbar .brand .muted {
+    display: none;
+  }
+}

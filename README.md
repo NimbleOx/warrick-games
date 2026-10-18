@@ -16,6 +16,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Pill Panic | `/pill-panic/` | `games/pill-panic` | live | 5179 |
 | Stack Attack | `/stack-attack/` | `games/stack-attack` | live | 5180 |
 | Dice Dominion | `/dice-dominion/` | `games/dice-dominion` | not deployed | 5181 |
+| Double Trouble | `/double-trouble/` | `games/double-trouble` | not deployed | 5182 |
 | Corner Shop | `/corner-shop/` | `games/corner-shop` | not deployed | 5183 |
 
 The dev ports are the ones in `.claude/launch.json`, so every game can run at the same time.

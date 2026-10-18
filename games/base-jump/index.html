@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Base Jump</title>
+    <meta name="description" content="Take every base. Tanks need roads, helicopters don't. Real-time strategy for friends — no accounts, just share a code." />
+    <meta name="theme-color" content="#0e120c" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">BASE JUMP <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="stage-col">
+          <div class="hud" id="hud">
+            <div class="hud-main" id="hud-main"></div>
+            <div class="hud-stat"><span class="label">Time</span><b id="hud-clock">—</b></div>
+            <div class="hud-stat"><span class="label">Bases</span><b id="hud-bases">—</b></div>
+            <div class="hud-stat"><span class="label">Units</span><b id="hud-units">—</b></div>
+          </div>
+
+          <div class="orders" id="orders">
+            <div class="seg" role="group" aria-label="Send size">
+              <span class="label">Send</span>
+              <button class="seg-btn" data-pct="25" aria-pressed="false" title="Send a quarter (1)">25%</button>
+              <button class="seg-btn" data-pct="50" aria-pressed="true" title="Send half (2)">50%</button>
+              <button class="seg-btn" data-pct="100" aria-pressed="false" title="Send everything (3)">All</button>
+            </div>
+            <button class="btn btn-small" id="select-all" title="Select all your bases (A)">All bases</button>
+            <button class="btn btn-small" id="upgrade" title="Upgrade the selected base (U)" disabled>Upgrade</button>
+            <span class="tip" id="tip"></span>
+          </div>
+
+          <div class="stage" id="stage">
+            <canvas id="game-canvas"></canvas>
+            <ol class="feed" id="feed" aria-live="polite"></ol>
+            <div class="banner" id="banner" hidden></div>
+          </div>
+          <p class="keys-hint">
+            Drag from your base to a target (sweep across more of yours to send from them too), or tap yours then the target ·
+            <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> send size · <kbd>A</kbd> all bases · <kbd>U</kbd> upgrade · <kbd>Esc</kbd> clear
+          </p>
+          <p class="legend">
+            <span><i class="key-depot"></i> depot: builds tanks, which drive along roads</span>
+            <span><i class="key-air"></i> airfield: builds helicopters, which fly anywhere</span>
+            <span><b class="heli-ink">✈</b> blue numbers are helicopters · 1 tank = 2 helicopters in a fight</span>
+          </p>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Forces</h2>
+              <span class="muted small" id="round-label"></span>
+            </div>
+            <ol id="scoreboard" class="scoreboard"></ol>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Chat</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Taunt the enemy…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Round results -->
+      <div class="modal-back" id="results" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="results-title">
+          <h2 id="results-title" class="results-title">Results</h2>
+          <p class="winner-line" id="results-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Player</th><th>Bases</th><th>Units</th><th>Taken</th><th>Most held</th><th>Wins</th></tr>
+            </thead>
+            <tbody id="results-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <span class="spacer"></span>
+            <button id="results-lobby" class="btn" data-action="lobby">Back to lobby</button>
+            <button id="results-again" class="btn btn-primary" data-action="start">Play again</button>
+          </div>
+          <p class="hint center" id="results-wait"></p>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

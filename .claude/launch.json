@@ -90,6 +90,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/pocket-wars", "--", "--port", "5186", "--strictPort"],
       "port": 5186
+    },
+    {
+      "name": "base-jump",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/base-jump", "--", "--port", "5187", "--strictPort"],
+      "port": 5187
     }
   ]
 }

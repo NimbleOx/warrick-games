@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { MONOMINO, PIECE_IDS } from "../src/shared/pieces";
 import { COLORS, positionOf, seated, type GameState } from "../src/shared/protocol";
-import { EMPTY, isFirstMove, legalMoves, moveCells, placementError, scoreFor } from "../src/shared/rules";
+import { chooseMove } from "../src/shared/ai";
+import { mulberry32 } from "@warrick/kit/shared/rng";
+import { EMPTY, isFirstMove, legalMoves, moveCells, placementError, scoreFor, squaresLeft } from "../src/shared/rules";
 import { AWAY_LIMIT, AWAY_MS, CPU_MS, Game, newGameState } from "../src/worker/game";
 
 function setup() {
@@ -361,5 +363,55 @@ describe("game flow", () => {
     const late = t.human("Late");
     expect(late.spectator).toBe(true);
     expect(late.seat).toBe(-1);
+  });
+});
+
+describe("solitaire", () => {
+  it("plays alone on the small board from its corner, with no clock, to the final score", () => {
+    const t = setup();
+    const ann = t.human("Ann");
+    t.game().updateSettings(ann.id, { turnSeconds: 30 });
+    t.game().start(ann.id);
+    expect(t.s.phase).toBe("playing");
+    expect(t.s).toMatchObject({ size: 14, starts: [0], seats: [ann.id], turnPlayerId: ann.id });
+    // Nobody's waiting, so the turn timer doesn't apply.
+    expect(t.s.turnDeadline).toBeNull();
+    expect(t.s.timer).toBeNull();
+
+    // Every turn is Ann's, until her pieces stop fitting or run out.
+    const rng = mulberry32(4);
+    for (let i = 0; i < 30 && t.s.phase === "playing"; i++) {
+      expect(t.s.turnPlayerId).toBe(ann.id);
+      expect(t.s.timer).toBeNull();
+      t.advance(60_000);
+      const p = t.current();
+      t.game().place(p.id, chooseMove(positionOf(t.s), p.seat, "normal", rng)!);
+    }
+    expect(t.s.phase).toBe("gameover");
+    const p = t.s.players[0];
+    expect(p.out === "done" || p.out === "stuck").toBe(true);
+    expect(p.score).toBe(scoreFor(p.tray, p.lastPiece));
+    expect(squaresLeft(p.tray)).toBeLessThan(20);
+    expect(t.s.winners).toEqual([]);
+    expect(t.s.moves.length).toBe(21 - p.tray.length);
+  });
+
+  it("waits for a solitaire player who goes away, and ends when they leave", () => {
+    const t = setup();
+    const ann = t.human("Ann");
+    t.game().start(ann.id);
+    playAny(t);
+    t.connected.delete(ann.id);
+    t.game().setConnected(ann.id, false);
+    expect(t.s.timer).toBeNull();
+    expect(t.s.turnDeadline).toBeNull();
+    t.connected.add(ann.id);
+    t.game().setConnected(ann.id, true);
+    expect(t.s.turnPlayerId).toBe(ann.id);
+    playAny(t);
+    t.game().leave(ann.id);
+    expect(t.s.phase).toBe("gameover");
+    expect(t.s.players[0]).toMatchObject({ out: "left", score: scoreFor(t.s.players[0].tray, t.s.players[0].lastPiece) });
+    expect(t.s.winners).toEqual([]);
   });
 });

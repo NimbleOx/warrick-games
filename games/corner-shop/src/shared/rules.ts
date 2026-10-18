@@ -36,6 +36,9 @@ export interface Layout {
  * bottom-left corner stays empty). 2 players: 14×14 with the starts near the middle, as in Duo.
  */
 export function layoutFor(players: number): Layout {
+  // Solitaire: the small board, from its top-left corner. On 20×20 anyone fits all 21 pieces;
+  // here it takes some care.
+  if (players === 1) return { size: 14, starts: [0] };
   if (players <= 2) {
     const size = 14;
     return { size, starts: [4 * size + 4, 9 * size + 9] };

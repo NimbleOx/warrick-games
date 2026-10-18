@@ -96,6 +96,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/base-jump", "--", "--port", "5187", "--strictPort"],
       "port": 5187
+    },
+    {
+      "name": "dust-up",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/dust-up", "--", "--port", "5188", "--strictPort"],
+      "port": 5188
     }
   ]
 }

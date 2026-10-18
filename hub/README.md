@@ -9,7 +9,7 @@ npm run deploy -w hub   # wrangler deploy
 
 - Keep the hub's own files at paths no game will use (`/style.css`, `/favicon.svg`, `/icons/`).
 - Unknown paths get `public/404.html`.
-- When a game goes live, turn its "Coming soon" card in `public/index.html` into a link (`href="/<name>/"`).
+- When a game goes live, give its card in `public/index.html` the title link (`<a class="game-link" href="/<name>/">`), which covers the whole card. A game with solo play also gets a Solo button beside Play (`<a class="tag tag-solo" href="/<name>/solo">`), which starts a solo game straight away (see the kit's README).
 - Before attaching a custom domain, check DNS against the zone's authoritative nameservers (`dig @mina.ns.cloudflare.com <name>`), not the local resolver, which caches the "doesn't exist" answer for 30 minutes.
 
 ## Icons

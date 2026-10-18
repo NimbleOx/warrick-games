@@ -27,12 +27,15 @@ const MUTED = "#8d94b8";
 const HUB_LOGO = { logo: "#ffd23f", shade: "#e2401c", deep: "#6b1208" };
 
 const hubHtml = fs.readFileSync(path.join(root, "hub/public/index.html"), "utf8");
-const games = [...hubHtml.matchAll(/<a class="game live" href="\/([\w-]+)\/">([\s\S]*?)<\/a>/g)].map(([, slug, card]) => ({
-  slug,
-  name: text(card.match(/<h2>([\s\S]*?)<\/h2>/)[1]),
-  blurb: text(card.match(/<p>([\s\S]*?)<\/p>/)[1]),
-  icon: fs.readFileSync(path.join(root, "hub/public/icons", `${slug}.svg`)),
-}));
+const games = [...hubHtml.matchAll(/<div class="game live">([\s\S]*?)<\/li>/g)].map(([, card]) => {
+  const slug = card.match(/<a class="game-link" href="\/([\w-]+)\/">/)[1];
+  return {
+    slug,
+    name: text(card.match(/<h2>([\s\S]*?)<\/h2>/)[1]),
+    blurb: text(card.match(/<p>([\s\S]*?)<\/p>/)[1]),
+    icon: fs.readFileSync(path.join(root, "hub/public/icons", `${slug}.svg`)),
+  };
+});
 const tagline = text(hubHtml.match(/<p class="tagline">([\s\S]*?)<\/p>/)[1]);
 
 render(hubCard(), path.join(root, "hub/public/og.png"));

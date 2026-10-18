@@ -67,6 +67,8 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   roundWinnerId: string | null;
   phaseDeadline: number | null;
   timer: Timer | null;
+  /** Each player's [score, kills] when the round in progress began, so a replayed round doesn't pay twice. */
+  roundBase: Record<string, [score: number, kills: number]> | null;
 }
 
 export type ClientMsg = LobbyMsg | { t: "turn"; dir: Dir } | { t: "boost" };

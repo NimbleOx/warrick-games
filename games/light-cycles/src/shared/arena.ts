@@ -228,6 +228,16 @@ export class Arena {
           crashes.push({ i, by: -1 });
           return;
         }
+        // Side by side and facing: each drives into the other's head. That's a head-on, not a wall.
+        const c = this.cycles[i];
+        const swap = movers.findIndex((j, k2) => {
+          const o = this.cycles[j];
+          return k2 !== k && o.x === x && o.y === y && targets[k2][0] === c.x && targets[k2][1] === c.y;
+        });
+        if (swap >= 0) {
+          crashes.push({ i, by: movers[swap], headOn: true });
+          return;
+        }
         const owner = this.grid[y * cfg.w + x];
         if (owner) {
           crashes.push({ i, by: owner - 1 });

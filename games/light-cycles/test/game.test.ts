@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mulberry32 } from "@warrick/kit/shared/rng";
+import type { PlayerState } from "../src/shared/protocol";
 import { Game, newGameState } from "../src/worker/game";
 
 function setup() {
@@ -153,6 +154,41 @@ describe("game flow", () => {
     expect(t.s.round).toBe(1);
     expect(fresh.arena?.tick).toBe(0);
     expect(fresh.outbox.some((m) => m.t === "arena")).toBe(true);
+  });
+
+  it("takes back a lost round's points before riding it again", () => {
+    const t = setup();
+    const a = t.act((g) => g.addHuman("A")).s.players[0];
+    t.connected.add(a.id);
+    for (let i = 0; i < 4; i++) t.act((g) => g.addCpu(a.id, "easy"));
+    t.act((g) => g.start(a.id));
+    t.run(() => t.s.round === 2);
+    const atStart = t.s.players.map((p) => [p.score, p.kills]);
+    t.run(() => t.s.phase === "playing");
+    t.run(() => t.s.players.some((p, k) => p.score !== atStart[k][0]));
+    expect(t.s.phase).toBe("playing");
+
+    // The room restarts mid-round: the arena is gone and round 2 is ridden again from the start.
+    const g = new Game(t.s, { now: () => Date.now(), isConnected: () => true }, null);
+    g.recover();
+    expect(t.s.round).toBe(2);
+    expect(g.arena?.tick).toBe(0);
+    expect(t.s.players.map((p) => [p.score, p.kills])).toEqual(atStart);
+  });
+
+  it("gives a watcher a seat that came free before the start", () => {
+    const t = setup();
+    const ps: PlayerState[] = [];
+    for (let i = 0; i < 9; i++) {
+      const p = t.act((g) => g.addHuman(`P${i}`)).s.players[i];
+      t.connected.add(p.id);
+      ps.push(p);
+    }
+    expect(ps[8].spectator).toBe(true);
+    t.act((g) => g.leave(ps[3].id));
+    t.act((g) => g.start(ps[0].id));
+    expect(ps[8].spectator).toBe(false);
+    expect(t.arena!.cycles).toHaveLength(8);
   });
 
   it("replays the round when the countdown ends with the arena gone", () => {

@@ -13,7 +13,7 @@ It runs on Cloudflare: a Worker serves the client and the API, and each game is 
 - New dice land on random territories of yours. Those that don't fit (8 is the most a territory holds) are saved, up to 64, and placed first next time.
 - The turn clock restarts after every attack. When it runs out, your turn ends and you still get your dice.
 - Later seats start with a few extra dice, since going first is a big advantage (see below). The log says who got how many.
-- Reloading the page puts you back in your seat. If the player whose turn it is isn't connected, their turn ends after 5 seconds, and the host can hand their seat to a normal CPU (the **CPU** button by their name) until they come back. Anyone who joins mid-game watches until the next game.
+- Reloading the page puts you back in your seat, with the clock you had (reloading can't buy time). If the player whose turn it is isn't connected, their turn ends after 5 seconds, and the host can hand their seat to a normal CPU (the **CPU** button by their name) until they come back. Anyone who joins mid-game watches until the next game.
 
 ## Development
 
@@ -47,8 +47,8 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
    └─WS─ /dice-dominion/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
 ```
 
-- **One Durable Object per game code**, built on the kit's `Room`: the game state, each player's secret token and the chat/event log live in its storage, and it talks to browsers over hibernatable WebSockets, so a game costs nothing between actions. The state is saved after every attack and every turn, so a deploy mid-game picks up where it was.
-- **The map** is made on the server from a seed (`src/shared/map.ts`): a continent grown out from the middle of a hex grid with a flood fill steered by smoothed noise (so it gets bays, inlets and lakes), one seed per territory spread across it, and the seeds grown over the land, smallest territory first. Maps with a tiny territory or a territory graph that isn't connected are thrown away. The map never changes during a game, so it goes out once: in the welcome and in the state that starts the game. Every other state message leaves it out (`Game.touch` in `src/worker/game.ts`), and a client that somehow lacks it asks with `sync`.
+- **One Durable Object per game code**, built on the kit's `Room`: the game state, each player's secret token and the chat/event log live in its storage, and it talks to browsers over hibernatable WebSockets, so a game costs nothing between actions. The state is saved after every attack and every turn, so a deploy mid-game picks up where it was. The map has a storage key of its own, written only when a game makes a new one.
+- **The map** is made on the server from a seed (`src/shared/map.ts`): a continent grown out from the middle of a hex grid with a flood fill steered by smoothed noise (so it gets bays, inlets and lakes), one seed per territory spread across it, and the seeds grown over the land, smallest territory first. Maps with a tiny territory or a territory graph that isn't connected are thrown away. The map never changes during a game, so it isn't in the state: it goes out on its own, in the welcome and in a `map` message when a game starts, and a client that somehow lacks it asks with `sync`.
 - **Dice are rolled only on the server.** Each attack is broadcast as the two territories, both rolls and the result, and each turn's end as the list of territories the new dice landed on. Clients queue these and animate them (a short roll, the dice dropping in one by one) before applying the state that follows. Tapping skips the animation.
 - **One alarm drives every timer:** the turn clock, the gap between a CPU's attacks, the end-of-turn dice drop and the winner's banner. Timers pause when nobody is connected, and a game with no connections for 12 hours is deleted.
 - **The rules are pure functions** over each territory's owner and dice plus the map's neighbour lists (`src/shared/rules.ts`): largest group, legal attacks and why an attack isn't allowed, attack resolution, end-of-turn dice with the reserve, the win check. The server, the CPUs and the client's hints all use them.
@@ -71,7 +71,8 @@ src/shared/    code used by both sides: hex grid, map generation, odds, rules, C
 src/worker/    index.ts (routes), room.ts (Durable Object: messages and the alarm), game.ts (turns, attacks, timers)
 src/client/    main.ts (the game screen and its hooks into the shell), render.ts (the map on a canvas),
                audio.ts (sounds), attract.ts (the home screen's self-playing demo)
-test/          Vitest tests for the map, the odds, the rules and the game flow
+test/          Vitest tests for the map, the odds, the rules and the game flow, and room.test.ts, which runs
+               the real room (reloads, restarts, the map's storage) through the kit's test harness
 ```
 
 The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).

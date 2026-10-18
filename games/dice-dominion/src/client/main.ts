@@ -13,6 +13,7 @@ import {
   type GameState,
   type PlayerState,
   type ServerMsg,
+  type WelcomeExtra,
 } from "../shared/protocol";
 import { largestGroup, legalAttacks, sum, targetsOf, territoryCount } from "../shared/rules";
 import { Attract } from "./attract";
@@ -71,11 +72,13 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   },
   choices: SETTING_CHOICES,
   intercept,
-  onWelcome: () => {
+  onWelcome: (msg) => {
     app.queue = [];
     app.anim = null;
     app.pending = false;
     app.selected = -1;
+    const map = (msg as Partial<WelcomeExtra>).map;
+    if (map) setMap(map);
   },
   onMessage,
   onState,
@@ -127,7 +130,7 @@ function onReset(): void {
 
 /** Attacks and dice drops animate; anything after them waits its turn. */
 function intercept(msg: ServerMsg): boolean {
-  if (msg.t !== "state" && msg.t !== "attack" && msg.t !== "drop") return false;
+  if (msg.t !== "state" && msg.t !== "attack" && msg.t !== "drop" && msg.t !== "map") return false;
   app.queue.push(msg);
   pump();
   return true;
@@ -139,7 +142,21 @@ function pump(): void {
     if (msg.t === "state") shell.applyState(msg.state);
     else if (msg.t === "attack") startAttack(msg.attack);
     else if (msg.t === "drop") startDrop(msg.drop);
+    else if (msg.t === "map") {
+      setMap(msg.map);
+      // The answer to "sync": show the state that was waiting for it.
+      if (shell.state?.mapId === msg.map.id) shell.applyState(shell.state);
+    }
   }
+}
+
+function setMap(map: HexMap): void {
+  if (map.id === app.map?.id) return;
+  app.map = map;
+  view.setMap(map);
+  app.lastRoll = null;
+  app.flash.clear();
+  layoutStage();
 }
 
 /** Behind (a hidden tab, a slow phone): hurry the animations along. */
@@ -155,19 +172,12 @@ function onMessage(msg: ServerMsg): void {
 }
 
 function onState(s: GameState, prev: GameState | null): void {
-  if (s.map && s.map.id !== app.map?.id) {
-    app.map = s.map;
-    view.setMap(s.map);
-    app.lastRoll = null;
-    app.flash.clear();
-    layoutStage();
-  }
   if (s.phase === "lobby") {
     app.selected = -1;
     return;
   }
   if (!app.map || app.map.id !== s.mapId) {
-    // A state without the map we need (we missed the one that started the game): ask for it.
+    // A game whose map we don't have (we missed the one that started it): ask for it.
     if (performance.now() - app.syncAskedAt > 3000) {
       app.syncAskedAt = performance.now();
       shell.send({ t: "sync" });

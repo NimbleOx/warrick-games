@@ -1,9 +1,10 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { mulberry32 } from "@warrick/kit/shared/rng";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Predictor } from "../src/client/predict";
 import { TICK_MS } from "../src/shared/constants";
 import { EV_FIRE, type Frame } from "../src/shared/protocol";
-import { IN_UP } from "../src/shared/sim";
+import { IN_LEFT, IN_UP, POS_SCALE, wallsFor, type WorldSnapshot } from "../src/shared/sim";
 import { COUNTDOWN_MS, Game, GameError, newGameState, newLive } from "../src/worker/game";
 
 function setup() {
@@ -249,6 +250,23 @@ describe("match", () => {
     expect(t.s.setup!.tanks).toContain(b.id);
   });
 
+  it("restarts a countdown that ran out with nobody here, but not one still going", () => {
+    const t = setup();
+    const a = t.join("A");
+    t.game().addCpu(a.id, "easy");
+    t.game().start(a.id);
+    const deadline = t.s.phaseDeadline;
+    // Someone arrives (or reloads) with half a second to go: the countdown carries on for everyone.
+    t.advance(COUNTDOWN_MS - 500);
+    t.game().wake(false);
+    expect(t.s.phaseDeadline).toBe(deadline);
+    // It ran out while nobody was here to see it (the alarm waits for someone): a fresh one for whoever's back.
+    t.advance(1000);
+    t.game().wake(false);
+    expect(t.s.phaseDeadline).toBe(t.now + COUNTDOWN_MS);
+    expect(t.s.timer).toEqual({ kind: "countdown", at: t.now + COUNTDOWN_MS });
+  });
+
   it("resumes a paused round where it was", () => {
     const t = setup();
     const a = t.join("A");
@@ -261,5 +279,96 @@ describe("match", () => {
     expect(t.s.phase).toBe("countdown");
     expect(t.live.round!.world.tick).toBe(tick);
     expect(g.outbox.some((m) => m.t === "round")).toBe(true);
+  });
+});
+
+describe("reconnecting", () => {
+  it("lets you steer after a reconnect, even if you pressed a key before the welcome", () => {
+    seedRandom(2);
+    const t = setup();
+    const a = t.join("A");
+    t.join("B"); // stays, so the round runs on while A is away
+    t.game().start(a.id);
+    const i = t.s.setup!.tanks.indexOf(a.id);
+    const server = () => t.live.round!.world.tanks[i];
+
+    // A's client as main.ts runs it: input changes numbered and sent, and its own tank predicted the way
+    // NetRound does it (it imports the renderer's types, which need the DOM).
+    const walls = wallsFor(t.s.setup!.maze).tank;
+    const me = { seq: 0, bits: 0, predictor: new Predictor(), online: true };
+    const startRound = (world: WorldSnapshot) => {
+      const k = world.tanks[i];
+      me.predictor = new Predictor();
+      me.predictor.reset({ x: k.x, y: k.y, h: k.h, tt: k.tt }, me.seq, me.bits);
+    };
+    const press = (bits: number) => {
+      me.bits = bits;
+      me.seq++;
+      me.predictor.input(me.seq, bits);
+      if (me.online) t.game().input(a.id, me.seq, bits, false);
+    };
+    // Frames on their way to A.
+    const inbox: Frame[] = [];
+    const listen = () => {
+      for (const f of inbox.splice(0)) {
+        const k = f.k[i] as number[];
+        const pose = { x: k[0] / POS_SCALE, y: k[1] / POS_SCALE, h: k[2], tt: k[3] };
+        me.predictor.reconcile(pose, k[4], k[5], walls, []);
+      }
+    };
+    /** Ticks with no lag: A's client steps its prediction, the server steps the round, the frame comes back. */
+    const tick = (n: number, deliver = true) => {
+      for (let k = 0; k < n; k++) {
+        if (t.s.phase === "playing") me.predictor.step(walls, []);
+        for (const f of t.run(1, () => false)) if (me.online) inbox.push(f);
+        if (deliver) listen();
+      }
+    };
+
+    startRound(t.live.round!.world.snapshot());
+    t.run(1, () => t.s.phase === "playing");
+    // 57 changes on the first connection, ending with a turn key held.
+    for (let n = 1; n <= 57; n++) {
+      press(n % 2 ? IN_LEFT : 0);
+      tick(1);
+    }
+    expect(t.live.inputs.get(a.id)).toMatchObject({ seq: 57, bits: IN_LEFT });
+
+    // A blip: the socket drops, and the server stops A's tank.
+    me.online = false;
+    t.connected.delete(a.id);
+    t.game().setConnected(a.id, false);
+    tick(10);
+
+    // A new socket opens and says hello, which starts the server's count over. The client's starts over
+    // with it (not at the welcome, which takes a round trip to arrive).
+    me.online = true;
+    me.seq = 0;
+    t.connected.add(a.id);
+    t.game().setConnected(a.id, true);
+    t.game().wake(true);
+    const welcome = t.live.round!.world.snapshot();
+    tick(2, false);
+    // Still holding the turn key, with the round still on screen: this goes out before the welcome is in.
+    press(IN_LEFT);
+    tick(2, false);
+    // The welcome: a new round from its snapshot, whatever is held sent again, then the frames behind it.
+    startRound(welcome);
+    if (me.bits) press(me.bits);
+    listen();
+    tick(5);
+
+    // Drive, then let go. Every change takes effect, and the prediction agrees with the server.
+    const before = { ...server() };
+    press(IN_UP);
+    tick(5);
+    const after = { ...server() };
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(0);
+    expect(after.h).toBe(before.h); // stopped turning
+    press(0);
+    tick(5);
+    expect(t.live.inputs.get(a.id)).toMatchObject({ seq: 4, bits: 0 });
+    expect(server()).toMatchObject({ x: after.x, y: after.y, h: after.h }); // stopped driving
+    expect(me.predictor.pose).toMatchObject({ x: after.x, y: after.y, h: after.h });
   });
 });

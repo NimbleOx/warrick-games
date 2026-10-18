@@ -10,12 +10,10 @@ const MAX_MSG_BYTES = 8192;
 /**
  * One Durable Object per game code (the kit's Room does sockets, storage and cleanup). While a
  * match is on and someone is connected, the loop steps the CPU bottles and broadcasts what every
- * bottle did. Players' inputs and clock pings are handled here, as they arrive.
+ * bottle did. Players' inputs are handled here, as they arrive.
  */
 export class GameRoom extends Room<GameState, Game, Live> {
   protected readonly tickMs = LOOP_MS;
-  /** The socket whose message the kit is handling, so `afterHello` knows who said hello. */
-  private speaker: WebSocket | null = null;
 
   protected newState(code: string, now: number): GameState {
     return newGameState(code, now);
@@ -38,26 +36,16 @@ export class GameRoom extends Room<GameState, Game, Live> {
       if (pid) this.makeGame(this.state!, this.io(), this.live).feed(pid, msg);
       return;
     }
-    // The browser sets its clock by ours: send back its send time, so it can time the round trip.
-    if (msg?.t === "ping") {
-      send(ws, { t: "pong", now: Date.now(), c: typeof msg.c === "number" ? msg.c : undefined });
-      return;
-    }
-    // The kit says hello (and calls afterHello) before its first await.
-    this.speaker = ws;
-    const done = super.webSocketMessage(ws, raw);
-    this.speaker = null;
-    return done;
+    return super.webSocketMessage(ws, raw);
   }
 
-  protected afterHello(game: Game): void {
+  protected afterHello(game: Game, pid: string): void {
     // A round whose bottles were lost (the object restarted) starts over.
     game.recover();
     // The browser starts its own bottle over from ours.
-    const pid = playerOf(this.speaker);
-    if (pid) game.rejoin(pid);
+    game.rejoin(pid);
     // The loop stops while nobody is here. The first one back picks the round up where it stopped.
-    if (this.connectedIds().size === 1) game.resume();
+    if (!this.looping) game.resume();
   }
 
   protected welcome(game: Game): object {
@@ -87,8 +75,8 @@ function parse(raw: string): ClientMsg | null {
   }
 }
 
-function playerOf(ws: WebSocket | null): string | null {
-  return (ws?.deserializeAttachment() as { pid: string | null } | null)?.pid ?? null;
+function playerOf(ws: WebSocket): string | null {
+  return (ws.deserializeAttachment() as { pid: string | null } | null)?.pid ?? null;
 }
 
 function send(ws: WebSocket, msg: object): void {

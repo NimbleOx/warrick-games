@@ -151,15 +151,10 @@ export interface Frame {
 }
 
 export type ClientMsg =
-  | Exclude<LobbyMsg, { t: "ping" }>
-  | { t: "in"; e: number; n: number; k?: KeyEntry[]; g?: DropEntry[] }
-  | { t: "resync"; own?: boolean }
-  /** `c` is the browser's clock when it sent this, so it can time the round trip from the pong. */
-  | { t: "ping"; c?: number };
+  LobbyMsg | { t: "in"; e: number; n: number; k?: KeyEntry[]; g?: DropEntry[] } | { t: "resync"; own?: boolean };
 
 export type ServerMsg =
-  | Exclude<RoomMsg<GameState>, { t: "welcome" | "pong" }>
+  | Exclude<RoomMsg<GameState>, { t: "welcome" }>
   | { t: "welcome"; you: string; state: GameState; log: LogEntry[]; snap: RoundSnap | null; now: number }
   | { t: "snap"; snap: RoundSnap }
-  | Frame
-  | { t: "pong"; now: number; c?: number };
+  | Frame;

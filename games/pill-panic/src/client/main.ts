@@ -44,9 +44,6 @@ interface RivalCard {
 }
 
 const app = {
-  /** Server clock minus ours, from the quickest ping. */
-  skew: 0,
-  pings: [] as { rtt: number; skew: number }[],
   /** This browser's copy of the round. */
   view: null as RoundView | null,
   viewKey: "",
@@ -85,12 +82,6 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   },
   choices: SETTING_CHOICES,
   playerTags: (p) => (p.trophies ? `<span class="tag">${p.trophies} match${p.trophies > 1 ? "es" : ""} won</span>` : ""),
-  // The clock pings are Pill Panic's own; the shell would drop their pongs.
-  intercept: (msg) => {
-    if (msg.t !== "pong") return false;
-    onPong(msg);
-    return true;
-  },
   onWelcome: (msg) => msg.t === "welcome" && onWelcome(msg.snap),
   onMessage,
   onState,
@@ -106,8 +97,8 @@ const attract = new Attract($<HTMLCanvasElement>("attract"));
 const me = (): PlayerState | undefined => shell.mine;
 const playerById = (id: string | null | undefined) => shell.player(id);
 const canHost = (s = shell.state) => shell.canHost(s);
-/** Until the first ping is back, the clock comes from the latest message. */
-const serverNow = () => Date.now() + (app.pings.length ? app.skew : shell.skew);
+/** Every bottle runs on the server's clock (the shell's, from the quickest recent ping). */
+const serverNow = () => shell.serverNow();
 const wallTick = () => app.view?.wall(serverNow()) ?? -1;
 const colorOf = (slot: number) => app.people.get(app.view?.who[slot] ?? "")?.color ?? "#8d94b8";
 
@@ -129,27 +120,12 @@ function onScreen(screen: Screen): void {
 function onReset(): void {
   app.view = null;
   app.viewKey = "";
-  app.pings = [];
   controls.reset();
   $("results").hidden = true;
 }
 
 function onWelcome(snap: RoundSnap | null): void {
-  ping();
   setView(snap);
-}
-
-/** Measure the server's clock: every bottle runs on it. */
-function ping(): void {
-  shell.send({ t: "ping", c: Date.now() });
-}
-
-function onPong(msg: Extract<ServerMsg, { t: "pong" }>): void {
-  if (typeof msg.c !== "number") return;
-  const rtt = Date.now() - msg.c;
-  app.pings.push({ rtt, skew: msg.now + rtt / 2 - Date.now() });
-  if (app.pings.length > 10) app.pings.shift();
-  app.skew = app.pings.reduce((a, b) => (b.rtt < a.rtt ? b : a)).skew;
 }
 
 // ------------------------------------------------------------------ messages
@@ -614,8 +590,9 @@ function wire(): void {
 
 wire();
 shell.start();
-// Measure the server's clock every couple of seconds while connected.
-setInterval(ping, 2000);
+// The shell pings on each welcome and every 5 s during a round. Every bottle runs on the server's
+// clock, so measure it more often, and in the lobby too, so it's settled before a round starts.
+setInterval(() => shell.conn?.ping(), 2000);
 requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) Object.assign(window, { __pp: { app, controls, shell } });

@@ -14,8 +14,6 @@ import { Game, newGameState, snapshot, type Live } from "./game";
 export class GameRoom extends Room<GameState, Game, Live> {
   protected readonly tickMs = TICK_MS;
   private rng = mulberry32(randomSeed());
-  /** The socket whose message is being handled. */
-  private current: WebSocket | null = null;
   /** When each socket was last sent a snapshot for a resync. */
   private resyncAt = new WeakMap<WebSocket, number>();
 
@@ -35,18 +33,12 @@ export class GameRoom extends Room<GameState, Game, Live> {
     return state.phase === "playing" && !!this.live;
   }
 
-  async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    this.current = ws;
-    await super.webSocketMessage(ws, raw);
-  }
-
   /**
    * A round that stopped ticking (nobody else was here, or the room restarted) picks back up.
    * One that's still ticking for the others carries on.
    */
   protected afterHello(game: Game): void {
-    const ticking = game.s.phase === "playing" && !!game.live && this.connectedIds(this.current ?? undefined).size > 0;
-    if (!ticking) game.recover();
+    if (!this.looping) game.recover();
   }
 
   protected welcome(game: Game): object {

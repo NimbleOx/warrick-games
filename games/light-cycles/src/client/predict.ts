@@ -16,6 +16,10 @@ const CLOCK_FRAMES = 30;
 const CLOCK_EASE = 0.05;
 /** Off by more than this (in ms), and it jumps straight there. */
 const CLOCK_JUMP_MS = 250;
+/** How late frames have come lately (`TickClock.late`) halves every this many ms. */
+const LATE_HALF_LIFE_MS = 2000;
+/** A frame later than this (in ms) counts as only this late: that's a hiccup, not how the network goes. */
+const MAX_LATE_MS = 150;
 /** Your cycle runs at most this many ticks past the newest frame. */
 const MAX_LEAD_TICKS = 10;
 /** How many ticks after it was due a turn can still show up before it counts as turned down. */
@@ -40,17 +44,32 @@ export class TickClock {
   /** The gap the clock goes by, easing towards the smallest of `gaps`. */
   private gap: number | null = null;
   private eased = 0;
+  /** The latest a frame has come lately, in ms after the clock had it due, and when that was. */
+  private lateMs = 0;
+  private lateAt = 0;
 
   reset(tickMs: number): void {
     this.tickMs = tickMs;
     this.gaps = [];
     this.gap = null;
+    this.lateMs = 0;
   }
 
   /** Frame `n` arrived at `now`. */
   heard(n: number, now: number): void {
-    this.gaps.push(now - n * this.tickMs);
+    const gap = now - n * this.tickMs;
+    this.gaps.push(gap);
     if (this.gaps.length > CLOCK_FRAMES) this.gaps.shift();
+    this.lateMs = Math.max(Math.min(MAX_LATE_MS, gap - (this.gap ?? gap)), this.late(now));
+    this.lateAt = now;
+  }
+
+  /**
+   * How late frames have come lately, in ms after this clock had them due: the latest of them,
+   * fading by half every few seconds. Playback waits that long for each frame (see `Playback`).
+   */
+  late(now: number): number {
+    return this.lateMs * 0.5 ** (Math.max(0, now - this.lateAt) / LATE_HALF_LIFE_MS);
   }
 
   /** The server's tick at `now`, as it looks from here (with fractions), or null before the first frame. */
@@ -58,7 +77,9 @@ export class TickClock {
     if (!this.gaps.length) return null;
     const target = Math.min(...this.gaps);
     if (this.gap === null || Math.abs(target - this.gap) > CLOCK_JUMP_MS) {
+      // Starting over: by the new reading, the frames so far weren't late.
       this.gap = target;
+      this.lateMs = 0;
     } else if (now > this.eased) {
       const most = (now - this.eased) * CLOCK_EASE;
       this.gap += Math.max(-most, Math.min(most, target - this.gap));
@@ -227,10 +248,9 @@ export class Predictor {
     const c0 = a.cycles[i];
     const last = c0.trail[c0.trail.length - 1];
     // Only the last line of the wall grows, so the rest can be shared.
-    const c: Cycle = { ...c0, alive: true, trail: [...c0.trail.slice(0, -1), [...last]] };
+    const c: Cycle = { ...c0, trail: [...c0.trail.slice(0, -1), [...last]] };
     let cur: [number, number] = [c.x, c.y];
-    // It sits still before the first frame (in the countdown). A crashed one waits where it hit
-    // until playback reaches the crash.
+    // It sits still before the first frame (in the countdown), and a crashed one where it hit.
     if (!c0.alive || this.clock.tick(now) === null) return { i, cycle: c, head: [cur[0] + 0.5, cur[1] + 0.5] };
 
     const shown = this.shownTick(now, rtt);

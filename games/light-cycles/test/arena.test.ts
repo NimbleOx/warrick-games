@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { steer, territory } from "../src/shared/ai";
-import { Arena, MAX_AHEAD_TICKS, spawnPoints, type ArenaConfig, type Dir } from "../src/shared/arena";
+import { Arena, MAX_AHEAD_TICKS, spawnPoints, type ArenaConfig, type Dir, type Frame } from "../src/shared/arena";
 import { ARENA_SIZES } from "../src/shared/constants";
 import { DEFAULT_SETTINGS, arenaConfig } from "../src/shared/protocol";
 import { mulberry32 } from "@warrick/kit/shared/rng";
@@ -203,6 +203,33 @@ describe("arena", () => {
     expect(server.aliveCount).toBeLessThanOrEqual(1);
     expect(client.snapshot()).toEqual(server.snapshot());
     expect(Array.from(client.grid)).toEqual(Array.from(server.grid));
+  });
+
+  it("shows a crash ahead of the frames before it, and ends up as the server did", () => {
+    const server = arena([
+      { x: 12, y: 4, dir: 1 },
+      { x: 0, y: 10, dir: 1 },
+    ]);
+    server.requestBoost(0, 3);
+    server.queueTurn(1, 0, 4);
+    const newest = new Arena(server.snapshot());
+    const shown = new Arena(server.snapshot());
+    const frames: Frame[] = [];
+    while (newest.cycles[0].alive) {
+      const f = server.step();
+      newest.apply(f);
+      frames.push(f);
+    }
+    // Playback is three frames behind when the crash comes in: the boost, the turn and the crash.
+    while (frames.length > 3) shown.apply(frames.shift()!);
+    expect(frames.flatMap((f) => f.e.map((e) => e.k))).toEqual(["boost", "crash"]);
+    shown.crashAs(0, newest.cycles[0]);
+    expect(shown.cycles[0]).toEqual(newest.cycles[0]);
+    expect(shown.grid.includes(1)).toBe(false); // its wall goes with it
+    for (const f of frames) shown.apply(f);
+    for (let k = 0; k < 3; k++) shown.apply(server.step());
+    expect(shown.snapshot()).toEqual(server.snapshot());
+    expect(Array.from(shown.grid)).toEqual(Array.from(server.grid));
   });
 
   it("rebuilds the grid from a snapshot", () => {

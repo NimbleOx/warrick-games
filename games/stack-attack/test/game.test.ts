@@ -160,6 +160,44 @@ describe("rounds", () => {
     expect(t.direct.map((d) => d.msg.t)).toEqual(["fix"]);
   });
 
+  it("doesn't overrule a lock that garbage crossed on its way in", () => {
+    const t = setup();
+    const ann = t.act((g) => g.addHuman("Ann"));
+    const bo = t.act((g) => g.addHuman("Bo"));
+    t.connect(ann.id);
+    t.connect(bo.id);
+    t.act((g) => g.start(ann.id));
+    t.advance(COUNTDOWN_MS);
+    const snap = t.act((g) => g.snapshot())!;
+    const annSlot = snap.who.indexOf(ann.id);
+    const mine = Lane.fromSnap(snap.seats[annSlot]!);
+    const bos = Lane.fromSnap(snap.seats[snap.who.indexOf(bo.id)]!);
+    // Ann's browser locks a piece, knowing of no garbage yet.
+    const pl = choose(mine, "easy", mulberry32(1), 0)!;
+    mine.lock(pl, 0);
+    const first = { e: 0, k: 0, pl, g: 0, ck: mine.checksum() };
+    // Before that lock reaches the server, Bo clears lines and the garbage is queued for Ann.
+    const rng = mulberry32(5);
+    const toAnn = () => ops(t.sent).find((o) => o.k === "g" && o.to === annSlot);
+    for (let k = 0; !toAnn(); k++) {
+      expect(k).toBeLessThan(200);
+      const bpl = choose(bos, "hard", rng, 0)!;
+      bos.lock(bpl, 0);
+      t.act((g) => g.lock(bo.id, { e: 0, k, pl: bpl, g: 0, ck: bos.checksum() }));
+    }
+    t.act((g) => g.lock(ann.id, first));
+    expect(t.direct).toHaveLength(0);
+    // The garbage reaches Ann's browser, and her next lock agrees with the server too.
+    const op = toAnn()!;
+    if (op.k !== "g") throw new Error("not garbage");
+    mine.queue.push({ id: op.id, lines: op.lines, hole: op.hole, from: op.from });
+    const next = choose(mine, "easy", mulberry32(2), op.id)!;
+    mine.lock(next, op.id);
+    t.act((g) => g.lock(ann.id, { e: 0, k: 1, pl: next, g: op.id, ck: mine.checksum() }));
+    expect(t.direct).toHaveLength(0);
+    expect(t.live!.round.seat(annSlot)!.lane.checksum()).toBe(mine.checksum());
+  });
+
   it("a player leaving mid-round can end it", () => {
     const t = setup();
     const host = t.act((g) => g.addHuman("Ann"));

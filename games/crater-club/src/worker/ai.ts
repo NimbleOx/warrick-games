@@ -6,9 +6,9 @@ import { WEAPONS, shopDef, weaponCount, type ShopId, type WeaponId } from "../sh
 import { worldFromState } from "../shared/world-state";
 
 const ERROR: Record<CpuLevel, { angle: number; power: number }> = {
-  easy: { angle: 9, power: 0.12 },
-  normal: { angle: 3, power: 0.04 },
-  hard: { angle: 1, power: 0.015 },
+  easy: { angle: 11, power: 0.14 },
+  normal: { angle: 4, power: 0.055 },
+  hard: { angle: 1.5, power: 0.02 },
 };
 
 const ATTACK_WEAPONS: WeaponId[] = [
@@ -61,8 +61,13 @@ export function chooseCpuShot(s: GameState, me: PlayerState, level: CpuLevel, rn
     return d;
   };
 
+  // Angles go up from the target's side, so the search meets its shots in the same order facing
+  // left or right, and among shots that hit it keeps the flattest. (Counting from 0° either way, a
+  // tank firing left picked a steep lob, which aim error and wind throw off far more.)
+  const dir = tx < tank.x ? -1 : 1;
   const candidates: { angle: number; power: number; d: number }[] = [];
-  for (let angle = 5; angle <= 175; angle += 5) {
+  for (let up = 5; up <= 175; up += 5) {
+    const angle = dir > 0 ? up : 180 - up;
     for (let power = 100; power <= maxPower; power += 50) {
       candidates.push({ angle, power, d: score(angle, power) });
     }
@@ -72,7 +77,7 @@ export function chooseCpuShot(s: GameState, me: PlayerState, level: CpuLevel, rn
   for (const c of candidates.slice(0, 3)) {
     for (let da = -4; da <= 4; da++) {
       for (let dp = -50; dp <= 50; dp += 10) {
-        const angle = c.angle + da;
+        const angle = c.angle + da * dir;
         const power = c.power + dp;
         if (angle < 0 || angle > 180 || power < 0 || power > maxPower) continue;
         const d = score(angle, power);

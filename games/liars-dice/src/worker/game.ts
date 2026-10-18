@@ -1,6 +1,7 @@
 import type { BasePlayer, CpuLevel } from "@warrick/kit/shared/protocol";
 import { mulberry32, randomSeed, shuffle } from "@warrick/kit/shared/rng";
-import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { GameError, Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
+import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
 import { cpuMove, type CpuView } from "../shared/ai";
 import { AWAY_MS, CPU_THINK_MAX_MS, CPU_THINK_MIN_MS, MAX_DICE, START_DICE, revealMs } from "../shared/constants";
 import {
@@ -18,6 +19,8 @@ import { rollDice } from "./dice";
 export { GameError, type GameIO } from "@warrick/kit/worker/lobby";
 
 const CPU_NAMES = ["Pablo", "Dolores", "Gizmo", "Mabel", "Rex", "Pixel", "Bones", "Lucky", "Moxie", "Snake Eyes"];
+/** The turn clock: whoever isn't here on their turn has AWAY_MS before the game moves for them. */
+const CLOCK: ClockRules = { awayMs: AWAY_MS };
 
 export function newGameState(code: string, now: number): GameState {
   return {
@@ -25,6 +28,7 @@ export function newGameState(code: string, now: number): GameState {
     round: 0,
     order: [],
     turnId: null,
+    clockEnd: null,
     turnDeadline: null,
     bids: [],
     reveal: null,
@@ -44,6 +48,16 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
   protected readonly choices = SETTING_CHOICES;
   protected readonly cpuNames = CPU_NAMES;
   protected readonly finishedPhase = "gameover";
+
+  constructor(s: GameState, io: GameIO, live: Hands | null = null) {
+    super(s, io, live);
+    // A game saved before the kit's turn clock kept the clock in `turnDeadline`, and when the
+    // turn really ends in its timer.
+    if (s.clockEnd === undefined) {
+      s.clockEnd = s.turnDeadline;
+      if (s.timer?.kind === "turn") s.turnDeadline = s.timer.at;
+    }
+  }
 
   protected betweenRounds(): boolean {
     return this.s.phase === "lobby";
@@ -92,16 +106,14 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
     if (!p || p.cpu) return;
     // Every hello lands here: (re)send the player their own cup.
     if (connected) this.sendHand(id);
+    // A second tab, or a hello from someone already here, changes nothing else.
     if (p.connected === connected) return;
     p.connected = connected;
     const s = this.s;
     if (s.phase === "playing" && s.turnId === id) {
-      // A missing player gets a short grace before the game moves for them; back in time, they get their clock back.
-      s.timer = connected
-        ? s.turnDeadline
-          ? { kind: "turn", at: s.turnDeadline }
-          : null
-        : { kind: "turn", at: Math.min(s.turnDeadline ?? Infinity, this.io.now() + AWAY_MS) };
+      // A missing player gets a short grace before the game moves for them; back, they get the clock they had.
+      const now = this.io.now();
+      this.armTurn(connected ? turnHolderBack(s, CLOCK, now) : turnHolderLeft(s, CLOCK, now));
     }
     this.touch();
   }
@@ -151,7 +163,7 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
     s.round = 0;
     s.order = [];
     s.turnId = null;
-    s.turnDeadline = null;
+    s.clockEnd = s.turnDeadline = null;
     s.bids = [];
     s.reveal = null;
     s.timer = null;
@@ -212,14 +224,17 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
     const now = this.io.now();
     s.turnId = id;
     if (p.cpu) {
-      s.turnDeadline = null;
+      s.clockEnd = s.turnDeadline = null;
       s.timer = { kind: "cpu", at: now + CPU_THINK_MIN_MS + Math.random() * (CPU_THINK_MAX_MS - CPU_THINK_MIN_MS) };
     } else {
-      s.turnDeadline = s.settings.turnSeconds ? now + s.settings.turnSeconds * 1000 : null;
-      const at = this.io.isConnected(id) ? s.turnDeadline : Math.min(s.turnDeadline ?? Infinity, now + AWAY_MS);
-      s.timer = at === null ? null : { kind: "turn", at };
+      this.armTurn(startTurnClock(s, CLOCK, now, s.settings.turnSeconds * 1000, this.io.isConnected(id)));
     }
     this.touch();
+  }
+
+  /** The timer for a human's turn: it ends at `at`, or never. */
+  private armTurn(at: number | null): void {
+    this.s.timer = at === null ? null : { kind: "turn", at };
   }
 
   private nextTurn(): void {
@@ -261,10 +276,11 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
 
   private call(caller: PlayerState, kind: "liar" | "spot"): void {
     const s = this.s;
+    // First the cups: if they were lost, the round is rolled again and its bids are gone with it.
+    const hands = this.hands();
     const last = s.bids.at(-1);
     if (!last) throw new GameError("Nothing to call yet: make the first bid");
     const bidder = this.player(last.by)!;
-    const hands = this.hands();
     const cups = s.order.filter((id) => hands.dice[id]?.length).map((id) => ({ id, dice: [...hands.dice[id]] }));
     const result = resolveCall(kind, last, cups.map((c) => c.dice), this.rules);
     const loser = result.loser === "caller" ? caller : result.loser === "bidder" ? bidder : null;
@@ -310,7 +326,7 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
     };
     s.phase = "reveal";
     s.turnId = null;
-    s.turnDeadline = null;
+    s.clockEnd = s.turnDeadline = null;
     s.timer = { kind: "reveal", at: now + revealMs(result.count) };
     this.touch();
   }
@@ -338,7 +354,7 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
     const winner = this.alive[0] ?? null;
     s.phase = "gameover";
     s.turnId = null;
-    s.turnDeadline = null;
+    s.clockEnd = s.turnDeadline = null;
     s.timer = null;
     s.winnerId = winner?.id ?? null;
     if (winner) {
@@ -382,7 +398,10 @@ export class Game extends Lobby<GameState, ServerMsg, Hands> {
       const p = this.player(s.turnId ?? "");
       if (s.phase === "playing" && p && this.canPlay(p.id)) {
         if (t.kind === "cpu" && p.cpu) this.autoMove(p, p.cpu);
-        else {
+        else if (!turnTimeUp(s, CLOCK, this.io.now())) {
+          // Not yet, or noticed long after (the room was empty or restarting): there's time to come back.
+          this.armTurn(s.turnDeadline);
+        } else {
           this.event(this.io.isConnected(p.id) ? `⏱ ${p.name} ran out of time` : `${p.name} is away, so the game moved for them`);
           this.autoMove(p, "normal");
         }

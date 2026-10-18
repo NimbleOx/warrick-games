@@ -16,6 +16,7 @@ import { FACES, bidError, bidText, counts, minQty, type RoundRules } from "../sh
 import { Attract } from "./attract";
 import { sfx } from "./audio";
 import { dieSvg, hiddenDie } from "./dice";
+import { Pending } from "./pending";
 
 // ------------------------------------------------------------------ app state
 
@@ -27,8 +28,6 @@ const app = {
   face: null as number | null,
   /** Which turn the picker was last set up for. */
   turnKey: "",
-  /** A move is on its way to the server. */
-  sending: false,
   /** The reveal being animated, and how far its count has got (for the ticks). */
   revealKey: "",
   revealShown: -1,
@@ -37,6 +36,12 @@ const app = {
   bidsHeard: "",
   gameoverClosed: false,
 };
+
+/** A move on its way to the server. */
+const move = new Pending(6000, () => {
+  if (shell.state) renderPicker(shell.state);
+  toast("The server didn't answer — try again");
+});
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "liars-dice",
@@ -59,7 +64,7 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   },
   choices: SETTING_CHOICES,
   onWelcome: () => {
-    app.sending = false;
+    move.answered();
     app.turnKey = "";
   },
   onMessage,
@@ -106,7 +111,7 @@ function onReset(): void {
   app.hand = null;
   app.turnKey = "";
   app.revealKey = "";
-  app.sending = false;
+  move.answered();
   app.gameoverClosed = false;
   $("gameover").hidden = true;
 }
@@ -120,14 +125,14 @@ function onMessage(msg: ServerMsg): void {
       break;
     case "error":
       // The shell has shown the message.
-      app.sending = false;
+      move.answered();
       if (shell.state) renderPicker(shell.state);
       break;
   }
 }
 
 function onState(s: GameState, prev: GameState | null): void {
-  app.sending = false;
+  move.answered();
   if (s.phase === "lobby") {
     app.gameoverClosed = false;
     return;
@@ -335,7 +340,7 @@ function renderPicker(s: GameState): void {
   picker.hidden = !inGame || s.phase === "gameover";
   if (picker.hidden) return;
 
-  const mine = isMyTurn(s) && !app.sending;
+  const mine = isMyTurn(s) && !move.waiting;
   const rules = rulesOf(s);
   const total = tableDice(s);
   const last = s.bids.at(-1) ?? null;
@@ -373,7 +378,7 @@ function renderPicker(s: GameState): void {
   const turn = player(s.turnId);
   let why = "";
   if (s.phase === "reveal") why = "The cups are up…";
-  else if (app.sending) why = "Sending…";
+  else if (move.waiting) why = "Sending…";
   else if (!isMyTurn(s)) why = turn ? `Waiting for ${esc(turn.name)}…` : "";
   else if (!chosen) why = last ? `Pick a quantity and a face that raise ${bidText(last)}, or call Liar!` : "Open the bidding: pick a quantity and a face.";
   const whyEl = $("why");
@@ -517,20 +522,14 @@ function frame(now: number): void {
 
 function send(msg: ClientMsg): void {
   const s = shell.state;
-  if (!s || !isMyTurn(s) || app.sending) return;
+  if (!s || !isMyTurn(s) || move.waiting) return;
   unlockAudio();
   if (!shell.send(msg)) {
     toast("Not connected — reconnecting, try again in a moment");
     return;
   }
-  app.sending = true;
+  move.start();
   renderPicker(s);
-  window.setTimeout(() => {
-    if (!app.sending) return;
-    app.sending = false;
-    if (shell.state) renderPicker(shell.state);
-    toast("The server didn't answer — try again");
-  }, 6000);
 }
 
 function placeBid(): void {
@@ -608,4 +607,4 @@ wire();
 shell.start();
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) Object.assign(window, { __ld: { app, shell, animateReveal, renderGame } });
+if (import.meta.env.DEV) Object.assign(window, { __ld: { app, move, shell, animateReveal, renderGame } });

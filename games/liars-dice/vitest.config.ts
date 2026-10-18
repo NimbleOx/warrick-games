@@ -1,10 +1,8 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-// The tests run in Node. The privacy test runs the real room, with the Workers runtime module swapped for a stub.
+// The tests run in Node. The room tests run the real room, with the Workers runtime module
+// swapped for the kit's stub.
 export default defineConfig({
-  resolve: {
-    alias: { "cloudflare:workers": fileURLToPath(new URL("./test/stubs/cloudflare-workers.ts", import.meta.url)) },
-  },
+  resolve: { alias: { "cloudflare:workers": "@warrick/kit/testing/cloudflare-workers" } },
   test: { include: ["test/**/*.test.ts"] },
 });

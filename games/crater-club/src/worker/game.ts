@@ -213,6 +213,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
       const weapon = weaponCount(p.inventory, p.aim.weapon) > 0 ? p.aim.weapon : "baby_missile";
       p.aim = { angle: x < WORLD_W / 2 ? 60 : 120, power: 500, weapon };
       p.ready = false;
+      p.lastShot = null;
     });
     s.terrain = heights;
     s.turnOrder = order;

@@ -11,6 +11,14 @@ const ERROR: Record<CpuLevel, { angle: number; power: number }> = {
   hard: { angle: 1.5, power: 0.02 },
 };
 
+/**
+ * Easy CPUs bracket, like a human: each shot in a row that missed the same tank takes a quarter off
+ * their aim error, down to a third of it. (Without it, two easy CPUs could miss each other for 30
+ * turns, and one round in seven between them ended in the stalemate draw.)
+ */
+const BRACKET = 0.75;
+const BRACKET_FLOOR = 0.33;
+
 const ATTACK_WEAPONS: WeaponId[] = [
   "deaths_head",
   "nuke",
@@ -33,7 +41,10 @@ const ATTACK_WEAPONS: WeaponId[] = [
  */
 const PLAYED_THROUGH = new Set<WeaponId>(["hot_napalm", "napalm", "sandhog", "laser"]);
 
-/** Search angle/power space for the shot that lands closest to a target, then fumble it a bit. */
+/**
+ * Search angle/power space for the shot that lands closest to a target, then fumble it a bit.
+ * An easy CPU notes the shot in `me.lastShot`, to steady its aim if it misses.
+ */
 export function chooseCpuShot(s: GameState, me: PlayerState, level: CpuLevel, rng: Rng): Aim {
   const world = worldFromState(s);
   const tank = me.tank!;
@@ -110,9 +121,19 @@ export function chooseCpuShot(s: GameState, me: PlayerState, level: CpuLevel, rn
     }
   }
 
+  // If the target's health and shield are as they were at the last shot, that shot missed.
+  let steady = 1;
+  if (level === "easy") {
+    const life = target.tank!.health + target.tank!.shield;
+    const last = me.lastShot;
+    const misses = last && last.target === target.id && last.life === life ? last.misses + 1 : 0;
+    me.lastShot = { target: target.id, life, misses };
+    steady = Math.max(BRACKET_FLOOR, BRACKET ** misses);
+  }
+
   const err = ERROR[level];
-  const angle = Math.round(choice.angle + (rng() * 2 - 1) * err.angle);
-  const power = Math.round(choice.power * (1 + (rng() * 2 - 1) * err.power));
+  const angle = Math.round(choice.angle + (rng() * 2 - 1) * err.angle * steady);
+  const power = Math.round(choice.power * (1 + (rng() * 2 - 1) * err.power * steady));
   return {
     angle: Math.min(180, Math.max(0, angle)),
     power: Math.min(maxPower, Math.max(0, power)),

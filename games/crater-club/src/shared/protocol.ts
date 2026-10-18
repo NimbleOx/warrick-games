@@ -56,6 +56,11 @@ export interface PlayerState extends BasePlayer {
   ready: boolean;
   tank: TankState | null;
   aim: Aim;
+  /**
+   * An easy CPU's last shot this round: whom it aimed at, their health and shield then, and how
+   * many shots in a row at them had missed before it. Missing from games saved before it.
+   */
+  lastShot?: { target: string; life: number; misses: number } | null;
 }
 
 export interface Timer {

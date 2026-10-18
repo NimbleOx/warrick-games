@@ -174,6 +174,26 @@ const MINI_ATTACK = [0, 0, 1, 2];
 const COMBO_ATTACK = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5];
 const PERFECT_CLEAR_ATTACK = 10;
 
+const CLEAR_POINTS = [0, 100, 300, 500, 800];
+const TSPIN_POINTS = [400, 800, 1200, 1600];
+const MINI_POINTS = [100, 200, 400];
+const PERFECT_CLEAR_POINTS = [0, 800, 1200, 1800, 2000];
+
+/**
+ * Points for a lock, the usual guideline way: the clear (T-spins worth more), half as much
+ * again for a back-to-back, 50 per combo step and a perfect-clear bonus, all times the level.
+ * The level goes up with time, so only the server scores, like the garbage multiplier: keep it
+ * out of `Lane`.
+ */
+export function lockPoints(res: LockResult, level: number): number {
+  const lines = res.cleared.length;
+  let pts = (res.spin === SPIN_FULL ? TSPIN_POINTS : res.spin === SPIN_MINI ? MINI_POINTS : CLEAR_POINTS)[lines] ?? 0;
+  if (res.b2b) pts *= 1.5;
+  if (lines && res.combo > 0) pts += 50 * res.combo;
+  if (res.pc) pts += PERFECT_CLEAR_POINTS[lines] ?? 0;
+  return Math.round(pts * level);
+}
+
 /**
  * One player's board, piece queue, hold, combo and incoming garbage. Both sides run the same
  * code: the player's browser locks pieces into its copy as they land, and the server replays

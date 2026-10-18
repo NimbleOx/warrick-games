@@ -9,8 +9,9 @@ A falling-block battle game like *Tetris 99* or a *Puyo Puyo Tetris* versus matc
 - Garbage timing: a clear cancels garbage up to the `known` id the lock reports; a lock without a clear lets in garbage up to the previous lock's `known`. Don't make it time-based inside `Lane`: it would differ between browser and server. Only the server puts a time floor under `known`: garbage sent more than `SEEN_AFTER_MS` (2 s) before a lock arrives counts as known whatever the lock says, and that lock is overruled. Otherwise a modified browser could keep garbage out forever by never reporting it.
 - The garbage multiplier (`attackScale`) depends on time, so it's applied only on the server, to what goes out. Keep it out of `Lane`.
 - The server is the authority. When it disagrees with a browser it bumps the board's epoch and sends a `fix`; it never trusts a placement it couldn't reach with `explore()`, nor locks faster than `LOCK_BURST`/`LOCK_RATE` allow (bursts of 20, 10 a second, far beyond any human).
+- Solo: a round with one seat (`Round.solo`) is played until that player tops out, not to the last one standing; garbage with nobody to go to isn't sent, and nobody wins. The score (`lockPoints`) is times the level, which is time-based, so like `attackScale` it's the server's alone and stays out of `Lane`. An away solo player gets no autopilot, and the hanging-piece deadline waits for them.
 - Super Rotation System turns and kicks, 500 ms lock delay with 15 move resets, guideline gravity curve. Keep the controls local: no input should wait on the network.
 
 ## Not in v1
 
-Opponents' falling pieces, 180° turns, per-player targeting (like *Tetris 99*'s attacker/KO modes), key remapping, and a solo marathon or sprint mode. Design so they can be added.
+Opponents' falling pieces, 180° turns, per-player targeting (like *Tetris 99*'s attacker/KO modes), key remapping, soft and hard drop points, a pause, and solo sprint or ultra modes. Design so they can be added.

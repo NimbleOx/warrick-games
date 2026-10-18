@@ -1,7 +1,7 @@
 import { choose, cpuPace, type CpuLevel } from "../shared/ai";
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { COLS, LOCK_DELAY_MS, MAX_LOCK_RESETS, SPAWN_X, SPAWN_Y } from "../shared/constants";
-import { Lane, reachable, type LockResult, type Placement } from "../shared/engine";
+import { Lane, lockPoints, reachable, type LockResult, type Placement } from "../shared/engine";
 import { isPiece } from "../shared/pieces";
 import {
   attackScale,
@@ -43,6 +43,8 @@ interface Seat {
   kos: number;
   /** Garbage sent, after the multiplier. */
   atk: number;
+  /** Points scored: what solo play counts. */
+  score: number;
   place: number;
   outAt: number;
   cpu: CpuLevel | null;
@@ -81,6 +83,8 @@ export class Round {
   readonly goAt: number;
   readonly speed: Speed;
   readonly aim: Aim;
+  /** One player on their own: no garbage, and the round goes on until they top out. */
+  readonly solo: boolean;
   seats: (Seat | null)[] = Array(MAX_PLAYERS).fill(null);
   over = false;
   /** Ops since the last frame went out. */
@@ -96,6 +100,7 @@ export class Round {
     this.speed = o.speed;
     this.aim = o.aim;
     this.rng = o.rng;
+    this.solo = o.slots.length === 1;
     for (const { slot, cpu } of o.slots) {
       this.seats[slot] = {
         slot,
@@ -107,6 +112,7 @@ export class Round {
         locksAt: o.goAt,
         kos: 0,
         atk: 0,
+        score: 0,
         place: 0,
         outAt: 0,
         cpu,
@@ -168,6 +174,10 @@ export class Round {
         if (now < seat.nextMoveAt) continue;
         this.autoMove(seat, seat.cpu, now);
         seat.nextMoveAt = now + cpuPace(seat.cpu, this.rng);
+      } else if (away(seat.slot) && this.solo) {
+        // Nobody's waiting on a solo board: it waits for its player, with no autopilot and
+        // no deadline running.
+        seat.lastLockAt = now;
       } else if (away(seat.slot)) {
         if (!seat.awaySince) {
           seat.awaySince = now;
@@ -208,11 +218,18 @@ export class Round {
       who,
       seats: this.seats.map((s) => (s ? this.seatSnap(s) : null)),
       over: this.over,
+      solo: this.solo,
     };
   }
 
   seatSnap(s: Seat): SeatSnap {
-    return { ...s.lane.snap(), e: s.e, g: s.g, kos: s.kos, atk: s.atk, place: s.place };
+    return { ...s.lane.snap(), e: s.e, g: s.g, kos: s.kos, atk: s.atk, sc: s.score, place: s.place };
+  }
+
+  /** The level a slot reached: where the speed was when they went out, or is now. */
+  reached(slot: number, now: number): number {
+    const s = this.seats[slot];
+    return this.level(s?.outAt || now);
   }
 
   /** Seconds each slot lasted. */
@@ -273,6 +290,7 @@ export class Round {
   private landed(seat: Seat, res: LockResult, now: number): void {
     const lane = seat.lane;
     seat.lastLockAt = now;
+    seat.score += lockPoints(res, this.level(now));
     const out = res.sent && Math.round(res.sent * attackScale(this.speed, now - this.goAt));
     const target = out ? this.target(seat.slot) : null;
     if (target) seat.atk += out;
@@ -288,6 +306,7 @@ export class Round {
       q: lane.pending(),
       lines: lane.lines,
       atk: seat.atk,
+      sc: seat.score,
       c: res.cleared.length,
       sp: res.spin,
       a: res.attack,
@@ -327,7 +346,8 @@ export class Round {
     const killer = by >= 0 && by !== seat.slot ? this.seats[by] : null;
     if (killer) killer.kos++;
     this.ops.push({ k: "ko", s: seat.slot, by: killer ? by : -1, place: seat.place });
-    if (this.alive <= 1) {
+    // Last one standing, or on your own, topping out.
+    if (this.alive <= (this.solo ? 0 : 1)) {
       this.over = true;
       for (const s of this.seats) {
         if (s && !s.lane.out) {

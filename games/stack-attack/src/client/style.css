@@ -463,6 +463,11 @@ kbd {
   .handling .setting .label {
     grid-column: 1 / -1;
   }
+
+  /* The kit sets this too, but .game-topbar above would win. */
+  .topbar {
+    padding: 8px 10px;
+  }
 }
 
 @media (max-width: 420px) {

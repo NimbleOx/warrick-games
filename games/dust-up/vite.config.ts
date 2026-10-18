@@ -1,9 +1,10 @@
-import { defineConfig } from "vite";
+import { gameConfig } from "@warrick/kit/vite";
 
-// Milestone 1 is a client-only sandbox: no Worker yet, so not the kit's gameConfig (milestone 4).
-// It's served under /dust-up/ already, like the finished game will be. check.html is the
-// determinism check to open in each browser.
-export default defineConfig({
-  base: "/dust-up/",
-  build: { rollupOptions: { input: { main: "index.html", check: "check.html" } } },
+// Served at warrick.games/dust-up/, next to the hub and the other games (see wrangler.jsonc).
+// The client has a second page, check.html: the determinism check, to open in each browser (see
+// the README).
+export default gameConfig("dust-up", {
+  environments: {
+    client: { build: { rollupOptions: { input: { main: "index.html", check: "check.html" } } } },
+  },
 });

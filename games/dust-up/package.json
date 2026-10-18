@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
+    "typecheck": "tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "vitest run",
-    "bench": "vitest bench --run"
+    "bench": "vitest bench --run",
+    "cf-typegen": "wrangler types --include-runtime=false"
   }
 }

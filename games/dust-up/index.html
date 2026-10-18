@@ -3,7 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Dust Up · bike sandbox</title>
+    <title>Dust Up</title>
+    <meta name="description" content="Side-on dirt bike races for friends. No accounts — create a game and share the code." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Warrick Games" />
+    <meta property="og:title" content="Dust Up" />
+    <meta property="og:description" content="Side-on dirt bike races for friends. No accounts — create a game and share the code." />
+    <meta property="og:url" content="https://warrick.games/dust-up/" />
+    <meta property="og:image" content="https://warrick.games/dust-up/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Dust Up: Race your friends over jumps, gaps and whoops on dirt bikes. Fastest time wins." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#1c120b" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,21 +26,112 @@
     <link rel="stylesheet" href="/src/client/style.css" />
   </head>
   <body>
-    <canvas id="view"></canvas>
-    <div class="hud">
-      <div class="hud-left">
-        <div class="brand">DUST UP <span class="tag">sandbox</span></div>
-        <div class="clock" id="clock">0:00.00</div>
-        <div class="stats"><span id="speed">0 km/h</span> · <span id="checkpoint">CP 0</span></div>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">DUST UP <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="ghost-toggle" class="btn btn-ghost" title="Show your best run on this course (G)" aria-pressed="false">Ghost</button>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="stage-col">
+          <div class="stage" id="stage">
+            <canvas id="game-canvas"></canvas>
+
+            <div class="strip" id="strip" aria-hidden="true"><div class="strip-line"></div></div>
+
+            <div class="hud" id="hud">
+              <div class="hud-main">
+                <div class="hud-clock" id="hud-clock">0:00.00</div>
+                <div class="hud-sub"><span id="hud-course"></span><span id="hud-place"></span></div>
+              </div>
+              <div class="hud-side">
+                <div class="hud-speed" id="hud-speed"></div>
+                <div class="hud-end" id="hud-end" hidden></div>
+                <div class="hud-split" id="hud-split" hidden></div>
+              </div>
+            </div>
+
+            <div class="banner" id="banner" hidden></div>
+            <div class="lean-meter" id="lean-meter" hidden><i></i></div>
+          </div>
+          <div class="pad" id="pad" hidden>
+            <div class="pad-left">
+              <button class="btn pad-btn" data-ctl="back" aria-label="Lean back">◀</button>
+              <button class="btn pad-btn" data-ctl="forward" aria-label="Lean forward">▶</button>
+            </div>
+            <div class="pad-right">
+              <button class="btn pad-btn pad-reset" data-ctl="reset" aria-label="Back to the checkpoint">↺</button>
+              <button class="btn pad-btn" data-ctl="brake" aria-label="Brake">BRAKE</button>
+              <button class="btn pad-btn pad-gas" data-ctl="gas" aria-label="Gas">GAS</button>
+            </div>
+          </div>
+          <p class="keys-hint" id="keys-hint">
+            <kbd>↑</kbd>/<kbd>W</kbd>/<kbd>Space</kbd> gas · <kbd>↓</kbd>/<kbd>S</kbd> brake · <kbd>←</kbd><kbd>→</kbd>/<kbd>A</kbd><kbd>D</kbd> lean ·
+            <kbd>R</kbd> back to checkpoint · <kbd>G</kbd> ghost · or click the course to ride with the mouse
+          </p>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel">
+            <div class="panel-head"><h2>Riders</h2></div>
+            <ul id="game-players" class="game-players"></ul>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Pit chat</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Talk trash…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
       </div>
-      <div class="hud-right" id="perf"></div>
-    </div>
-    <div class="banner" id="banner" hidden></div>
-    <div class="help">
-      <b>↑/W</b> gas · <b>↓/S</b> brake · <b>←/A</b> lean back · <b>→/D</b> lean forward · <b>R</b> back to checkpoint ·
-      <b>Enter</b> restart
-    </div>
-    <div class="tune" id="tune" hidden></div>
+
+      <!-- After each course -->
+      <div class="modal-back" id="results" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="results-title">
+          <h2 id="results-title" class="results-title"></h2>
+          <p class="winner-line" id="results-line"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Rider</th><th>Time</th><th>Gap</th><th>Points</th><th>Total</th></tr>
+            </thead>
+            <tbody id="results-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <p class="hint" id="results-next"></p>
+            <div class="results-solo" id="results-solo" hidden>
+              <button class="btn" id="results-again">Ride it again</button>
+              <button class="btn btn-primary" id="results-on">Next course</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Final standings -->
+      <div class="modal-back" id="gameover" hidden>
+        <div class="modal gameover-modal" role="dialog" aria-labelledby="gameover-title">
+          <h2 id="gameover-title" class="gameover-title">Series over</h2>
+          <p class="winner-line" id="gameover-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Rider</th><th>Points</th><th>Wins</th></tr>
+            </thead>
+            <tbody id="gameover-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <button id="gameover-lobby" class="btn btn-primary" data-action="lobby">Back to lobby</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <script type="module" src="/src/client/main.ts"></script>
   </body>
 </html>

@@ -1,0 +1,9 @@
+{
+  "extends": "@warrick/kit/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["vitest"],
+    "resolveJsonModule": true
+  },
+  "include": ["src/worker", "src/shared", "test", "worker-configuration.d.ts", "../../packages/kit/worker-runtime.d.ts"]
+}

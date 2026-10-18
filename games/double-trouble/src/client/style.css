@@ -84,6 +84,20 @@
   text-overflow: ellipsis;
 }
 
+/* A solo round has no rocks: no meters to explain, and moves in their place. */
+.screen-game.solo .legend {
+  visibility: hidden;
+}
+
+.screen-game.solo .rock-hint {
+  display: none;
+}
+
+.hud:not(.solo) [data-solo],
+.hud.solo [data-versus] {
+  display: none;
+}
+
 .hud-stat {
   flex: 1;
 }
@@ -422,6 +436,15 @@ kbd {
   /* Score and KOs are in the scoreboard too: leave the HUD room for the rest. */
   .hud .hud-score,
   .hud .hud-kos {
+    display: none;
+  }
+
+  /* On your own, the score is the point: show it, and leave the moves to the scoreboard. */
+  .hud.solo .hud-score {
+    display: flex;
+  }
+
+  .hud.solo [data-solo] {
     display: none;
   }
 

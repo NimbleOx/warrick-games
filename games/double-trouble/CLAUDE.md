@@ -10,8 +10,9 @@ A 2048 battle game: everyone plays their own board at once, and merges send rock
 - The rock multiplier (`attackScale`) depends on time, so it's applied only on the server, to what goes out. Keep it out of `Lane`.
 - Idle drops are a server action: `Lane.drop()`, then an overrule so the browser takes the new board. Rocks with nowhere to land bury an idle player.
 - The server is the authority. When it disagrees with a browser it bumps the board's epoch and sends a `fix`. Moves from an older epoch are ignored; a move with the right epoch that doesn't replay is overruled, and so is one beyond `MOVE_BURST`/`MOVE_RATE` (bursts of 20, 15 a second, faster than any human).
+- Solo: a round with one seat (`Round.solo`) has no goal from the settings: making `SOLO_GOAL` (2048) sends a `goal` op and marks the seat `won`, but the round goes on until they run out of moves. Rocks with nobody to go to aren't sent, and nobody wins the round.
 - Keep the controls local: no move should wait on the network. A held key moves once.
 
 ## Not in v1
 
-Undo, a solo mode, per-player targeting, bigger boards than 5 × 5, rocks that take more than one hit (`ROCK_HP` and the cracked look are there, unused), and animations on the opponents' boards. Design so they can be added.
+Undo, per-player targeting, bigger boards than 5 × 5, rocks that take more than one hit (`ROCK_HP` and the cracked look are there, unused), and animations on the opponents' boards. Design so they can be added.

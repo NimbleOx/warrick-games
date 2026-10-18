@@ -1,4 +1,5 @@
-export type WeaponKind = "missile" | "mirv" | "funky" | "leapfrog" | "roller" | "dirt" | "tracer";
+export type WeaponKind =
+  "missile" | "mirv" | "funky" | "leapfrog" | "roller" | "sandhog" | "napalm" | "laser" | "dirt" | "tracer";
 
 export type WeaponId =
   | "baby_missile"
@@ -8,8 +9,12 @@ export type WeaponId =
   | "mirv"
   | "deaths_head"
   | "funky_bomb"
+  | "napalm"
+  | "hot_napalm"
   | "leapfrog"
   | "roller"
+  | "sandhog"
+  | "laser"
   | "dirt_clod"
   | "dirt_ball"
   | "tracer";
@@ -36,6 +41,12 @@ export interface WeaponDef {
   bombletDamage?: number;
   /** Leapfrog: extra hops after the first impact. */
   bounces?: number;
+  /** Napalm: blobs of burning fuel, the health per second it burns off a tank sitting in it, and for how long. */
+  fuel?: number;
+  burn?: number;
+  burnSecs?: number;
+  /** Laser: how far the beam reaches at full power. Sandhog: how far it burrows. */
+  reach?: number;
 }
 
 export interface ItemDef {
@@ -124,6 +135,32 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     bombletRadius: 22,
     bombletDamage: 35,
   },
+  napalm: {
+    id: "napalm",
+    name: "Napalm",
+    kind: "napalm",
+    desc: "Burning fuel that runs downhill and pools. Great into a valley.",
+    price: 5000,
+    bundle: 3,
+    radius: 30,
+    damage: 0,
+    fuel: 40,
+    burn: 18,
+    burnSecs: 3.5,
+  },
+  hot_napalm: {
+    id: "hot_napalm",
+    name: "Hot Napalm",
+    kind: "napalm",
+    desc: "More fuel, burning hotter and for longer.",
+    price: 9000,
+    bundle: 2,
+    radius: 50,
+    damage: 0,
+    fuel: 70,
+    burn: 25,
+    burnSecs: 4.5,
+  },
   leapfrog: {
     id: "leapfrog",
     name: "Leapfrog",
@@ -144,6 +181,28 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     bundle: 5,
     radius: 30,
     damage: 65,
+  },
+  sandhog: {
+    id: "sandhog",
+    name: "Sandhog",
+    kind: "sandhog",
+    desc: "Burrows through hills and blows up under whoever is behind them.",
+    price: 5000,
+    bundle: 3,
+    radius: 32,
+    damage: 70,
+    reach: 180,
+  },
+  laser: {
+    id: "laser",
+    name: "Laser",
+    kind: "laser",
+    desc: "A straight beam: no gravity, no wind. Cuts through hills. Power sets its range.",
+    price: 6000,
+    bundle: 3,
+    radius: 0,
+    damage: 50,
+    reach: 1200,
   },
   dirt_clod: {
     id: "dirt_clod",

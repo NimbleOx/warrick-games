@@ -1,12 +1,24 @@
 import { DEFAULT_COLORS as PLAYER_COLORS } from "@warrick/kit/shared/constants";
-import { THEME_COUNT, TICK_MS, WORLD_W } from "../shared/constants";
+import { THEME_COUNT, TICK_MS, TURRET_Y, WORLD_W } from "../shared/constants";
 import { mulberry32, randInt, randomSeed, type Rng } from "@warrick/kit/shared/rng";
 import { World, launchFor } from "../shared/sim";
 import { TERRAIN_STYLES, flattenPad, generateTerrain } from "../shared/terrain";
 import type { WeaponId } from "../shared/weapons";
 import { Renderer, type TankInfo } from "./render";
 
-const DEMO_WEAPONS: WeaponId[] = ["missile", "baby_nuke", "mirv", "funky_bomb", "leapfrog", "roller", "missile", "nuke"];
+const DEMO_WEAPONS: WeaponId[] = [
+  "missile",
+  "baby_nuke",
+  "mirv",
+  "funky_bomb",
+  "leapfrog",
+  "roller",
+  "missile",
+  "nuke",
+  "napalm",
+  "sandhog",
+  "laser",
+];
 
 /** Self-playing demo battle behind the home screen. */
 export class Attract {
@@ -91,10 +103,16 @@ export class Attract {
         if (d < best.d) best = { angle, power, d };
       }
     }
-    const angle = best.angle + Math.round((rng() - 0.5) * 6);
-    const power = Math.round(best.power * (1 + (rng() - 0.5) * 0.08));
+    let angle = best.angle + Math.round((rng() - 0.5) * 6);
+    let power = Math.round(best.power * (1 + (rng() - 0.5) * 0.08));
+    let weapon = DEMO_WEAPONS[Math.floor(rng() * DEMO_WEAPONS.length)];
+    if (weapon === "laser") {
+      // Lasers go straight, so they only fire at someone level or higher up.
+      const direct = Math.round((Math.atan2(target.y + 6 - (me.y + TURRET_Y), target.x - me.x) * 180) / Math.PI);
+      if (direct >= 0 && direct <= 180) [angle, power] = [direct, 1000];
+      else weapon = "missile";
+    }
     this.tanks.get(me.id)!.angle = angle;
-    const weapon = DEMO_WEAPONS[Math.floor(rng() * DEMO_WEAPONS.length)];
     this.world.fire({ shooterId: me.id, weapon, seed: randomSeed(), ...launchFor(me, angle, power) });
     this.shooting = true;
     this.shotStart = now;

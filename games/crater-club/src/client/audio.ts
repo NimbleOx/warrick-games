@@ -14,6 +14,22 @@ export const sfx = {
   dirt(): void {
     noiseBurst(0.4, 500, 0.4);
   },
+  laser(): void {
+    tone(1800, 0.45, 0.22, "sawtooth", 260);
+    tone(2400, 0.3, 0.08, "square", 1200);
+  },
+  zap(): void {
+    noiseBurst(0.18, 4000, 0.3, "highpass");
+    tone(140, 0.2, 0.25, "square", 60);
+  },
+  napalm(): void {
+    noiseBurst(0.9, 700, 0.55);
+    noiseBurst(1.4, 2600, 0.12, "bandpass");
+  },
+  burrow(): void {
+    noiseBurst(0.6, 260, 0.5);
+    tone(55, 0.6, 0.3, "triangle", 40);
+  },
   split(): void {
     tone(900, 0.12, 0.15, "square", 300);
   },

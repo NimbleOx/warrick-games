@@ -94,10 +94,11 @@ export function flattenPad(heights: number[], cx: number): number {
   return h;
 }
 
-/** Remove a disc of dirt. Anything above the hole falls straight down. */
-export function carveCrater(heights: number[], cx: number, cy: number, r: number): void {
+/** Remove a disc of dirt. Anything above the hole falls straight down. Returns whether any dirt went. */
+export function carveCrater(heights: number[], cx: number, cy: number, r: number): boolean {
   const from = Math.max(0, Math.ceil(cx - r));
   const to = Math.min(WORLD_W - 1, Math.floor(cx + r));
+  let changed = false;
   for (let x = from; x <= to; x++) {
     const dx = x - cx;
     const dy = Math.sqrt(r * r - dx * dx);
@@ -105,8 +106,23 @@ export function carveCrater(heights: number[], cx: number, cy: number, r: number
     const hi = cy + dy;
     const h = heights[x];
     const overlap = Math.min(h, hi) - Math.max(0, lo);
-    if (overlap > 0) heights[x] = Math.max(0, Math.round(h - overlap));
+    if (overlap > 0) {
+      const next = Math.max(0, Math.round(h - overlap));
+      if (next !== h) changed = true;
+      heights[x] = next;
+    }
   }
+  return changed;
+}
+
+/** Remove the dirt between lo and hi from one column; anything above falls. Returns whether any dirt went. */
+export function cutColumn(heights: number[], x: number, lo: number, hi: number): boolean {
+  const h = heights[x];
+  const overlap = Math.min(h, hi) - Math.max(0, lo);
+  if (overlap <= 0) return false;
+  const next = Math.max(0, Math.round(h - overlap));
+  heights[x] = next;
+  return next !== h;
 }
 
 /** Drop a disc of dirt. Parts of the disc that are in mid-air settle onto the column. */

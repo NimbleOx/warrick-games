@@ -2,7 +2,7 @@ import { steer } from "../shared/ai";
 import { Arena, spawnPoints } from "../shared/arena";
 import { PLAYER_COLORS, THEME_COUNT, tickMsFor } from "../shared/constants";
 import { DEFAULT_SETTINGS, arenaConfig, type CpuLevel } from "../shared/protocol";
-import { mulberry32, randInt, randomSeed, shuffle, type Rng } from "../shared/rng";
+import { mulberry32, randInt, randomSeed, shuffle, type Rng } from "@warrick/kit/shared/rng";
 import { Renderer, type RiderInfo } from "./render";
 
 const TICK_MS = tickMsFor("classic");

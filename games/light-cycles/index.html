@@ -16,101 +16,6 @@
     <link rel="stylesheet" href="/src/client/style.css" />
   </head>
   <body>
-    <!-- Home: create or join -->
-    <section id="screen-home" class="screen screen-home">
-      <canvas id="attract" class="attract" aria-hidden="true"></canvas>
-      <div class="home-card">
-        <h1 class="logo">LIGHT<br />CYCLES</h1>
-        <p class="tagline">Real-time light cycle duels for friends.<br />No accounts — just share a code.</p>
-
-        <label class="field">
-          <span class="label">Your name</span>
-          <input id="home-name" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="Rider" />
-        </label>
-
-        <div id="home-join-invite" class="invite" hidden>
-          <span class="label">You're invited to game</span>
-          <div class="invite-code" id="home-invite-code"></div>
-          <button id="home-join-invite-btn" class="btn btn-primary btn-big">Join game</button>
-          <button id="home-not-this" class="link-btn">Start my own game instead</button>
-        </div>
-
-        <div id="home-default">
-          <button id="home-create" class="btn btn-primary btn-big">Create game</button>
-          <div class="divider"><span>or join with a code</span></div>
-          <form id="home-join-form" class="join-row">
-            <input
-              id="home-code"
-              class="code-input"
-              maxlength="5"
-              autocomplete="off"
-              autocapitalize="characters"
-              spellcheck="false"
-              placeholder="CODE"
-              aria-label="Game code"
-            />
-            <button class="btn">Join</button>
-          </form>
-        </div>
-        <p id="home-error" class="error" role="alert"></p>
-      </div>
-      <footer class="home-foot">A love letter to the light cycles of <em>Tron</em> (1982).</footer>
-    </section>
-
-    <!-- Lobby -->
-    <section id="screen-lobby" class="screen screen-lobby" hidden>
-      <header class="topbar">
-        <div class="brand">LIGHT CYCLES</div>
-        <div class="topbar-right">
-          <span class="conn" id="lobby-conn"></span>
-          <button class="btn btn-ghost" data-action="leave">Leave</button>
-        </div>
-      </header>
-      <div class="lobby">
-        <div class="panel code-panel">
-          <span class="label">Game code</span>
-          <div class="big-code" id="lobby-code"></div>
-          <div class="share-row">
-            <input id="lobby-link" readonly aria-label="Invite link" />
-            <button id="lobby-copy" class="btn">Copy link</button>
-          </div>
-          <p class="hint">Send this link to friends. Anyone with it can join — no sign-up.</p>
-        </div>
-
-        <div class="panel players-panel">
-          <div class="panel-head">
-            <h2>Riders <span id="lobby-count" class="muted"></span></h2>
-          </div>
-          <ul id="lobby-players" class="lobby-players"></ul>
-          <div id="lobby-cpu" class="cpu-row">
-            <span class="label">Add CPU</span>
-            <button class="btn btn-small" data-cpu="easy">Easy</button>
-            <button class="btn btn-small" data-cpu="normal">Normal</button>
-            <button class="btn btn-small" data-cpu="hard">Hard</button>
-          </div>
-          <div class="color-row">
-            <span class="label">Your color</span>
-            <div id="lobby-colors" class="swatches"></div>
-          </div>
-        </div>
-
-        <div class="panel settings-panel">
-          <div class="panel-head"><h2>Settings</h2></div>
-          <div id="lobby-settings" class="settings"></div>
-          <button id="lobby-start" class="btn btn-primary btn-big">Start game</button>
-          <p id="lobby-wait" class="hint center"></p>
-        </div>
-
-        <div class="panel chat-panel">
-          <div class="panel-head"><h2>Chat</h2></div>
-          <ol class="log" data-log></ol>
-          <form class="chat-form" data-chat>
-            <input maxlength="200" placeholder="Say something…" aria-label="Chat message" />
-          </form>
-        </div>
-      </div>
-    </section>
-
     <!-- Game -->
     <section id="screen-game" class="screen screen-game" hidden>
       <header class="topbar game-topbar">
@@ -181,13 +86,12 @@
           </table>
           <div class="modal-foot">
             <button class="btn btn-ghost" data-action="leave">Leave</button>
-            <button id="gameover-lobby" class="btn btn-primary">Back to lobby</button>
+            <button id="gameover-lobby" class="btn btn-primary" data-action="lobby">Back to lobby</button>
           </div>
         </div>
       </div>
     </section>
 
-    <div class="toast" id="toast" role="status" hidden></div>
     <script type="module" src="/src/client/main.ts"></script>
   </body>
 </html>

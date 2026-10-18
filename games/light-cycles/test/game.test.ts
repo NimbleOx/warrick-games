@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Game, newGameState } from "../src/worker/game";
 
 function setup() {
@@ -52,6 +52,8 @@ describe("game flow", () => {
     expect(t.s.round).toBe(1);
     expect(g.outbox[0].t).toBe("arena");
     expect(t.arena?.cycles).toHaveLength(4);
+    // The lobby is closed while the game is on.
+    expect(() => t.act((g) => g.addCpu(host.id, "easy"))).toThrow("Wait for the round to end");
 
     // The human never steers, so they ride into a wall; the CPUs fight it out.
     t.run();
@@ -60,6 +62,15 @@ describe("game flow", () => {
     const total = t.s.players.reduce((n, p) => n + p.wins, 0);
     expect(total).toBeLessThanOrEqual(3);
     expect(t.s.players.some((p) => p.score > 0)).toBe(true);
+
+    // Back to the lobby: the round and the arena are cleared for the next game.
+    t.act((g) => g.backToLobby(host.id));
+    expect(t.s.phase).toBe("lobby");
+    expect(t.s.round).toBe(0);
+    expect(t.s.timer).toBeNull();
+    expect(t.s.roundWinnerId).toBeNull();
+    expect(t.arena).toBeNull();
+    expect(() => t.act((g) => g.backToLobby(host.id))).toThrow("Not right now");
   });
 
   it("only counts turns from riders in the round", () => {
@@ -142,5 +153,22 @@ describe("game flow", () => {
     expect(t.s.round).toBe(1);
     expect(fresh.arena?.tick).toBe(0);
     expect(fresh.outbox.some((m) => m.t === "arena")).toBe(true);
+  });
+
+  it("replays the round when the countdown ends with the arena gone", () => {
+    const t = setup();
+    const a = t.act((g) => g.addHuman("A")).s.players[0];
+    t.connected.add(a.id);
+    t.act((g) => g.addCpu(a.id, "normal"));
+    t.act((g) => g.start(a.id));
+    t.advance(5000);
+
+    // The room slept through the countdown: its timer fires, but the arena didn't survive.
+    const g = new Game(t.s, { now: () => 1_000_000 + 5000, isConnected: () => true }, null);
+    g.onTimer();
+    expect(t.s.phase).toBe("countdown");
+    expect(t.s.round).toBe(1);
+    expect(g.arena?.tick).toBe(0);
+    expect(g.outbox.some((m) => m.t === "arena")).toBe(true);
   });
 });

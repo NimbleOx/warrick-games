@@ -1,5 +1,5 @@
 import { MIN_OPEN } from "./constants";
-import type { Rng } from "./rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 
 /** 0 up, 1 right, 2 down, 3 left (y points down). */
 export type Dir = 0 | 1 | 2 | 3;

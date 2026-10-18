@@ -12,7 +12,7 @@ function crosses(m: GameMap, [a, b]: [number, number], [c, d]: [number, number])
 function connected(m: GameMap): boolean {
   const seen = new Set([0]);
   const stack = [0];
-  while (stack.length) for (const nb of m.adj[stack.pop()!]) if (!seen.has(nb)) seen.add(nb), stack.push(nb);
+  while (stack.length) for (const nb of m.adj[stack.pop()!]) if (!seen.has(nb)) (seen.add(nb), stack.push(nb));
   return seen.size === m.x.length;
 }
 
@@ -61,7 +61,9 @@ describe("map generation", () => {
       expect(m.garrison[b]).toBeLessThanOrEqual(hi);
     }
     const near = m.starts.map((s) => {
-      const nb = [...m.adj[s]].sort((a, b) => Math.hypot(m.x[a] - m.x[s], m.y[a] - m.y[s]) - Math.hypot(m.x[b] - m.x[s], m.y[b] - m.y[s]));
+      const nb = [...m.adj[s]].sort(
+        (a, b) => Math.hypot(m.x[a] - m.x[s], m.y[a] - m.y[s]) - Math.hypot(m.x[b] - m.x[s], m.y[b] - m.y[s]),
+      );
       return nb.some((b) => m.level[b] === 1 && m.garrison[b] === 5 && m.kind[b] === TANK);
     });
     expect(near.filter(Boolean).length).toBeGreaterThanOrEqual(3);

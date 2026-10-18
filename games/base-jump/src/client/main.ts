@@ -316,7 +316,8 @@ function renderHud(): void {
 
 /** The send size, the upgrade button and the line that says what the selection can do. */
 function renderOrders(): void {
-  for (const btn of $$<HTMLButtonElement>("[data-pct]")) btn.setAttribute("aria-pressed", String(Number(btn.dataset.pct) === app.pct));
+  for (const btn of $$<HTMLButtonElement>("[data-pct]"))
+    btn.setAttribute("aria-pressed", String(Number(btn.dataset.pct) === app.pct));
   const b = app.battle;
   const up = $<HTMLButtonElement>("upgrade");
   const all = $<HTMLButtonElement>("select-all");
@@ -356,7 +357,8 @@ function renderOrders(): void {
   } else {
     const tanks = sel.reduce((n, i) => n + b.bases[i].t, 0);
     const helis = sel.reduce((n, i) => n + b.bases[i].h, 0);
-    const units = [tanks ? plural(tanks, "tank") : "", helis ? plural(helis, "helicopter") : ""].filter(Boolean).join(", ") || "no units yet";
+    const units =
+      [tanks ? plural(tanks, "tank") : "", helis ? plural(helis, "helicopter") : ""].filter(Boolean).join(", ") || "no units yet";
     tip.textContent = `${plural(sel.length, "base")} · ${units} · now pick a target`;
   }
 }
@@ -452,7 +454,9 @@ function renderResults(s: GameState): void {
   const you = winner?.id === shell.me;
   $("results-winner").innerHTML = winner
     ? `<b style="color:${winner.color}">${esc(you ? "You" : winner.name)}</b> ${
-        r.how === "conquest" ? (you ? "take" : "takes") + " every base!" : `${you ? "hold" : "holds"} the most bases when time runs out: ${winner.bases} of ${r.total}.`
+        r.how === "conquest"
+          ? (you ? "take" : "takes") + " every base!"
+          : `${you ? "hold" : "holds"} the most bases when time runs out: ${winner.bases} of ${r.total}.`
       }`
     : "It's a draw: nobody holds more bases than everyone else.";
   $("results-rows").innerHTML = r.standings

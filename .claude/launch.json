@@ -20,12 +20,6 @@
       "port": 5174
     },
     {
-      "name": "curve-ball",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "games/curve-ball", "--", "--port", "5175", "--strictPort"],
-      "port": 5175
-    },
-    {
       "name": "ricochet-alley",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/ricochet-alley", "--", "--port", "5176", "--strictPort"],

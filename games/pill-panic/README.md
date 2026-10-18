@@ -1,0 +1,80 @@
+# Pill Panic
+
+A multiplayer, browser-based take on *Dr. Mario* for up to 8 players. Everyone gets the same bottle of germs and the same capsules; the first to clear their bottle wins the round, and big clears dump junk on your rivals. There are no accounts: one person creates a game, shares the 5-character code (or the link), and everyone else joins with just a name.
+
+It runs entirely on Cloudflare: a Worker serves the client and the API, and each game is one Durable Object.
+
+## Playing
+
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/pill-panic/g/K7Q2M`. Send either one to your friends.
+- The host picks the germ level (0–20: (level + 1) × 4 germs), the speed (low, medium, high), how many rounds win the match (1, 2, 3 or 5) and who junk goes to (whoever's winning, a random rival, or everyone), and can add CPU players (easy, normal or hard).
+- Capsules drop into your bottle two halves at a time. Line up four or more of one color, across or down, to clear them. Germs count toward the four, and they don't fall; loose capsule halves do.
+- Clear every germ in your bottle to win the round. If a new capsule has nowhere to go, you're out. The last player left in also wins the round.
+- Clear two or more lines with one capsule, at once or in a chain, and you send one loose half per line (up to four) into a rival's bottle. It drops in after their current capsule lands.
+- Gravity speeds up every 10 capsules.
+- Keys: ←/→ (or A/D) move, ↓ (or S) drops faster, Space drops straight down, Z rotates left, X or ↑ (or W) rotates right. Touch screens get an on-screen pad.
+- Reloading the page puts you back in your seat. Players who join mid-match play from the next round. Players who are offline when a round starts sit it out.
+
+## Development
+
+```bash
+npm install
+npm run dev        # http://localhost:5179/pill-panic/: Vite + the Worker and Durable Object running in workerd
+npm test           # bottle rules, CPUs, the networked round and game-flow tests (Node)
+npm run test:live  # with `npm run dev` running: two headless players and a CPU play a match through the real server
+npm run typecheck
+```
+
+`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. `npm run test:live` expects the game at `http://localhost:5179/pill-panic`; set `PILL_PANIC_URL` if it's elsewhere.
+
+## Deploying to Cloudflare
+
+```bash
+npx wrangler login
+npm run deploy     # vite build && wrangler deploy
+```
+
+That creates a Worker called `pill-panic` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
+
+It's served at **https://warrick.games/pill-panic/**, one path on a site shared with the other games. The hub page at the root is its own Worker (`../../hub`, with `warrick.games` as a Custom Domain). This Worker has the zone route `warrick.games/pill-panic*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is off (`workers_dev: false`).
+
+- Vite's `base` is `/pill-panic/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/pill-panic/api/`.
+- Workers static assets are looked up by request path and know nothing about Vite's `base`. The `nestClientUnderBase` plugin in `vite.config.ts` moves the client build into `dist/client/pill-panic/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/pill-panic/assets/*.js` and `/pill-panic/g/ABCDE` both return 200.
+- All the games share one origin, so `localStorage` keys start with `pp.`.
+- After the first deploy, turn Pill Panic's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
+
+If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+
+## How it works
+
+```
+browser ──HTTP──▶ Worker ──▶ static assets (client)
+   │                │
+   │   POST /pill-panic/api/games            → allocate a code, initialize that room
+   │   GET  /pill-panic/api/games/:code      → does the game exist?
+   └─WS─ /pill-panic/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+```
+
+- **One Durable Object per game code.** It holds the lobby and match state, each player's secret token, and the chat/event log in storage, and talks to browsers over hibernatable WebSockets. Rounds live in memory and state is saved at round boundaries. A deploy restarts every Durable Object; the first player back finds the round gone, and it starts over.
+- **A bottle is a deterministic simulation.** `Bottle.step(buttons)` advances it one tick (60 a second) given the buttons held. The same seed, level and inputs give the same bottle anywhere, down to a checksum.
+- **Your own bottle runs in your browser**, on the server's clock, so moving and turning capsules has no lag. The browser tells the server which buttons changed on which tick (`{t: "in", n, k, g}`), about 20 times a second.
+- **The server replays every player's inputs** through its own copy of their bottle, and that copy is the one that counts: attacks, wins and top-outs all come from the server's replay. CPU bottles step on the server with the clock.
+- **Everyone else's bottle is a mirror.** Every 50 ms the server broadcasts a frame: for each bottle, the inputs it replayed since the last frame and a checksum. Browsers replay those segments a few ticks behind, so other bottles move smoothly. A checksum mismatch or a gap makes the browser ask for a fresh snapshot.
+- **Attacks** are aimed by the server and carry their columns and colors. CPU bottles take them at once. A player's browser drops each one into its bottle on the tick it arrives and reports that tick, so the server can replay it on the same tick.
+- **The server can overrule a browser.** If a browser falls more than 2 seconds behind the clock, doesn't take an attack within 2 seconds, or sends inputs that can't be replayed, the server moves the bottle on itself and sends the owner a fix: a snapshot of the bottle and a new epoch. Inputs from the old epoch are ignored. Each round's bottles start at a random epoch, so inputs still in flight from the last round can't be mistaken for this one's.
+- **Rounds are decided in tick order.** Bottles finish at different moments in different browsers, so the server only settles a win or a top-out once every bottle still playing has been replayed past that tick.
+- **CPU players** try every spot a capsule can reach by turning and sliding, score each by the germs it clears and the work it leaves (lines of one color that need filling, other colors piled on germs, tall stacks near the middle), and look one capsule ahead. Easy, normal and hard differ in reaction time, button speed, slop, and whether they drop capsules straight down.
+
+### Layout
+
+```
+src/shared/    code used by both sides
+  bottle.ts      the bottle: capsules, gravity, matching, chains, attacks, snapshots and checksums
+  round.ts       Lane (a bottle plus queued inputs), Mirror (a replayed bottle), Round (the server's round)
+  ai.ts          CPU players
+  protocol.ts    settings, game state and message types
+src/worker/    index.ts (routes), room.ts (Durable Object + loop), game.ts (lobby and match rules)
+src/client/    main.ts (UI + networking glue), view.ts (this browser's copy of the round), render.ts (canvas),
+               input.ts (keys + touch pad), net.ts, audio.ts, attract.ts (home-screen CPU demo)
+test/          Vitest tests: bottle rules, the networked round, game flow; test/live checks a running server
+```

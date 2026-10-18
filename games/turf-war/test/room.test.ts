@@ -76,3 +76,23 @@ describe("the room", () => {
     expect(snaps(ann)).toBe(before + 2);
   });
 });
+
+describe("a solo round", () => {
+  it("starts with one player and ends on the clock with their own result", async () => {
+    const r = await open();
+    const ann = await r.connect("Ann");
+    await r.say(ann, { t: "settings", settings: { roundSeconds: 60, board: "small" } });
+    await r.say(ann, { t: "start" });
+    expect(r.s().phase).toBe("playing");
+    expect(r.s().players.map((p) => p.slot)).toEqual([0]);
+    // Nobody to beat: the round runs to the clock, whatever Ann does.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(r.s().phase).toBe("playing");
+    await vi.advanceTimersByTimeAsync(35_000);
+    const state = (ann.last("state") as { state: GameState }).state;
+    expect(state.phase).toBe("results");
+    expect(state.results).toMatchObject({ solo: true, winnerId: null });
+    expect(state.results!.standings.map((x) => x.id)).toEqual([ann.you]);
+    expect(r.live()).toBeNull();
+  });
+});

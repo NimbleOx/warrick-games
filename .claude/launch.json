@@ -56,10 +56,40 @@
       "port": 5180
     },
     {
+      "name": "dice-dominion",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/dice-dominion", "--", "--port", "5181", "--strictPort"],
+      "port": 5181
+    },
+    {
       "name": "double-trouble",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/double-trouble", "--", "--port", "5182", "--strictPort"],
       "port": 5182
+    },
+    {
+      "name": "corner-shop",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/corner-shop", "--", "--port", "5183", "--strictPort"],
+      "port": 5183
+    },
+    {
+      "name": "box-office",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/box-office", "--", "--port", "5184", "--strictPort"],
+      "port": 5184
+    },
+    {
+      "name": "liars-dice",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/liars-dice", "--", "--port", "5185", "--strictPort"],
+      "port": 5185
+    },
+    {
+      "name": "pocket-wars",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/pocket-wars", "--", "--port", "5186", "--strictPort"],
+      "port": 5186
     }
   ]
 }

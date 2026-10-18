@@ -1,7 +1,7 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { $, $$, esc } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { SUBSTEPS, TICK_MS, WIN_LEAD, type Speed } from "../shared/constants";
+import { RESYNC_EVERY_MS, SUBSTEPS, TICK_MS, WIN_LEAD, type Speed } from "../shared/constants";
 import {
   SETTING_CHOICES,
   autoTarget,
@@ -39,12 +39,16 @@ interface Play {
   clock: number;
   /** Waiting for a fresh snapshot after a missed frame or a checksum mismatch. */
   stale: boolean;
+  /** When we last asked for one (`performance.now()`). */
+  askedAt: number;
 }
 
 /** How far behind the newest frame playback aims to be, in ticks. */
 const BUFFER_TICKS = 1.5;
 /** Further behind than this (say, the tab was in the background) and playback skips ahead. */
 const MAX_BEHIND_TICKS = 45;
+/** Still no snapshot this long after asking: ask again. Longer than the server's limit, so it isn't dropped too. */
+const RESYNC_RETRY_MS = RESYNC_EVERY_MS + 500;
 
 const app = {
   play: null as Play | null,
@@ -180,20 +184,10 @@ function setRound(snap: RoundSnapshot | null, s = shell.state): void {
     app.play = null;
     return;
   }
-  const round = new Round(snap);
-  renderer.reset(round);
-  const styles = headStyles(round, s);
-  let k = 0;
-  for (;;) {
-    while (k < snap.inputs.length && snap.inputs[k][0] <= round.tick) {
-      round.setSteer(snap.inputs[k][1], snap.inputs[k][2]);
-      k++;
-    }
-    if (round.tick >= snap.tick || round.over) break;
-    round.step();
-    renderer.afterStep(round, styles);
-  }
-  app.play = { num: snap.num, round, queue: [], received: round.tick, clock: round.tick, stale: false };
+  renderer.reset(snap);
+  let styles: HeadStyle[] | null = null;
+  const round = Round.replay(snap, snap.inputs, snap.tick, (r) => renderer.afterStep(r, (styles ??= headStyles(r, s))));
+  app.play = { num: snap.num, round, queue: [], received: round.tick, clock: round.tick, stale: false, askedAt: 0 };
 }
 
 function onFrame(f: FrameMsg): void {
@@ -204,11 +198,17 @@ function onFrame(f: FrameMsg): void {
   p.received = f.n + 1;
 }
 
-/** Something went missing or drifted: ask for a fresh snapshot and ignore frames until it comes. */
+/**
+ * Something went missing or drifted: ask for a fresh snapshot and ignore frames until it comes.
+ * The server drops requests that come too quickly, so the frame loop calls this again while
+ * it's waiting, and it asks again once the last request has had time to be answered.
+ */
 function resync(p: Play): void {
-  if (p.stale) return;
+  const now = performance.now();
+  if (p.stale && now - p.askedAt < RESYNC_RETRY_MS) return;
+  if (!p.stale) console.warn(`Curve Ball: resyncing round ${p.num} at tick ${p.round.tick}`);
   p.stale = true;
-  console.warn(`Curve Ball: resyncing round ${p.num} at tick ${p.round.tick}`);
+  p.askedAt = now;
   shell.send({ t: "resync" });
 }
 
@@ -345,6 +345,7 @@ function frame(now: number): void {
  * a round that only CPUs are left in.
  */
 function advance(p: Play, dt: number): void {
+  if (p.stale) resync(p);
   const latest = p.received;
   const behind = latest - p.clock;
   if (behind > MAX_BEHIND_TICKS) p.clock = latest - BUFFER_TICKS;

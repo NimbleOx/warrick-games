@@ -88,6 +88,23 @@ describe("lobby", () => {
     expect(late.spectator).toBe(true);
   });
 
+  it("gives watchers the seats of players who left or went offline before the start", () => {
+    const t = setup();
+    const humans = Array.from({ length: MAX_PLAYERS + 2 }, (_, i) => t.human(`P${i + 1}`));
+    const watchers = humans.slice(MAX_PLAYERS);
+    expect(watchers.every((p) => p.spectator)).toBe(true);
+    // One leaves the lobby; another closes their tab and is dropped when the game starts.
+    t.act((g) => g.leave(humans[1].id));
+    t.connected.delete(humans[2].id);
+    t.act((g) => g.setConnected(humans[2].id, false));
+    t.act((g) => g.start(humans[0].id));
+    expect(t.live!.round.heads).toHaveLength(MAX_PLAYERS);
+    for (const w of watchers) {
+      expect(t.s.players.find((p) => p.id === w.id)!.spectator).toBe(false);
+      expect(t.live!.round.index(w.id)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it("needs two players to start", () => {
     const t = setup();
     const host = t.human("Host");

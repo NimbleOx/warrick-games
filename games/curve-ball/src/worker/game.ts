@@ -118,6 +118,8 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     for (const p of [...this.s.players]) {
       if (!p.cpu && !p.connected) this.removePlayer(p.id);
     }
+    // Whoever is watching takes a free seat, including one just left by somebody who went.
+    this.promoteSpectators();
     if (this.participants.length < 2) throw new GameError("Need at least two players. Add a CPU?");
     for (const p of this.s.players) p.score = p.wins = 0;
     const s = this.s;

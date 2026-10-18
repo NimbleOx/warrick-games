@@ -72,8 +72,8 @@ export class Renderer {
     }
   }
 
-  /** Start drawing a new round from an empty arena. */
-  reset(round: Round): void {
+  /** Start drawing a new round from an empty arena. Takes the round or the setup it's built from. */
+  reset(round: Pick<Round, "cfg">): void {
     const { w, h } = round.cfg;
     this.w = w;
     this.h = h;

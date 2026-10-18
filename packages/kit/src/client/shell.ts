@@ -123,6 +123,11 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     return Date.now() + this.skew;
   }
 
+  /** The quickest recent round trip to the room, in ms (see `ClockSync`), or null before one is timed. */
+  get rtt(): number | null {
+    return this.clock.rtt;
+  }
+
   player(id: string | null | undefined): S["players"][number] | undefined {
     return this.state?.players.find((p) => p.id === id);
   }

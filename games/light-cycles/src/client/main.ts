@@ -14,8 +14,8 @@ import {
 } from "../shared/protocol";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
+import { Predictor, type Predicted } from "./predict";
 import { Renderer, type DrawOpts, type RiderInfo } from "./render";
-import { TurnCue } from "./turns";
 
 // ------------------------------------------------------------------ helpers
 
@@ -32,8 +32,10 @@ const app = {
   frames: [] as Frame[],
   /** Where playback is, in ticks. It trails the newest frame a little to smooth out network jitter. */
   clock: 0,
-  /** Turns you've sent that no frame has shown yet. */
-  turns: new TurnCue(),
+  /** The newest frame, and your cycle run on from it, so it steers the moment you press. */
+  predictor: new Predictor(),
+  /** Your cycle as drawn this animation frame, while a round is being ridden. */
+  ahead: null as Predicted | null,
   lastNow: 0,
   /** The state being applied came with a welcome (joining or reconnecting), not a change of phase. */
   welcomed: false,
@@ -107,8 +109,7 @@ function onScreen(screen: Screen): void {
 
 /** Left the game, or lost it for good. */
 function onReset(): void {
-  app.arena = null;
-  app.frames = [];
+  setArena(null);
   $("gameover").hidden = true;
 }
 
@@ -117,7 +118,7 @@ function onReset(): void {
 function onWelcome(msg: ServerMsg): void {
   if (msg.t !== "welcome") return;
   app.welcomed = true;
-  setArena(msg.arena);
+  setArena(msg.arena, msg.state);
 }
 
 function onMessage(msg: ServerMsg): void {
@@ -132,11 +133,12 @@ function onMessage(msg: ServerMsg): void {
   }
 }
 
-function setArena(snap: ArenaSnapshot | null): void {
+function setArena(snap: ArenaSnapshot | null, s = shell.state): void {
   app.arena = snap ? new Arena(snap) : null;
   app.frames = [];
   app.clock = app.arena?.tick ?? 0;
-  app.turns.clear();
+  app.predictor.reset(snap, tickMsFor(s?.settings.speed ?? "classic"));
+  app.ahead = null;
   if (app.arena) renderer.reset(app.arena);
 }
 
@@ -150,6 +152,7 @@ function onState(s: GameState, prev: GameState | null): void {
   if (s.phase !== "playing") drain();
   if (prev && !welcomed && prev.phase !== s.phase) {
     if (s.phase === "playing") {
+      app.predictor.started(performance.now());
       sfx.go();
       flashBanner(`<span class="count">GO!</span>`, 700, "count-banner");
     } else if (s.phase === "roundover" && s.roundWinnerId === shell.me) {
@@ -161,11 +164,12 @@ function onState(s: GameState, prev: GameState | null): void {
 }
 
 function onFrame(f: Frame): void {
-  const a = app.arena;
-  if (!a || f.n <= (app.frames.at(-1)?.n ?? a.tick)) return;
+  if (!app.arena || !app.predictor.frame(f, shell.me, performance.now())) return;
   app.frames.push(f);
-  // A background tab doesn't animate, so keep its round current rather than queueing.
-  if (document.hidden) drain();
+  // A background tab doesn't animate, so keep its round current rather than queueing. Your own
+  // crash shows as soon as it's heard: your cycle runs ahead of playback (see `Predictor`), so
+  // it would otherwise sit at the wall until playback caught up.
+  if (document.hidden || f.e.some((e) => e.k === "crash" && app.arena!.cycles[e.i]?.id === shell.me)) drain();
 }
 
 /**
@@ -195,11 +199,8 @@ function drain(): void {
 
 function applyFrame(f: Frame, now: number): void {
   const a = app.arena!;
-  const mine = a.cycles[a.index(shell.me)];
-  const before = mine?.dir;
   renderer.beforeFrame(a, now);
   a.apply(f);
-  if (mine && before !== undefined) app.turns.shown(before, mine.dir, f.n);
   renderer.afterFrame(a, f, now, (id) => playerById(id)?.color ?? "#ffffff", shell.me);
   if (!f.e.length) return;
   for (const ev of f.e) {
@@ -207,8 +208,6 @@ function applyFrame(f: Frame, now: number): void {
       const mine = a.cycles[ev.i].id === shell.me;
       sfx.crash(mine);
       if (mine) flashBanner(`<span class="big">DEREZZED</span>Hang tight for the next round`, 1800);
-    } else if (ev.k === "boost") {
-      if (a.cycles[ev.i].id === shell.me) sfx.boost();
     } else if (ev.k === "shrink" && ev.s === 1) {
       flashBanner(`<span class="big">SUDDEN DEATH</span>The walls are closing in`, 1800);
     }
@@ -227,6 +226,7 @@ function frame(now: number): void {
   if (shell.screen !== "game") return;
   advance(now);
   const s = shell.state;
+  app.ahead = s?.phase === "playing" ? app.predictor.predict(shell.me, now, shell.rtt) : null;
   if (app.arena && s) renderer.draw(app.arena, drawOpts(s), now);
   tickClocks();
 }
@@ -239,7 +239,8 @@ function drawOpts(s: GameState): DrawOpts {
     riders,
     labels: s.phase === "countdown",
     tickMs: tickMsFor(s.settings.speed),
-    turn: isLive(s) ? app.turns.next : null,
+    turn: s.phase === "countdown" ? app.predictor.next : null,
+    ahead: app.ahead,
   };
 }
 
@@ -327,7 +328,7 @@ function renderBoost(): void {
   const s = shell.state;
   const el = $("hud-boost");
   if (!s) return;
-  const cyc = myCycle();
+  const cyc = app.ahead?.cycle ?? myCycle();
   const total = s.settings.boosts;
   const key = !total ? "off" : cyc ? `${cyc.boosts}:${cyc.boost > 0}:${cyc.alive}` : "none";
   if (el.dataset.key === key) return;
@@ -473,19 +474,25 @@ function renderGameOver(s: GameState): void {
 
 // ------------------------------------------------------------------ steering
 
+/** Turns and boosts are sent for the tick your screen shows them on: see `Predictor`. */
 function steer(dir: Dir): void {
   const cyc = myCycle();
   if (!isLive() || !cyc?.alive) return;
   unlockAudio();
-  const newest = app.frames.at(-1)?.n ?? app.arena!.tick;
-  if (shell.send({ t: "turn", dir }) && app.turns.send(dir, cyc.dir, newest)) sfx.turn();
+  const at = app.predictor.aimTurn(shell.me, dir, performance.now(), shell.rtt);
+  if (at === null || !shell.send({ t: "turn", dir, at })) return;
+  app.predictor.sentTurn(dir, at);
+  sfx.turn();
 }
 
 function boost(): void {
-  const cyc = myCycle();
+  const cyc = app.ahead?.cycle ?? myCycle();
   if (shell.state?.phase !== "playing" || !cyc?.alive || cyc.boosts <= 0 || cyc.boost > 0) return;
   unlockAudio();
-  shell.send({ t: "boost" });
+  const at = app.predictor.aimBoost(shell.me, performance.now(), shell.rtt);
+  if (at === null || !shell.send({ t: "boost", at })) return;
+  app.predictor.sentBoost(at);
+  sfx.boost();
 }
 
 const KEY_DIRS: Record<string, Dir> = {

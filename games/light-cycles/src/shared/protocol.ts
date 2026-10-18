@@ -71,7 +71,8 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   roundBase: Record<string, [score: number, kills: number]> | null;
 }
 
-export type ClientMsg = LobbyMsg | { t: "turn"; dir: Dir } | { t: "boost" };
+/** `at`: the tick to turn or boost on, if later than the next one (the tick your screen showed it on). */
+export type ClientMsg = LobbyMsg | { t: "turn"; dir: Dir; at?: number } | { t: "boost"; at?: number };
 
 export type ServerMsg =
   | Exclude<RoomMsg<GameState>, { t: "welcome" }>

@@ -42,8 +42,8 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **One Durable Object per game code.** It holds the game state, each player's secret token, and the chat/event log in storage. It talks to browsers over hibernatable WebSockets, so idle games cost nothing.
 - **No logins.** Each browser generates a random token and keeps it in `localStorage`. The room maps tokens to player slots, which is how a reload or reconnect gets you your cycle back. Other players never see tokens.
 - **The server runs the race.** Unlike Crater Club's turn-based shots, this is real time. While a round is live, the room runs a drift-corrected `setTimeout` loop at 10, 14 or 20 ticks a second, depending on the speed setting. Each tick it steers the CPUs, steps the arena (`src/shared/arena.ts`) and broadcasts a small `Frame`: the cells each cycle entered, their headings, and any crashes, boosts or wall shrinks. Clients feed frames to the same `Arena` class with `apply()`, so walls are laid by identical code on every screen. Heads are drawn interpolated between ticks so movement looks smooth.
-- **Input is just turns.** Clients send `turn` and `boost` messages. The server queues up to three turns per rider (so a quick up-then-left hairpin works) and ignores U-turns.
-- **Your head shows your turn right away.** A turn shows up in a frame only after a round trip, the wait for the next tick and the playback buffer (one tick behind the newest frame, to ride out jitter). Until then a chevron beside your head points the new way (`src/client/turns.ts` keeps the server's queueing rules to know which turns count). It's only a cue: the frames still steer.
+- **Input is just turns.** Clients send `turn` and `boost` messages, each with the tick it's for (`at`). The server queues up to three turns per rider, makes one a tick (so a quick up-then-left hairpin works), holds each until its tick, and ignores U-turns. A turn that arrives after its tick is made on the next one.
+- **Your cycle steers the moment you press.** Frames show the past: they take a round trip and a tick of playback to come back. So your own cycle isn't drawn from them, but from where the server will have it when a turn you press now gets there: the newest frame, ridden on by the time since it, the round trip and a little slack (`src/client/predict.ts`). A turn is sent for the tick that leaves the cell your head is heading into, and the server holds it until then, so it lands on the cell you saw. Everyone else is drawn from frames as before, so they're a tick or two behind you. The frames still decide: each one restarts the prediction, so a turn that got there late, or a crash, puts it right. A late turn also adds to the slack, and the predicted head stops at a wall until the crash comes in.
 - **The tick loop only runs when it has to.** It stops when the round ends or nobody is connected, so the object can hibernate between rounds. A pending timer keeps a Durable Object in memory, and each incoming WebSocket message resets its 30-second CPU budget. During a round the client sends a JSON heartbeat every 5 seconds (the kit's socket does this while the shell's `isLive` says a round is on); the plain `ping`/`pong` keepalive doesn't count, because the auto-response answers it without waking the room.
 - **The arena lives in memory only**, since it changes every tick. If the room restarts mid-round, the round is replayed from a fresh grid. Everything else (scores, settings, phase) is in storage.
 - **One alarm drives the phase timers**: the 3-second countdown, the round-over pause and cleanup. A game with no connections for 12 hours is deleted.
@@ -55,9 +55,9 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 src/shared/    code used by both sides: constants, the arena simulation, CPU steering, protocol types
 src/worker/    index.ts (routes), room.ts (Durable Object: steering messages, the tick loop, the phase timers),
                game.ts (rounds, riding and scoring)
-src/client/    main.ts (the game screen and its hooks into the shell), render.ts (canvas), audio.ts (sounds),
-               attract.ts (home-screen demo)
-test/          Vitest tests for the arena, the CPUs and the game flow
+src/client/    main.ts (the game screen and its hooks into the shell), predict.ts (your cycle, ahead of the frames),
+               render.ts (canvas), audio.ts (sounds), attract.ts (home-screen demo)
+test/          Vitest tests for the arena, the CPUs, the game flow and prediction
 ```
 
 The room, lobby rules, router, socket (with the heartbeat that keeps a round's room within its CPU budget), home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`). `localStorage` keys start with `lc.`.

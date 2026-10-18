@@ -71,6 +71,15 @@ export interface Frame {
 }
 
 export const MAX_QUEUED_TURNS = 3;
+/** A turn or boost can be asked for at most this many ticks ahead. */
+export const MAX_AHEAD_TICKS = 20;
+
+/** A turn waiting for its tick. */
+interface Queued {
+  dir: Dir;
+  /** The first tick it can be made on. */
+  at: number;
+}
 
 /**
  * The light cycle grid. The server calls `step()` once per tick and sends the
@@ -84,8 +93,9 @@ export class Arena {
   cycles: Cycle[];
   /** 0 = empty, otherwise 1 + the index of the cycle whose wall fills the cell. */
   readonly grid: Uint8Array;
-  private queues: Dir[][];
-  private wantBoost: boolean[];
+  private queues: Queued[][];
+  /** The tick each cycle has asked to boost on, or -1. */
+  private wantBoost: number[];
 
   constructor(snap: ArenaSnapshot) {
     const { tick, shrink, cycles, ...cfg } = snap;
@@ -102,7 +112,7 @@ export class Arena {
       }
     });
     this.queues = this.cycles.map(() => []);
-    this.wantBoost = this.cycles.map(() => false);
+    this.wantBoost = this.cycles.map(() => -1);
   }
 
   static create(cfg: ArenaConfig, starts: { id: string; x: number; y: number; dir: Dir }[]): Arena {
@@ -134,9 +144,8 @@ export class Arena {
     return n;
   }
 
-  /** Inside the walls (which close in during sudden death)? */
-  inside(x: number, y: number): boolean {
-    const s = this.shrink;
+  /** Inside the walls (which close in during sudden death)? `s` is how far they've closed. */
+  inside(x: number, y: number, s = this.shrink): boolean {
     return x >= s && y >= s && x < this.cfg.w - s && y < this.cfg.h - s;
   }
 
@@ -159,24 +168,29 @@ export class Arena {
   /** The heading a cycle will have once its queued turns are used up. */
   plannedDir(i: number): Dir {
     const q = this.queues[i];
-    return q?.length ? q[q.length - 1] : this.cycles[i].dir;
+    return q?.length ? q[q.length - 1].dir : this.cycles[i].dir;
   }
 
-  /** Queue a turn for an upcoming tick. U-turns (straight into your own wall) are ignored. */
-  queueTurn(i: number, dir: Dir): boolean {
+  /**
+   * Queue a turn for an upcoming tick: the next one, or tick `at` if that's later (a player's
+   * turn waits for the tick their screen showed it on). One turn is made per tick, in order.
+   * U-turns (straight into your own wall) are ignored.
+   */
+  queueTurn(i: number, dir: Dir, at?: number): boolean {
     const c = this.cycles[i];
     if (!c?.alive || !isDir(dir)) return false;
     const last = this.plannedDir(i);
     const q = this.queues[i];
     if (dir === last || dir === opposite(last) || q.length >= MAX_QUEUED_TURNS) return false;
-    q.push(dir);
+    q.push({ dir, at: this.aheadTick(at) });
     return true;
   }
 
-  requestBoost(i: number): boolean {
+  /** Boost on the next tick, or on tick `at` if that's later, if the last boost has burnt out by then. */
+  requestBoost(i: number, at?: number): boolean {
     const c = this.cycles[i];
-    if (!c?.alive || c.boosts <= 0 || c.boost > 0) return false;
-    this.wantBoost[i] = true;
+    if (!c?.alive || c.boosts <= 0) return false;
+    this.wantBoost[i] = this.aheadTick(at);
     return true;
   }
 
@@ -188,12 +202,7 @@ export class Arena {
     const m: number[][] = this.cycles.map(() => []);
 
     // Sudden death: the walls close in one ring at a time.
-    if (
-      cfg.suddenDeathAt &&
-      n >= cfg.suddenDeathAt &&
-      (n - cfg.suddenDeathAt) % cfg.shrinkEvery === 0 &&
-      Math.min(cfg.w, cfg.h) - 2 * (this.shrink + 1) >= MIN_OPEN
-    ) {
+    if (shrinksOn(cfg, n, this.shrink)) {
       this.shrink++;
       e.push({ k: "shrink", s: this.shrink });
       this.cycles.forEach((c, i) => {
@@ -203,14 +212,20 @@ export class Arena {
 
     this.cycles.forEach((c, i) => {
       if (!c.alive) return;
-      const turn = this.queues[i].shift();
-      if (turn !== undefined && turn !== opposite(c.dir)) c.dir = turn;
-      if (this.wantBoost[i] && c.boosts > 0 && c.boost === 0) {
-        c.boost = cfg.boostTicks;
-        c.boosts--;
-        e.push({ k: "boost", i });
+      const q = this.queues[i];
+      if (q.length && q[0].at <= n) {
+        const turn = q.shift()!.dir;
+        if (turn !== opposite(c.dir)) c.dir = turn;
       }
-      this.wantBoost[i] = false;
+      const want = this.wantBoost[i];
+      if (want >= 0 && want <= n) {
+        if (c.boosts > 0 && c.boost === 0) {
+          c.boost = cfg.boostTicks;
+          c.boosts--;
+          e.push({ k: "boost", i });
+        }
+        this.wantBoost[i] = -1;
+      }
     });
 
     // Everyone advances one cell at the same time; boosting cycles then advance once more.
@@ -283,22 +298,15 @@ export class Arena {
 
   // ---------------------------------------------------------------- internals
 
+  /** The tick a turn or boost asked for at `at` is due: no sooner than the next one, and not too far off. */
+  private aheadTick(at: number | undefined): number {
+    const next = this.tick + 1;
+    if (typeof at !== "number" || !Number.isFinite(at)) return next;
+    return Math.min(this.tick + MAX_AHEAD_TICKS, Math.max(next, Math.floor(at)));
+  }
+
   private enter(i: number, x: number, y: number): void {
-    const c = this.cycles[i];
-    const line = c.trail[c.trail.length - 1];
-    const n = line.length;
-    const px = line[n - 2];
-    const py = line[n - 1];
-    if (Math.abs(x - px) + Math.abs(y - py) !== 1) {
-      c.trail.push([x, y]); // wrapped around an edge
-    } else if (n >= 4 && Math.sign(px - line[n - 4]) === x - px && Math.sign(py - line[n - 3]) === y - py) {
-      line[n - 2] = x; // still going straight: stretch the last segment
-      line[n - 1] = y;
-    } else {
-      line.push(x, y);
-    }
-    c.x = x;
-    c.y = y;
+    enterCell(this.cycles[i], x, y);
     this.grid[y * this.cfg.w + x] = i + 1;
   }
 
@@ -316,6 +324,7 @@ export class Arena {
     c.boost = 0;
     c.diedAt = this.tick;
     this.queues[i] = [];
+    this.wantBoost[i] = -1;
     const g = this.grid;
     for (let k = 0; k < g.length; k++) if (g[k] === i + 1) g[k] = 0;
   }
@@ -329,6 +338,34 @@ export class Arena {
 
 function copyCycle(c: Cycle): Cycle {
   return { ...c, trail: c.trail.map((line) => [...line]) };
+}
+
+/** Move a cycle's head into the cell (x, y), one step from where it is (or across a wrapped edge), extending its wall. */
+export function enterCell(c: Cycle, x: number, y: number): void {
+  const line = c.trail[c.trail.length - 1];
+  const n = line.length;
+  const px = line[n - 2];
+  const py = line[n - 1];
+  if (Math.abs(x - px) + Math.abs(y - py) !== 1) {
+    c.trail.push([x, y]); // wrapped around an edge
+  } else if (n >= 4 && Math.sign(px - line[n - 4]) === x - px && Math.sign(py - line[n - 3]) === y - py) {
+    line[n - 2] = x; // still going straight: stretch the last segment
+    line[n - 1] = y;
+  } else {
+    line.push(x, y);
+  }
+  c.x = x;
+  c.y = y;
+}
+
+/** Do the walls close in another ring on tick `n`, having closed `shrink` so far? */
+export function shrinksOn(cfg: ArenaConfig, n: number, shrink: number): boolean {
+  return (
+    !!cfg.suddenDeathAt &&
+    n >= cfg.suddenDeathAt &&
+    (n - cfg.suddenDeathAt) % cfg.shrinkEvery === 0 &&
+    Math.min(cfg.w, cfg.h) - 2 * (shrink + 1) >= MIN_OPEN
+  );
 }
 
 /** Starting spots on a ring around the middle, each cycle facing inward. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { steer, territory } from "../src/shared/ai";
-import { Arena, spawnPoints, type ArenaConfig, type Dir } from "../src/shared/arena";
+import { Arena, MAX_AHEAD_TICKS, spawnPoints, type ArenaConfig, type Dir } from "../src/shared/arena";
 import { ARENA_SIZES } from "../src/shared/constants";
 import { DEFAULT_SETTINGS, arenaConfig } from "../src/shared/protocol";
 import { mulberry32 } from "@warrick/kit/shared/rng";
@@ -49,6 +49,33 @@ describe("arena", () => {
     a.step();
     a.step();
     expect([a.cycles[0].x, a.cycles[0].y]).toEqual([4, 4]);
+  });
+
+  it("holds a turn or a boost until the tick it was sent for", () => {
+    const a = arena([{ x: 2, y: 5, dir: 1 }]);
+    expect(a.queueTurn(0, 2, 3)).toBe(true);
+    expect(a.queueTurn(0, 1, 3)).toBe(true); // one turn a tick: this one waits for tick 4
+    expect(a.requestBoost(0, 4)).toBe(true);
+    a.step();
+    a.step();
+    expect(a.cycles[0].dir).toBe(1);
+    expect(a.step().d[0]).toBe(2);
+    const f = a.step();
+    expect(f.d[0]).toBe(1);
+    expect(f.e).toContainEqual({ k: "boost", i: 0 });
+    expect(a.cycles[0].trail).toEqual([[2, 5, 4, 5, 4, 6, 6, 6]]);
+  });
+
+  it("makes a turn sent for a tick gone by on the next one, and won't hold one too long", () => {
+    const a = arena([{ x: 2, y: 5, dir: 1 }], { h: 40 });
+    a.step();
+    a.step();
+    a.queueTurn(0, 2, 1);
+    expect(a.step().d[0]).toBe(2);
+    a.queueTurn(0, 1, 1e9);
+    for (let n = 0; n < MAX_AHEAD_TICKS - 1; n++) a.step();
+    expect(a.cycles[0].dir).toBe(2);
+    expect(a.step().d[0]).toBe(1);
   });
 
   it("crashes into the arena wall", () => {

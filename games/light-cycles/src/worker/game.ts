@@ -91,14 +91,14 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
 
   // ---------------------------------------------------------------- riding
 
-  turn(id: string, dir: Dir): void {
+  turn(id: string, dir: Dir, at?: number): void {
     const i = this.cycleIndex(id);
-    if (i >= 0 && isDir(dir)) this.arena!.queueTurn(i, dir);
+    if (i >= 0 && isDir(dir)) this.arena!.queueTurn(i, dir, at);
   }
 
-  boost(id: string): void {
+  boost(id: string, at?: number): void {
     const i = this.cycleIndex(id);
-    if (i >= 0 && this.s.phase === "playing") this.arena!.requestBoost(i);
+    if (i >= 0 && this.s.phase === "playing") this.arena!.requestBoost(i, at);
   }
 
   private cycleIndex(id: string): number {

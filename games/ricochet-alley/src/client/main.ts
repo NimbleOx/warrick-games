@@ -78,6 +78,8 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "ricochet-alley",
   title: "Ricochet Alley",
   prefix: devAs ? `ra.${devAs}` : "ra",
+  // Each ?as= player keeps a name of their own.
+  shareName: !devAs,
   logo: "RICOCHET<br />ALLEY",
   tagline: "Tank battles in a maze. Bullets bounce.<br />No accounts — just share a code.",
   placeholder: "Commander",

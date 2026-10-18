@@ -30,7 +30,26 @@ export function setStorePrefix(p: string): void {
 
 /** Read a key (no value), write it, or remove it (null). Storage can be missing (private mode). */
 export function store(key: string, value?: string | null): string | null {
-  const k = `${prefix}.${key}`;
+  return storeRaw(`${prefix}.${key}`, value);
+}
+
+/** The key every game keeps the player's name under: they share the warrick.games origin, so it follows them. */
+const SHARED_NAME = "warrick.name";
+
+/**
+ * The name the player last used in any game. A name saved by this game alone, from before names
+ * were shared, still counts until the player saves one.
+ */
+export function sharedName(): string | null {
+  return storeRaw(SHARED_NAME) || store("name");
+}
+
+/** Remember the player's name for every game. */
+export function saveSharedName(name: string): void {
+  storeRaw(SHARED_NAME, name);
+}
+
+function storeRaw(k: string, value?: string | null): string | null {
   try {
     if (value === undefined) return localStorage.getItem(k);
     if (value === null) localStorage.removeItem(k);

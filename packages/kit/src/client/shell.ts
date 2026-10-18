@@ -2,7 +2,7 @@ import { buildId } from "../shared/build";
 import { CODE_RE, CPU_LEVELS, DEFAULT_COLORS, MAX_PLAYERS } from "../shared/constants";
 import type { BaseState, CpuLevel, LogEntry } from "../shared/protocol";
 import { isMuted, setMuted, unlockAudio } from "./audio";
-import { $, $$, esc, playerToken, reloadOnce, setStorePrefix, store, toast } from "./dom";
+import { $, $$, esc, playerToken, reloadOnce, saveSharedName, setStorePrefix, sharedName, store, toast } from "./dom";
 import { ClockSync, Connection, type NetStatus } from "./net";
 
 export type Screen = "home" | "lobby" | "game";
@@ -16,10 +16,15 @@ export interface SettingLabel {
 }
 
 export interface ShellOptions<S extends BaseState, M extends AnyMsg> {
-  /** The path the game is served under, its name, and its localStorage prefix ("sa" for sa.name). */
+  /** The path the game is served under, its name, and its localStorage prefix ("sa" for sa.token). */
   slug: string;
   title: string;
   prefix: string;
+  /**
+   * The player's name follows them from game to game (it's kept once for the whole site). False
+   * keeps it to this game's prefix instead, for a dev aid that plays several players in one browser.
+   */
+  shareName?: boolean;
   /** The home card: logo (HTML, with <br /> between the words), tagline (HTML), name placeholder, footer (HTML). */
   logo: string;
   tagline: string;
@@ -188,7 +193,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     const code = m?.[1].toUpperCase();
     if (code && CODE_RE.test(code)) {
       // Coming back to a game you were in (reload, reconnect): straight back in.
-      if (store("lastGame") === code && store("name")) void this.joinGame(code);
+      if (store("lastGame") === code && this.savedName()) void this.joinGame(code);
       else this.showHome(code);
     } else {
       this.showHome(null);
@@ -201,7 +206,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     document.title = this.o.title;
     $("home-error").textContent = "";
     const nameInput = $<HTMLInputElement>("home-name");
-    nameInput.value = store("name") ?? "";
+    nameInput.value = this.savedName() ?? "";
     $("home-join-invite").hidden = !inviteCode;
     $("home-default").hidden = !!inviteCode;
     if (inviteCode) {
@@ -209,6 +214,16 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
       $("home-join-invite-btn").dataset.code = inviteCode;
     }
     if (!nameInput.value) nameInput.focus();
+  }
+
+  /** The name this browser plays under: the one saved for every game, unless `shareName` is false. */
+  private savedName(): string | null {
+    return this.o.shareName === false ? store("name") : sharedName();
+  }
+
+  private saveName(name: string): void {
+    if (this.o.shareName === false) store("name", name);
+    else saveSharedName(name);
   }
 
   private readName(): string | null {
@@ -219,7 +234,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
       input.focus();
       return null;
     }
-    store("name", name);
+    this.saveName(name);
     return name;
   }
 
@@ -246,7 +261,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
       $("home-error").textContent = "Codes are 5 letters/numbers.";
       return;
     }
-    const name = store("name") ?? this.readName();
+    const name = this.savedName() || this.readName();
     if (!name) return;
     try {
       const res = await fetch(`${this.base}api/games/${code}`);
@@ -280,7 +295,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
 
     this.conn = new Connection<C, M>(code, {
       hello: () =>
-        ({ t: "hello", token: this.token, name: store("name") ?? name, build: buildId() ?? undefined }) as unknown as C,
+        ({ t: "hello", token: this.token, name: this.savedName() || name, build: buildId() ?? undefined }) as unknown as C,
       message: (msg) => this.onMessage(msg),
       status: (s) => this.onStatus(s),
       stale: () => this.onStale(),
@@ -447,7 +462,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
         <p class="tagline">${o.tagline}</p>
         <label class="field">
           <span class="label">Your name</span>
-          <input id="home-name" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="${esc(o.placeholder)}" />
+          <input id="home-name" maxlength="16" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" spellcheck="false" placeholder="${esc(o.placeholder)}" />
         </label>
         <div id="home-join-invite" class="invite" hidden>
           <span class="label">You're invited to game</span>
@@ -459,7 +474,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
           <button id="home-create" class="btn btn-primary btn-big">Create game</button>
           <div class="divider"><span>or join with a code</span></div>
           <form id="home-join-form" class="join-row">
-            <input id="home-code" class="code-input" maxlength="5" autocomplete="off" autocapitalize="characters"
+            <input id="home-code" class="code-input" maxlength="5" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" autocapitalize="characters"
               spellcheck="false" placeholder="CODE" aria-label="Game code" />
             <button class="btn">Join</button>
           </form>
@@ -510,7 +525,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
           <div class="panel-head"><h2>Chat</h2></div>
           <ol class="log" data-log></ol>
           <form class="chat-form" data-chat>
-            <input maxlength="200" placeholder="Say something…" aria-label="Chat message" />
+            <input maxlength="200" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Say something…" aria-label="Chat message" />
           </form>
         </div>
       </div>
@@ -529,7 +544,10 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, unlockAudio, { passive: true });
 
     // Home
-    $("home-name").addEventListener("change", (e) => store("name", (e.target as HTMLInputElement).value.trim()));
+    $("home-name").addEventListener("change", (e) => {
+      const name = (e.target as HTMLInputElement).value.trim().slice(0, 16);
+      if (name) this.saveName(name);
+    });
     $("home-create").addEventListener("click", () => void this.createGame());
     $("home-join-form").addEventListener("submit", (e) => {
       e.preventDefault();

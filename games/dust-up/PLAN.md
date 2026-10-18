@@ -41,7 +41,15 @@ This file is the brief to build from. Once the game is built, its rules and desi
   - Not allowed: `Math.sin`, `cos`, `atan2`, `hypot`, `pow` and `exp`, because engines differ in the last bit.
   - The chassis angle is kept as a unit vector, rotated by small-angle updates and renormalised with `sqrt`. Any trig the course generator needs is a polynomial in shared code.
 - A golden test steps a recorded run and checks a hash of the final state. A dev page runs the same check in Safari, Firefox and Chrome. Do this before building anything on the sim.
-- A bike's state is about 20 numbers, so snapshots are cheap and a client can rewind and replay.
+- A bike's state is 41 numbers: 21 for the bodies, and 20 for the solver's impulses from the last step, which it starts from (warm starting). Snapshots are still cheap, and a client can rewind and replay.
+
+What milestone 1 found (the numbers are in `TUNE` in `bike.ts`):
+
+- **Warm starting is needed.** Without it, ten solver passes couldn't carry the bike's weight through the tilted suspension, and a bike at rest crept backwards at 2 mm/s, even with the brakes on. The kept impulses are part of the state, and so they're in the hash and in snapshots. Contacts are matched from step to step by ground feature (segment or corner).
+- **Rev limit.** The rear wheel can't spin more than 4 m/s faster than the bike moves. Holding the gas in the air used to spin it up to top speed, which tipped the nose up and then looped the bike on landing. Players hold Up all the time, so that was too harsh.
+- **Drag doesn't turn the chassis.** Engine braking and bearing drag act on the wheel alone. Their reaction through the tilted suspension also made a bike at rest creep. The engine and brakes still react on the chassis, so gas lifts the front and braking dives it.
+- **Feel targets met:** 0 to 50 km/h in 2 s, 72 km/h top speed. Gas alone doesn't lift the front on the flat. Gas with lean back wheelies in about 0.5 s and loops by about 1.2 s if held. Wheelies can be held low by working the gas and lean. A full flip in the air takes about 1.1 s at full lean. Landings survive from −50° to +40° off the slope. Neutral riding takes the sandbox whoops up to about 12 m/s; faster needs lean.
+- **Step cost:** 1.4–1.6 µs on an M-series Mac (Node and Chrome on V8, and JavaScriptCore). The CPU budget above (46,000 steps a second) is about 7% of a core there, or maybe 15–20% on a Worker's slower CPU.
 
 ### Courses (`src/shared/course.ts`)
 

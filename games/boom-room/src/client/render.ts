@@ -2,7 +2,7 @@ import type { ArenaEvent, ArenaSnap, CurseKind, ItemKind } from "../shared/arena
 import { CHAR_ITEM } from "../shared/arena";
 import { FALL_SHOW_MS, FUSE_MS } from "../shared/constants";
 import type { Dir } from "../shared/movement";
-import { mulberry32 } from "../shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { THEMES, hexA, hexToRgb, mix, shade, type RGB, type Theme } from "./themes";
 
 /** World units per tile. Pixel art is drawn at half this (16 art pixels per tile). */

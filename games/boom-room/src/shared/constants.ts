@@ -37,22 +37,5 @@ export const HURRY_DROP_MS = 150;
 /** How long a falling block is visible before it lands. */
 export const FALL_SHOW_MS = 450;
 
-export const MAX_PLAYERS = 8;
-
-export const PLAYER_COLORS = [
-  "#ff4d4d", // red
-  "#4da6ff", // blue
-  "#5ce65c", // green
-  "#ffd23f", // yellow
-  "#ff6bd6", // pink
-  "#3ff0e0", // cyan
-  "#ff9a3c", // orange
-  "#e8e8e8", // white
-] as const;
-
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const CODE_LENGTH = 5;
-export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
-
 /** Number of tile palettes the client knows how to draw. */
 export const THEME_COUNT = 6;

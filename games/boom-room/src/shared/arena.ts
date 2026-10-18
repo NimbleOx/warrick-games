@@ -21,7 +21,7 @@ import {
   START_FIRE,
 } from "./constants";
 import { DX, DY, OPPOSITE, SIDE_BIT, isDir, moveActor, overlaps, snapCoord, type BlockedFn, type Dir } from "./movement";
-import { shuffle, type Rng } from "./rng";
+import { shuffle, type Rng } from "@warrick/kit/shared/rng";
 
 export type ItemKind = "bomb" | "fire" | "speed" | "kick" | "maxfire" | "skull";
 export type CurseKind = "slow" | "fast" | "reverse" | "nobomb" | "autobomb" | "shortfuse" | "weak";

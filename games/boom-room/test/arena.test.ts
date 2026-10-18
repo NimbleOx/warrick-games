@@ -3,7 +3,7 @@ import { Match } from "../src/shared/ai";
 import { Arena, type ArenaOpts } from "../src/shared/arena";
 import { COUNTDOWN_MS, FLAME_MS, FUSE_MS, TICK_MS } from "../src/shared/constants";
 import { moveActor } from "../src/shared/movement";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 
 const OPEN: ArenaOpts = { cols: 15, rows: 13, crates: 0, items: 0, skulls: false, hurryMs: null, theme: 0 };
 

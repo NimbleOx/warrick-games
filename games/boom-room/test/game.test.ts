@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
-import type { Match } from "../src/shared/ai";
 import { TICK_MS } from "../src/shared/constants";
-import { Game, newGameState, type GameIO } from "../src/worker/game";
+import { Game, newGameState, type GameIO, type Live } from "../src/worker/game";
 
 function setup() {
   let now = 1_000_000;
   const connected = new Set<string>();
   const s = newGameState("ABCDE", now);
-  const io: GameIO = { now: () => now, isConnected: (id) => connected.has(id), match: null as Match | null };
-  const game = () => new Game(s, io);
+  const io: GameIO = { now: () => now, isConnected: (id) => connected.has(id) };
+  /** The round in play, kept between actions the way the room keeps it. */
+  const room = { live: null as Live | null };
+  const game = () => {
+    const g = new Game(s, io, room.live);
+    Object.defineProperty(g, "live", { get: () => room.live, set: (m: Live | null) => (room.live = m) });
+    return g;
+  };
   return {
     s,
-    io,
+    room,
     game,
     connected,
     advance(ms: number) {
@@ -21,14 +26,8 @@ function setup() {
     play(maxMs = 30 * 60 * 1000) {
       for (let t = 0; t < maxMs && s.phase !== "gameover"; t += TICK_MS) {
         now += TICK_MS;
-        if (s.phase === "playing" && io.match) {
-          io.match.step(TICK_MS);
-          const g = game();
-          g.onArenaEvents(io.match.arena.snapshot(true).ev);
-          if (io.match.arena.result) g.roundOver();
-        } else if (s.timer && now >= s.timer.at) {
-          game().onTimer();
-        }
+        if (s.phase === "playing" && room.live) game().tick();
+        else if (s.timer && now >= s.timer.at) game().onTimer();
       }
     },
   };
@@ -45,8 +44,8 @@ describe("game flow", () => {
     t.game().start(host.id);
     expect(t.s.phase).toBe("playing");
     expect(t.s.round).toBe(1);
-    expect(t.io.match?.arena.players).toHaveLength(3);
-    expect(t.io.match?.arena.cols).toBe(15);
+    expect(t.room.live?.arena.players).toHaveLength(3);
+    expect(t.room.live?.arena.cols).toBe(15);
 
     // The human never moves; the CPUs fight it out (and blow the human up).
     t.play();
@@ -54,7 +53,7 @@ describe("game flow", () => {
     const best = Math.max(...t.s.players.map((p) => p.wins));
     expect(best).toBe(2);
     expect(t.s.players.reduce((n, p) => n + p.deaths, 0)).toBeGreaterThan(0);
-    expect(t.io.match).toBeNull();
+    expect(t.room.live).toBeNull();
   });
 
   it("needs two bombers to start", () => {
@@ -84,8 +83,8 @@ describe("game flow", () => {
     t.connected.add(host.id);
     for (let i = 0; i < 6; i++) t.game().addCpu(host.id, "easy");
     t.game().start(host.id);
-    expect(t.io.match?.arena.cols).toBe(19);
-    expect(t.io.match?.arena.players).toHaveLength(7);
+    expect(t.room.live?.arena.cols).toBe(19);
+    expect(t.room.live?.arena.players).toHaveLength(7);
   });
 
   it("joining mid-game makes you a spectator, and disconnected players sit rounds out", () => {
@@ -97,19 +96,19 @@ describe("game flow", () => {
     t.game().start(a.id);
     const late = t.game().addHuman("Late");
     expect(late.spectator).toBe(true);
-    expect(t.io.match?.arena.player(late.id)).toBeUndefined();
+    expect(t.room.live?.arena.player(late.id)).toBeUndefined();
 
     t.game().setConnected(b.id, false);
     t.connected.delete(b.id);
-    t.io.match!.arena.result = { winner: a.id };
+    t.room.live!.arena.result = { winner: a.id };
     t.game().roundOver();
     expect(t.s.phase).toBe("roundover");
     expect(t.s.players.find((p) => p.id === a.id)!.wins).toBe(1);
     t.advance(10_000);
     t.game().onTimer();
     expect(t.s.phase).toBe("playing");
-    expect(t.io.match?.arena.player(b.id)).toBeUndefined();
-    expect(t.io.match?.arena.players).toHaveLength(2);
+    expect(t.room.live?.arena.player(b.id)).toBeUndefined();
+    expect(t.room.live?.arena.players).toHaveLength(2);
   });
 
   it("deals the round again if the room forgot it (object restarted)", () => {
@@ -118,12 +117,87 @@ describe("game flow", () => {
     t.connected.add(host.id);
     t.game().addCpu(host.id, "easy");
     t.game().start(host.id);
-    t.io.match = null;
+    t.room.live = null;
     const g = t.game();
     g.restartRound();
     expect(t.s.phase).toBe("playing");
     expect(t.s.round).toBe(1);
-    expect((t.io.match as Match | null)?.arena.players).toHaveLength(2);
+    expect((t.room.live as Live | null)?.arena.players).toHaveLength(2);
     expect(g.logs.some((l) => l.text.includes("interrupted"))).toBe(true);
+  });
+
+  it("deals the lost round to everyone who was in it, though nobody has reconnected yet", () => {
+    const t = setup();
+    const a = t.game().addHuman("A");
+    const b = t.game().addHuman("B");
+    t.connected.add(a.id).add(b.id);
+    t.game().addCpu(a.id, "easy");
+    t.game().start(a.id);
+    // The object restarted: the arena is gone, and the room marks every human offline until they say hello.
+    t.room.live = null;
+    t.connected.clear();
+    for (const p of t.s.players) if (!p.cpu) p.connected = false;
+    t.connected.add(a.id);
+    const g = t.game();
+    g.setConnected(a.id, true);
+    g.restartRound();
+    expect((t.room.live as Live | null)?.arena.players.map((p) => p.id).sort()).toEqual([a.id, b.id, "p3"].sort());
+    expect(t.s.players.every((p) => p.inRound)).toBe(true);
+  });
+
+  it("sends a new round's state, then its first frame", () => {
+    const t = setup();
+    const host = t.game().addHuman("Host");
+    t.connected.add(host.id);
+    t.game().addCpu(host.id, "easy");
+    const g = t.game();
+    g.start(host.id);
+    expect(g.outbox.map((m) => m.t)).toEqual(["state", "frame"]);
+    const [state, frame] = g.outbox;
+    expect(state.t === "state" && state.state).toBe(t.s);
+    expect(frame.t === "frame" && frame.f.time).toBe(0);
+
+    const tick = t.game();
+    tick.tick();
+    expect(tick.outbox.map((m) => m.t)).toEqual(["frame"]);
+  });
+
+  it("keeps a player who leaves mid-game in the standings, and drops them from the next round", () => {
+    const t = setup();
+    const a = t.game().addHuman("A");
+    const b = t.game().addHuman("B");
+    t.connected.add(a.id).add(b.id);
+    t.game().addCpu(a.id, "normal");
+    t.game().start(a.id);
+    t.game().leave(b.id);
+    t.connected.delete(b.id);
+    const left = t.s.players.find((p) => p.id === b.id)!;
+    expect(left.connected).toBe(false);
+    expect(left.inRound).toBe(true);
+
+    t.room.live!.arena.result = { winner: a.id };
+    t.game().roundOver();
+    t.advance(10_000);
+    t.game().onTimer();
+    expect(t.s.players.find((p) => p.id === b.id)?.inRound).toBe(false);
+    expect(t.room.live?.arena.player(b.id)).toBeUndefined();
+  });
+
+  it("goes back to the lobby only from game over, clearing the game", () => {
+    const t = setup();
+    const host = t.game().addHuman("Host");
+    t.connected.add(host.id);
+    t.game().updateSettings(host.id, { wins: 1 });
+    t.game().addCpu(host.id, "hard");
+    t.game().start(host.id);
+    expect(() => t.game().backToLobby(host.id)).toThrow();
+    t.play();
+    expect(t.s.phase).toBe("gameover");
+    t.game().backToLobby(host.id);
+    expect(t.s.phase).toBe("lobby");
+    expect(t.s.round).toBe(0);
+    expect(t.s.timer).toBeNull();
+    expect(t.room.live).toBeNull();
+    expect(t.s.players.some((p) => p.inRound)).toBe(false);
   });
 });

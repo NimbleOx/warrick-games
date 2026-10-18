@@ -1,7 +1,8 @@
+import { DEFAULT_COLORS } from "@warrick/kit/shared/constants";
 import { Match } from "../shared/ai";
 import { Arena } from "../shared/arena";
-import { PLAYER_COLORS, THEME_COUNT, TICK_MS } from "../shared/constants";
-import { mulberry32, randInt, randomSeed, type Rng } from "../shared/rng";
+import { THEME_COUNT, TICK_MS } from "../shared/constants";
+import { mulberry32, randInt, randomSeed, type Rng } from "@warrick/kit/shared/rng";
 import { Renderer, type BomberView } from "./render";
 
 const DEMO_BOMBERS = 6;
@@ -77,8 +78,8 @@ export class Attract {
     const rng = this.rng;
     const ids = Array.from({ length: DEMO_BOMBERS }, (_, i) => `d${i}`);
     this.colors.clear();
-    const offset = randInt(rng, 0, PLAYER_COLORS.length - 1);
-    ids.forEach((id, i) => this.colors.set(id, PLAYER_COLORS[(offset + i) % PLAYER_COLORS.length]));
+    const offset = randInt(rng, 0, DEFAULT_COLORS.length - 1);
+    ids.forEach((id, i) => this.colors.set(id, DEFAULT_COLORS[(offset + i) % DEFAULT_COLORS.length]));
     const arena = new Arena(rng, ids, {
       cols: 17,
       rows: 13,

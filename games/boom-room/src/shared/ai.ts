@@ -2,7 +2,7 @@ import type { Arena, ArenaPlayer, ItemKind, SimInput } from "./arena";
 import { FLAME_MS } from "./constants";
 import { DX, DY, type Dir } from "./movement";
 import type { CpuLevel } from "./protocol";
-import type { Rng } from "./rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 
 interface Profile {
   /** How often to re-plan, in ms. */

@@ -211,6 +211,42 @@ describe("clearing", () => {
     expect(b.phase).toBe("won");
   });
 
+  it("scores each germ in a combo twice the last, by speed, and keeps the score in snapshots", () => {
+    // Medium speed: 200 a germ, then 400.
+    const two = withPiece(bottleFrom(["...r....", "...r...."]), { a: RED, b: RED, rot: 1, y: 1 });
+    two.step(B_DROP);
+    settle(two);
+    expect(two.score).toBe(200 + 400);
+    // Six germs in one capsule's combo.
+    const six = withPiece(bottleFrom(["rrr..yyy"]), { x: 3, a: RED, b: YELLOW });
+    six.step(B_DROP);
+    settle(six);
+    expect(six.score).toBe(200 + 400 + 800 + 1600 + 3200 + 6400);
+    // A chain counts on from the clears before it: three germs after a clear with none.
+    const chain = withPiece(bottleFrom(["Y.......", "RRR.....", "ybbb....", "ybbb....", "ybbb...."]), {
+      x: 3,
+      y: 0,
+      rot: 1,
+      a: RED,
+      b: RED,
+    });
+    chain.step(B_DROP);
+    settle(chain);
+    expect(chain.score).toBe(200 + 400 + 800);
+    expect(Bottle.restore(chain.snapshot()).score).toBe(chain.score);
+    // Low speed is worth 100 a germ, high 300.
+    for (const [start, base] of [
+      [START_SPEED.low, 100],
+      [START_SPEED.hi, 300],
+    ]) {
+      const cells = bottleFrom(["...r....", "...r...."]).cells;
+      const b = withPiece(new Bottle(1234, start, cells), { a: RED, b: RED, rot: 1, y: 1 });
+      b.step(B_DROP);
+      settle(b);
+      expect(b.score).toBe(base * 3);
+    }
+  });
+
   it("doesn't attack for a single line", () => {
     const b = withPiece(bottleFrom(["rrr....b"]), { x: 3, a: RED, b: YELLOW });
     b.step(B_DROP);

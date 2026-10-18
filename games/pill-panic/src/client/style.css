@@ -123,6 +123,12 @@
   font-weight: 400;
 }
 
+/* A solo run shows its score, and has room for it in place of the speed. */
+.own-stats:not(.solo) [data-solo],
+.own-stats.solo [data-versus] {
+  display: none;
+}
+
 #hud-germs {
   color: var(--accent-2);
 }

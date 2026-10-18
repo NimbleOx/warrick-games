@@ -1,8 +1,8 @@
-import { $, esc } from "@warrick/kit/client/dom";
+import { $, esc, personalBest } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import type { BottleEvent } from "../shared/bottle";
-import { COLS, PLAYER_COLORS, TICKS_PER_SEC, TICK_MS, virusCount } from "../shared/constants";
+import { COLS, MAX_LEVEL, PLAYER_COLORS, TICKS_PER_SEC, TICK_MS, virusCount } from "../shared/constants";
 import {
   SETTING_CHOICES,
   type Aim,
@@ -34,6 +34,8 @@ const AIM_NAMES: Record<Aim, string> = {
   all: "Everyone",
 };
 const PALETTE = ["#fff", "#ff4d6d", "#ffd23f", "#4da6ff"];
+const fmt = (n: number) => n.toLocaleString("en");
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 // ------------------------------------------------------------------ app state
 
@@ -73,6 +75,12 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     "Clear two or more lines with one capsule, at once or in a chain, to drop junk on a rival.",
     "Everyone gets the same germs and the same capsules.",
   ],
+  minPlayers: 1,
+  soloRules: [
+    "On your own, clear the bottle to go up a level: four more germs each time. Top out and the run is over.",
+    "Each germ scores 100, 200 or 300 by speed, and twice as much as the last one in the same combo.",
+    "Your best score is kept in this browser. Add a CPU or invite a friend for a match instead.",
+  ],
   colors: PLAYER_COLORS,
   settings: {
     level: { label: "Germ level", fmt: (v: number) => `${v} · ${virusCount(v)} germs` },
@@ -101,6 +109,8 @@ const canHost = (s = shell.state) => shell.canHost(s);
 const serverNow = () => shell.serverNow();
 const wallTick = () => app.view?.wall(serverNow()) ?? -1;
 const colorOf = (slot: number) => app.people.get(app.view?.who[slot] ?? "")?.color ?? "#8d94b8";
+/** A solo run: one player, level after level. */
+const solo = (s = shell.state) => !!s?.solo;
 
 const controls = new Controls(() => {
   const v = app.view;
@@ -316,12 +326,21 @@ function frame(now: number): void {
 
 function renderGame(s: GameState): void {
   const r = s.round;
-  $("round-label").textContent = r ? `Match ${s.match} · Round ${r.n} · first to ${s.settings.wins}` : "";
-  $("match-label").textContent = `First to ${s.settings.wins}`;
+  $("round-label").textContent = !r
+    ? ""
+    : solo(s)
+      ? `Solo run · level ${r.level}`
+      : `Match ${s.match} · Round ${r.n} · first to ${s.settings.wins}`;
+  $("match-label").textContent = solo(s) ? "Solo run" : `First to ${s.settings.wins}`;
   const mine = me();
   $("own-chip").style.background = mine?.color ?? "#888";
   $("own-name").textContent = mine?.name ?? "";
-  $("own-pips").innerHTML = mine ? pips(mine.wins, s.settings.wins) : "";
+  $("own-pips").innerHTML = !mine
+    ? ""
+    : solo(s)
+      ? `<span class="muted">${plural(mine.wins, "level")} cleared</span>`
+      : pips(mine.wins, s.settings.wins);
+  $("own-stats").classList.toggle("solo", solo(s));
   $("hud-level").textContent = r ? String(r.level) : "—";
   $("hud-speed").textContent = r ? SPEED_NAMES[r.speed] : "—";
   syncRivals();
@@ -380,7 +399,9 @@ function renderLive(): void {
   if (!v || !s) return;
   const own = v.own?.b;
   const germs = own ? String(own.viruses) : "—";
-  let key = germs;
+  // Solo: the run's points so far, and this bottle's.
+  const score = own && solo(s) ? fmt((me()?.score ?? 0) + (s.round?.over ? 0 : own.score)) : "—";
+  let key = `${germs}|${score}`;
   for (const card of app.rivals.values()) {
     const b = v.bottle(card.slot);
     if (!b) continue;
@@ -395,6 +416,7 @@ function renderLive(): void {
   if (key === liveKey) return;
   liveKey = key;
   $("hud-germs").textContent = germs;
+  $("hud-score").textContent = score;
   for (const card of app.rivals.values()) {
     const b = v.bottle(card.slot);
     if (!b) continue;
@@ -431,11 +453,12 @@ function renderScoreboard(): void {
           : b.phase === "dead"
             ? "topped out"
             : `${b.viruses} germ${b.viruses === 1 ? "" : "s"} left`;
+      const extra = solo(s) ? ` · ${plural(p.wins, "level")} cleared` : p.sent ? ` · ${p.sent} junk sent` : "";
       return `<li class="${p.id === shell.me ? "me" : ""} ${b?.phase === "dead" ? "out" : ""}">
         <span class="chip" style="background:${p.color}"></span>
         <span class="pname">${esc(p.name)}${p.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span>
-        <span class="pips">${pips(p.wins, s.settings.wins)}</span>
-        <span class="meta">${status}${p.sent ? ` · ${p.sent} junk sent` : ""}</span>
+        <span class="pips">${solo(s) ? "" : pips(p.wins, s.settings.wins)}</span>
+        <span class="meta">${status}${extra}</span>
       </li>`;
     })
     .join("");
@@ -454,7 +477,13 @@ function renderBanner(): void {
   if (v && s && r && s.phase === "playing") {
     const wall = wallTick();
     const own = v.own?.b;
-    if (r.over) {
+    if (r.over && solo(s)) {
+      // Solo, a round only ends early by clearing the bottle: topping out ends the run.
+      const next = Math.min(MAX_LEVEL, r.level + 1);
+      const secs = r.nextAt ? Math.max(0, Math.ceil((r.nextAt - serverNow()) / 1000)) : 0;
+      big = `LEVEL ${r.level} CLEAR!`;
+      sub = r.nextAt ? `Level ${next} · ${virusCount(next)} germs in ${secs}…` : "";
+    } else if (r.over) {
       const winners = r.over.winners;
       if (!winners.length) big = "DRAW!";
       else if (winners.includes(shell.me)) big = "YOU WIN!";
@@ -467,17 +496,17 @@ function renderBanner(): void {
     } else if (wall < 0) {
       const n = Math.ceil(-wall / TICKS_PER_SEC);
       big = String(n);
-      sub = own ? `Level ${r.level} · ${virusCount(r.level)} germs · clear them all first` : "";
+      sub = own ? `Level ${r.level} · ${virusCount(r.level)} germs${solo(s) ? "" : " · clear them all first"}` : "";
       sound = `count${r.n}:${n}`;
     } else if (wall < TICKS_PER_SEC * 0.8 && own) {
       big = "GO!";
       sound = `go${r.n}`;
     } else if (own?.phase === "won") {
       big = "CLEAR!";
-      sub = "Checking nobody beat you to it…";
+      sub = solo(s) ? "" : "Checking nobody beat you to it…";
     } else if (own?.phase === "dead") {
       big = "TOPPED OUT";
-      sub = "You're out of this round. Watch the others.";
+      sub = solo(s) ? "" : "You're out of this round. Watch the others.";
     }
   }
   if (sound && sound !== app.sounded) {
@@ -493,35 +522,72 @@ function renderBanner(): void {
   el.innerHTML = big ? `<div class="big">${esc(big)}</div>${sub ? `<div class="sub">${sub}</div>` : ""}` : "";
 }
 
+/** The solo player's score against their best in this browser; null for a match, or someone else's run. */
+function soloBest(s: GameState): { best: number; prev: number | null; fresh: boolean } | null {
+  const r = s.results;
+  const x = r?.solo ? r.standings[0] : null;
+  if (!r || !x || x.id !== shell.me) return null;
+  return personalBest(`best.${s.settings.speed}`, `${s.code}:${r.match}`, x.score ?? 0);
+}
+
 function renderResults(s: GameState): void {
   const r = s.results;
   const open = s.phase === "results" && !!r;
   $("results").hidden = !open;
   if (!open || !r) return;
-  $("results-title").textContent = `Match ${r.match} results`;
-  const winner = r.standings.find((x) => x.id === r.winnerId);
-  $("results-winner").innerHTML = winner
-    ? `<b style="color:${winner.color}">${esc(winner.id === shell.me ? "You" : winner.name)}</b> ${winner.id === shell.me ? "win" : "wins"} the match, ${winner.wins} round${winner.wins === 1 ? "" : "s"} to ${Math.max(0, ...r.standings.filter((x) => x !== winner).map((x) => x.wins))}.`
-    : esc(r.note || "No winner this time.");
-  $("results-rows").innerHTML = r.standings
-    .map((x, i) => {
-      const p = playerById(x.id);
-      return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
+  const name = (x: { id: string; name: string; color: string }) =>
+    `<span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span>`;
+  if (r.solo) {
+    $("results-title").textContent = "Run over";
+    const x = r.standings[0];
+    const best = soloBest(s);
+    if (best?.fresh && best.prev !== null && app.overSounded !== `best:${r.match}`) {
+      app.overSounded = `best:${r.match}`;
+      sfx.win();
+    }
+    const who = x?.id === shell.me ? "You" : `<b style="color:${x?.color}">${esc(x?.name ?? "")}</b>`;
+    $("results-winner").innerHTML = !x
+      ? esc(r.note || "The run is over.")
+      : `${who} cleared ${plural(x.wins, "level")} and topped out on level ${r.level ?? "?"}, with <b>${fmt(x.score ?? 0)}</b> points.` +
+        (!best
+          ? ""
+          : best.fresh && best.prev !== null
+            ? ` <b class="best">A new personal best!</b>`
+            : best.fresh
+              ? " That's your best so far."
+              : ` Your best is ${fmt(best.best)}.`);
+    $("results-head").innerHTML = `<th></th><th>Player</th><th>Score</th><th>Levels</th><th>Germs</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map((x) => `<tr><td></td><td>${name(x)}</td><td>${fmt(x.score ?? 0)}</td><td>${x.wins}</td><td>${x.cleared}</td></tr>`)
+      .join("");
+  } else {
+    $("results-title").textContent = `Match ${r.match} results`;
+    const winner = r.standings.find((x) => x.id === r.winnerId);
+    $("results-winner").innerHTML = winner
+      ? `<b style="color:${winner.color}">${esc(winner.id === shell.me ? "You" : winner.name)}</b> ${winner.id === shell.me ? "win" : "wins"} the match, ${winner.wins} round${winner.wins === 1 ? "" : "s"} to ${Math.max(0, ...r.standings.filter((x) => x !== winner).map((x) => x.wins))}.`
+      : esc(r.note || "No winner this time.");
+    $("results-head").innerHTML = `<th></th><th>Player</th><th>Rounds</th><th>Germs</th><th>Junk sent</th><th>Matches</th>`;
+    $("results-rows").innerHTML = r.standings
+      .map((x, i) => {
+        const p = playerById(x.id);
+        return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
         <td>${i + 1}</td>
-        <td><span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span></td>
+        <td>${name(x)}</td>
         <td>${x.wins}</td><td>${x.cleared}</td><td>${x.sent}</td><td>${p?.trophies ?? "—"}</td></tr>`;
-    })
-    .join("");
+      })
+      .join("");
+  }
   const host = canHost(s);
   const again = $<HTMLButtonElement>("results-again");
   const lobby = $<HTMLButtonElement>("results-lobby");
   again.hidden = lobby.hidden = !host;
-  const enough = s.players.filter((p) => !p.spectator && (p.cpu || p.connected)).length >= 2;
+  // Someone has to be here to play, even on their own.
+  const enough = s.players.some((p) => p.cpu || p.connected);
   again.disabled = !enough;
   $("results-wait").textContent = host
     ? enough
       ? ""
-      : "Need at least two players for another match — add a CPU from the lobby."
+      : "Nobody's here to play another match."
     : `Waiting for ${playerById(s.hostId)?.name ?? "the host"} to start the next match…`;
 }
 

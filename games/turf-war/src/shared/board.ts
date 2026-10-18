@@ -29,7 +29,9 @@ export type Op =
   /** Death: [slot, killer or -1, slot that takes the trail as land or -1, cause, respawn tick or -1]. */
   | ["d", number, number, number, DeathCause, number]
   /** Spawn: [slot, center cell, facing]. A fresh 3 × 3 home patch. */
-  | ["s", number, number, Dir];
+  | ["s", number, number, Dir]
+  /** Join: [slot, spawn tick]. A new player takes the slot, starting from no kills or deaths. */
+  | ["j", number, number];
 
 /** Everything that happened in one tick. */
 export interface Frame {
@@ -148,6 +150,9 @@ export class Board {
         Object.assign(this.heads[slot], { cell, dir, alive: true, fresh: true, respawnAt: -1 });
         return;
       }
+      case "j":
+        this.heads[op[1]].respawnAt = op[2];
+        return;
     }
   }
 

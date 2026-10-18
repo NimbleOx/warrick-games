@@ -1,6 +1,6 @@
 import type { GameIO } from "@warrick/kit/worker/lobby";
 import { Room } from "@warrick/kit/worker/room";
-import { TICK_MS } from "../shared/constants";
+import { RESYNC_MS, TICK_MS } from "../shared/constants";
 import type { ClientMsg, GameState } from "../shared/protocol";
 import { Game, newGameState, type Live } from "./game";
 
@@ -13,6 +13,8 @@ import { Game, newGameState, type Live } from "./game";
  */
 export class GameRoom extends Room<GameState, Game, Live> {
   protected readonly tickMs = TICK_MS;
+  /** When each socket was last sent a snapshot it asked for. */
+  private lastResync = new WeakMap<WebSocket, number>();
 
   protected newState(code: string, now: number): GameState {
     return newGameState(code, now);
@@ -42,8 +44,14 @@ export class GameRoom extends Room<GameState, Game, Live> {
     if (msg.t === "dir") {
       game.turn(pid, msg.d);
     } else if (msg.t === "resync") {
+      // A snapshot is a few hundred times the size of the request, so each socket gets one a
+      // second at most. The client asks again on its next tick gap or bad checksum.
+      const now = Date.now();
+      if (now - (this.lastResync.get(ws) ?? -Infinity) < RESYNC_MS) return;
       const snap = game.snapshot();
-      if (snap) ws.send(JSON.stringify({ t: "snap", snap }));
+      if (!snap) return;
+      this.lastResync.set(ws, now);
+      ws.send(JSON.stringify({ t: "snap", snap }));
     }
   }
 }

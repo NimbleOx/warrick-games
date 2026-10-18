@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Pocket Wars</title>
+    <meta name="description" content="Turn-based tactics for friends, like Advance Wars. No accounts — create a game and share the code." />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">POCKET WARS <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="stage-col">
+          <div class="hud" id="hud">
+            <div class="hud-turn" id="hud-turn"></div>
+            <div class="hud-stat"><span class="label">Funds</span><b id="hud-funds">—</b></div>
+            <div class="hud-stat hud-income"><span class="label">Income</span><b id="hud-income">—</b></div>
+            <button id="end-turn" class="btn btn-primary end-turn" disabled>End turn</button>
+          </div>
+
+          <div class="stage" id="stage">
+            <canvas id="game-canvas"></canvas>
+            <div class="banner" id="banner" hidden></div>
+            <div class="action-menu" id="action-menu" role="menu" hidden></div>
+            <div class="forecast" id="forecast" hidden></div>
+            <div class="zoom" aria-label="Zoom">
+              <button class="btn btn-small" data-zoom="in" aria-label="Zoom in">+</button>
+              <button class="btn btn-small" data-zoom="out" aria-label="Zoom out">−</button>
+              <button class="btn btn-small" data-zoom="fit" aria-label="Show the whole map">Fit</button>
+            </div>
+          </div>
+
+          <div class="info" id="info"></div>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel">
+            <div class="panel-head"><h2>Armies</h2><span class="muted small" id="map-name"></span></div>
+            <ul id="game-players" class="game-players"></ul>
+            <div class="side-actions">
+              <label class="fast-toggle" id="fast-toggle" hidden><input type="checkbox" id="fast-cpus" /> Fast CPUs</label>
+              <button id="resign" class="btn btn-small btn-ghost">Resign</button>
+            </div>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Battle log</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Send a message…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Factory -->
+      <div class="modal-back" id="build" hidden>
+        <div class="modal build-modal" role="dialog" aria-labelledby="build-title">
+          <div class="modal-head">
+            <h2 id="build-title">Factory</h2>
+            <div class="build-funds">Funds <b id="build-funds"></b></div>
+          </div>
+          <div class="build-list" id="build-list"></div>
+          <div class="modal-foot">
+            <span class="hint">The new unit can move next turn.</span>
+            <button class="btn" id="build-close">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Final standings -->
+      <div class="modal-back" id="gameover" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="gameover-title">
+          <h2 id="gameover-title" class="results-title">Victory</h2>
+          <p class="winner-line" id="gameover-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Army</th><th>Result</th><th>Built</th><th>Kills</th><th>Lost</th><th>Captured</th></tr>
+            </thead>
+            <tbody id="gameover-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <span class="spacer"></span>
+            <button class="btn" id="gameover-map">See the map</button>
+            <button id="gameover-lobby" class="btn btn-primary" data-action="lobby">Back to lobby</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

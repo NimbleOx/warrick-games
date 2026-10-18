@@ -66,6 +66,8 @@ export class Renderer {
   oy = 0;
   private cache: { key: string; canvas: HTMLCanvasElement } | null = null;
   private fx: Effect[] = [];
+  /** The canvas needs drawing whatever the scene: it was resized (which clears it), or the camera moved. */
+  stale = true;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -79,6 +81,7 @@ export class Renderer {
     this.canvas.height = Math.round(this.h * this.dpr);
     this.canvas.style.width = `${this.w}px`;
     this.canvas.style.height = `${this.h}px`;
+    this.stale = true;
   }
 
   // ---------------------------------------------------------------- camera
@@ -91,6 +94,7 @@ export class Renderer {
     this.scale = this.fitScale(m);
     this.ox = (this.w - m.w * this.scale) / 2;
     this.oy = (this.h - m.h * this.scale) / 2;
+    this.stale = true;
   }
 
   /** Zoom to `scale` (at least the fit) with `tile` in the middle. */
@@ -126,6 +130,7 @@ export class Renderer {
     const pad = this.scale * 0.5;
     this.ox = mw <= this.w ? (this.w - mw) / 2 : Math.min(pad, Math.max(this.w - mw - pad, this.ox));
     this.oy = mh <= this.h ? (this.h - mh) / 2 : Math.min(pad, Math.max(this.h - mh - pad, this.oy));
+    this.stale = true;
   }
 
   /** The tile under a point on the page, or -1. */
@@ -173,6 +178,7 @@ export class Renderer {
   // ---------------------------------------------------------------- drawing
 
   draw(sc: Scene, now: number): void {
+    this.stale = false;
     const { ctx, m } = { ctx: this.ctx, m: sc.m };
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#0b1a10";

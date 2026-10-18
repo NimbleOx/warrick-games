@@ -65,10 +65,15 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   turnNo: number;
   /** Counts every action, so clients can tell states apart. */
   actionNo: number;
-  /** When the current turn ends by itself, as the clock shows it. */
+  /**
+   * The kit's turn clock (`@warrick/kit/worker/turns`). When the current turn ends by itself, as
+   * the clock shows it: the turn clock, or sooner while the player is away.
+   */
   turnDeadline: number | null;
   /** The thinking clock of the human whose turn it is, kept while they're away. */
   clockEnd: number | null;
+  /** This turn's 5 seconds for coming back with the clock nearly out have been used. */
+  clockTopUp?: boolean;
   timer: Timer | null;
   /** Player ids in the order they were knocked out. */
   knockedOut: string[];
@@ -89,7 +94,11 @@ export type ClientMsg =
   | { t: "takeover"; id: string }
   | { t: "fast"; on: boolean };
 
-/** Game events carry the state after them, so clients can animate and then snap to it. */
+/**
+ * Game events carry the state after them (each its own copy), so clients can animate and then
+ * snap to it. An event stands in for the room's state message, so the last one of an action
+ * carries the state at the end of it.
+ */
 export type ServerMsg =
   | RoomMsg<GameState>
   | { t: "act"; ev: ActEvent; state: GameState; now: number }

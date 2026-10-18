@@ -352,7 +352,11 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
     const game = this.game(this.connectedIds());
     game.tick?.();
     this.loopTicks++;
-    // flush() re-arms the loop (through syncLoop) if it should keep going.
+    // Re-arm before flushing: syncLoop() then leaves the running loop (and its schedule) alone,
+    // and still stops it if the round just ended. Restarting it there would reset the schedule
+    // every tick, so each tick would come tickMs after the last one finished and the game would
+    // run slow.
+    this.scheduleTick();
     this.flush(game).catch((err) => console.error("tick flush failed", err));
   }
 

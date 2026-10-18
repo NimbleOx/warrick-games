@@ -28,7 +28,7 @@ packages/kit/   what the games share: rooms, the lobby, networking, the page she
 
 This is an npm workspace. The shared tooling (Vite, the Cloudflare Vite plugin, wrangler, Vitest, TypeScript) is in the root `package.json`, with one `package-lock.json`.
 
-The games' shared code lives in `packages/kit` (`@warrick/kit`; see its README): the Durable Object base, the lobby rules, the Worker router, the reconnecting socket, the home/lobby/chat shell, the sound core, the base stylesheet and the Vite and TypeScript config. Each game keeps only its own rules, screen and look. Stack Attack and Crater Club are on the kit; the other games still have their own copies of that code, taken from Crater Club, and are moving over one at a time.
+The games' shared code lives in `packages/kit` (`@warrick/kit`; see its README): the Durable Object base, the lobby rules, the Worker router, the reconnecting socket, the home/lobby/chat shell, the sound core, the base stylesheet and the Vite and TypeScript config. Each game keeps only its own rules, screen and look. Every game is built on it.
 
 ## Commands
 
@@ -49,7 +49,7 @@ npm run deploy -w hub
 
 ## Adding a game
 
-1. Create `games/<name>/` and give it a free port in `.claude/launch.json`. Start from Stack Attack (real-time) or Crater Club (turn-based): both are built on the kit.
+1. Create `games/<name>/` and give it a free port in `.claude/launch.json`. Start from a game like it: Stack Attack or Turf War (real-time), Crater Club (turn-based), or Light Cycles (real-time rounds with timers between them).
 2. Build it on `@warrick/kit` (see its README): `vite.config.ts` is `gameConfig("<name>")`, which sets Vite's `base` to `/<name>/` and nests the built client under `dist/client/<name>/` (Workers static assets are looked up by request path and ignore Vite's `base`); the Worker is `gameWorker("<name>")`, with its API under `/<name>/api/...`; the client's `Shell` builds every URL from `import.meta.env.BASE_URL`.
 3. Give its `wrangler.jsonc` the route `{ "pattern": "warrick.games/<name>*", "zone_name": "warrick.games" }`, `workers_dev: false` and `run_worker_first: ["/<name>/api/*"]`.
 4. Pick its `localStorage` prefix (`cc`, `lc`, …) and pass it to the `Shell`: every game shares the warrick.games origin.

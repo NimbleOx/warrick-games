@@ -6,10 +6,10 @@ A 2048 battle game: everyone plays their own board at once, and merges send rock
 
 - Everyone in a round shares one seed. Tile values come from their own random stream, so everyone gets the same 2s and 4s in the same order; positions (and where rocks land) come from a second stream.
 - `Lane` in `src/shared/engine.ts` is the only model of a player's game, and the browser and the server must run it identically. Any rule change (merging, power, rocks, spawning, going out) goes there, and the checksum must cover anything that affects later play.
-- Rock timing: a move marks rocks up to the `g` it reports as seen, a move's power smashes only seen rocks, and seen rocks land `ARM_MOVES` moves later. Don't make it time-based: it would differ between browser and server. The checksum leaves out rocks the browser hadn't seen, because the server may have queued more while a move was in flight.
+- Rock timing: a move marks rocks up to the `g` it reports as seen, a move's power smashes only seen rocks, and seen rocks land `ARM_MOVES` moves later. Don't make it time-based inside `Lane`: it would differ between browser and server. The checksum leaves out rocks the browser hadn't seen, because the server may have queued more while a move was in flight. Only the server puts a time floor under `g`: rocks sent more than `SEEN_AFTER_MS` (1.5 s) before a move arrives count as seen whatever the move says, and that move is overruled. Otherwise a modified browser that kept moving could stop rocks from ever landing.
 - The rock multiplier (`attackScale`) depends on time, so it's applied only on the server, to what goes out. Keep it out of `Lane`.
 - Idle drops are a server action: `Lane.drop()`, then an overrule so the browser takes the new board. Rocks with nowhere to land bury an idle player.
-- The server is the authority. When it disagrees with a browser it bumps the board's epoch and sends a `fix`. Moves from an older epoch are ignored; a move with the right epoch that doesn't replay is overruled.
+- The server is the authority. When it disagrees with a browser it bumps the board's epoch and sends a `fix`. Moves from an older epoch are ignored; a move with the right epoch that doesn't replay is overruled, and so is one beyond `MOVE_BURST`/`MOVE_RATE` (bursts of 20, 15 a second, faster than any human).
 - Keep the controls local: no move should wait on the network. A held key moves once.
 
 ## Not in v1

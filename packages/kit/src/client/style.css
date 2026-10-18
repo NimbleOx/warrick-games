@@ -719,6 +719,11 @@ input::placeholder {
   color: var(--muted);
 }
 
+/* A new personal best, on a solo game's results. */
+.winner-line .best {
+  color: var(--accent-2);
+}
+
 .standings {
   width: 100%;
   border-collapse: collapse;

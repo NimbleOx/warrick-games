@@ -33,6 +33,27 @@ export function store(key: string, value?: string | null): string | null {
   return storeRaw(`${prefix}.${key}`, value);
 }
 
+/**
+ * A personal best kept in this browser, under the game's prefix (higher is better). Offer each
+ * finished run's score with an id for the run: showing the same results again doesn't count it
+ * twice, and still says it was a new best. `prev` is the best before this run, if there was one.
+ */
+export function personalBest(key: string, run: string, score: number): { best: number; prev: number | null; fresh: boolean } {
+  type Saved = { best: number; prev: number | null; run: string };
+  let saved: Saved | null = null;
+  try {
+    const raw = JSON.parse(store(key) ?? "null") as Saved | null;
+    if (raw && typeof raw.best === "number" && typeof raw.run === "string") saved = raw;
+  } catch {
+    // Not ours, or broken: start again.
+  }
+  if (saved?.run === run) return { best: saved.best, prev: saved.prev, fresh: true };
+  if (saved && saved.best >= score) return { best: saved.best, prev: saved.best, fresh: false };
+  const prev = saved?.best ?? null;
+  store(key, JSON.stringify({ best: score, prev, run }));
+  return { best: score, prev, fresh: true };
+}
+
 /** The key every game keeps the player's name under: they share the warrick.games origin, so it follows them. */
 const SHARED_NAME = "warrick.name";
 

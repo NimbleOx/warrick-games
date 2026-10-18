@@ -16,7 +16,7 @@ What every Warrick game shares, so each game's folder holds only its game: rooms
 | `@warrick/kit/shared/build` | `buildId()`: the build's id, the same in its client and worker |
 | `@warrick/kit/client/shell` | `Shell`: the home card (with the link back to the hub), create/join, the lobby, chat, connection status, leave, mute |
 | `@warrick/kit/client/net` | the reconnecting WebSocket (it notices a dead one), with the heartbeat real-time games need, `ClockSync` and a `?lag=150` dev aid |
-| `@warrick/kit/client/dom` | `$`, `$$`, `esc`, `setHtml` and `setText` (only when changed), `toast`, `store` (localStorage under the game's prefix) and `reloadOnce` |
+| `@warrick/kit/client/dom` | `$`, `$$`, `esc`, `setHtml` and `setText` (only when changed), `toast`, `store` (localStorage under the game's prefix), `personalBest` and `reloadOnce` |
 | `@warrick/kit/client/color` | `hexToRgb`, `mix` and `rgba`: colour arithmetic for canvas drawing |
 | `@warrick/kit/client/format` | `formatClock(ms)`: m:ss for HUD clocks |
 | `@warrick/kit/client/audio` | the synthesized-sound core (`tone`, `noiseBurst`, mute); each game builds its own `sfx` |
@@ -32,6 +32,8 @@ Its `GameRoom` extends `Room` with `newState` and `makeGame`, plus whichever it 
 The room calls `onTimer` once `timerAt` has come. After a restart (every deploy restarts every room and closes every socket), the game's `setConnected` hears about each player who went, on the first event after it, so away timers start as they would for a dropped connection.
 
 **Client.** `main.ts` creates a `Shell` with the home card's text, the settings' labels and choices, and hooks for its own messages and screen (`onMessage`, `onState`, `onScreen`, `onReset`, `confirmLeave`, `isLive`, `intercept`). The shell adds the home and lobby screens to the page, so `index.html` holds only the game screen. Buttons with `data-action="leave"`, `"start"` or `"lobby"` work anywhere; so do `.conn`, `[data-log]`, `form[data-chat]` and `#mute`. Call `shell.start()` once the game's own setup is done.
+
+**Solo.** A game that can be played alone passes `min` 1 to `beginStart` and sets `minPlayers: 1` on its `Shell`. With one player in the lobby, the start button reads `soloLabel` ("Play solo" by default) and the lobby shows `soloRules` in place of `rules`. The game's own rules then decide what a round with one seat means: it can't end on "last one standing". `personalBest(key, run, score)` keeps the player's best score in this browser; give each run an id (like the code and round number) so showing its results again doesn't count it twice.
 
 **Builds.** `gameConfig` gives the client and the worker the same build id, and the shell sends it in `hello`. A room tells a page with a different id (or none, from before ids) to reload, and the shell reloads, at most once a minute so a deploy that's still rolling out can't loop it. Set `WARRICK_BUILD` to choose the id.
 

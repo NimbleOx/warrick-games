@@ -18,6 +18,12 @@ class TestGame extends Lobby<State> {
     this.s.phase = "playing";
     this.touch();
   }
+  /** A start for a game that can be played alone. */
+  startAlone(byId: string): void {
+    this.beginStart(byId, 1);
+    this.s.phase = "playing";
+    this.touch();
+  }
   finish(): void {
     this.s.phase = "results";
     this.touch();
@@ -113,6 +119,15 @@ describe("lobby", () => {
     expect(() => t.game().updateSettings(host.id, { speed: "fast" })).toThrow("Wait for the round to end");
     // Anyone arriving now watches.
     expect(t.join("Cy").spectator).toBe(true);
+  });
+
+  it("starts with one player in a game that can be played alone", () => {
+    const t = setup();
+    const host = t.join("Ann");
+    const g = t.game();
+    g.startAlone(host.id);
+    expect(t.s.phase).toBe("playing");
+    expect(g.participants.map((p) => p.name)).toEqual(["Ann"]);
   });
 
   it("leaves the lobby as it was when a start fails", () => {

@@ -1,6 +1,6 @@
 import { $, esc, toast } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { NONE, boardSize, boxCounts, cloneBoard, geometry, type Board } from "../shared/board";
+import { NONE, boardSize, boxCounts, boxesLeft, cloneBoard, geometry, type Board } from "../shared/board";
 import { capturable, takeAll } from "../shared/chains";
 import {
   SETTING_CHOICES,
@@ -12,7 +12,7 @@ import {
 } from "../shared/protocol";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
-import { BoardView } from "./render";
+import { BoardView, SETTLE_MS } from "./render";
 
 const SIZE_NAMES: Record<BoardSize, string> = { small: "Small", medium: "Medium", large: "Large" };
 /** Boxes smaller than this (CSS px) take two taps on a touch screen: one to preview, one to draw. */
@@ -43,7 +43,18 @@ const app = {
   /** The player closed the results to look at the board. */
   resultsClosed: false,
   pointer: null as { id: number; touch: boolean } | null,
+  /** Boxes the player to move can complete in the latest state. */
+  caps: [] as number[],
+  /** The board needs drawing again; until when something on it is still moving; it was last frame. */
+  dirty: true,
+  settleUntil: 0,
+  moving: false,
 };
+
+/** Something the board shows changed: draw it on the next frame. */
+function redraw(): void {
+  app.dirty = true;
+}
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "box-office",
@@ -72,6 +83,7 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     if (msg.t === "error") {
       app.pending = -1;
       sfx.nope();
+      redraw();
     }
   },
   onState,
@@ -101,6 +113,7 @@ function onReset(): void {
   app.known = [];
   app.queue = [];
   app.pending = app.preview = app.hover = -1;
+  app.caps = [];
   $("results").hidden = true;
 }
 
@@ -110,6 +123,8 @@ function onState(s: GameState, prev: GameState | null): void {
     return;
   }
   sync(s);
+  app.caps = capturable(s);
+  redraw();
   if (app.pending >= 0 && (s.lines[app.pending] !== NONE || !isMyTurn(s))) app.pending = -1;
   if (!isMyTurn(s)) app.preview = app.hover = -1;
   else if (app.preview >= 0 && s.lines[app.preview] !== NONE) app.preview = -1;
@@ -175,6 +190,8 @@ function step(now: number): void {
     app.run = claimed ? app.run + claimed : 0;
     if (claimed) sfx.box(app.run);
     else sfx.line();
+    app.settleUntil = now + SETTLE_MS;
+    redraw();
     // A long run plays faster, so chains don't drag.
     const left = app.queue.length;
     app.nextAt = now + (left > 8 ? 45 : left > 3 ? 80 : 140);
@@ -195,11 +212,24 @@ function frame(now: number): void {
   const s = shell.state;
   if (!s || !app.view) return;
   step(now);
+  const mine = isMyTurn(s) && !app.queue.length;
+  const pulse = mine ? app.caps : [];
+  // Idle, nothing moves: the last drawing still stands. Pulsing boxes and a preview line throb.
+  // Once they stop, one more frame draws where they ended, however late it comes.
+  const moving = now < app.settleUntil || pulse.length > 0 || (mine && app.preview >= 0);
+  if (app.dirty || moving || app.moving) {
+    app.dirty = false;
+    draw(s, app.view, mine, pulse, now);
+  }
+  app.moving = moving;
+  tick(s, now);
+}
+
+function draw(s: GameState, board: Board, mine: boolean, pulse: number[], now: number): void {
   const me = mySeat(s);
   const color = (me >= 0 ? seatPlayer(s, me)?.color : undefined) ?? "#ffffff";
-  const mine = isMyTurn(s) && !app.queue.length;
   view.draw(
-    app.view,
+    board,
     {
       colors: s.seats.map((id) => shell.player(id)?.color ?? "#888"),
       labels: initials(s),
@@ -208,13 +238,12 @@ function frame(now: number): void {
       preview: app.preview >= 0,
       pending: app.pending,
       last: app.shown ? s.order[app.shown - 1] : -1,
-      pulse: mine ? capturable(s) : [],
+      pulse,
       lineTime: app.lineTime,
       boxTime: app.boxTime,
     },
     now,
   );
-  tick(s, now);
 }
 
 function tick(s: GameState, now: number): void {
@@ -260,9 +289,8 @@ function renderHud(s: GameState): void {
     el.innerHTML = html;
     el.dataset.html = html;
   }
-  const left = s.boxes.filter((o) => o === NONE).length;
   $("hud-left").innerHTML =
-    s.phase === "playing" ? `<span class="aside">${s.w} × ${s.h} · </span>${left} left` : `${s.w} × ${s.h}`;
+    s.phase === "playing" ? `<span class="aside">${s.w} × ${s.h} · </span>${boxesLeft(s)} left` : `${s.w} × ${s.h}`;
 }
 
 function renderScores(s: GameState): void {
@@ -292,7 +320,7 @@ function renderScores(s: GameState): void {
 
 function renderActions(s: GameState): void {
   const mine = isMyTurn(s);
-  const caps = mine ? capturable(s) : [];
+  const caps = mine ? app.caps : [];
   const take = $<HTMLButtonElement>("take-all");
   take.hidden = !caps.length;
   if (caps.length) take.textContent = `Take all (${takeAll(cloneBoard(s), 0).taken.length})`;
@@ -382,10 +410,19 @@ function send(edge: number): void {
   }
   app.pending = edge;
   app.preview = app.hover = -1;
+  redraw();
   window.setTimeout(() => {
-    if (app.pending === edge) app.pending = -1;
+    if (app.pending !== edge) return;
+    app.pending = -1;
+    redraw();
   }, 5000);
   if (shell.state) renderActions(shell.state);
+}
+
+function setHover(edge: number): void {
+  if (app.hover === edge) return;
+  app.hover = edge;
+  redraw();
 }
 
 /** Why you can't draw right now, said out loud. */
@@ -402,17 +439,17 @@ function wireInput(): void {
     const s = shell.state;
     if (!s || !app.view) return;
     if (e.pointerType === "mouse" || app.pointer?.id === e.pointerId) {
-      app.hover = canDraw() ? (view.nearest(s, e.clientX, e.clientY)?.edge ?? -1) : -1;
+      setHover(canDraw() ? (view.nearest(s, e.clientX, e.clientY)?.edge ?? -1) : -1);
     }
   });
   canvas.addEventListener("pointerleave", (e) => {
-    if (e.pointerType === "mouse") app.hover = -1;
+    if (e.pointerType === "mouse") setHover(-1);
   });
   canvas.addEventListener("pointerdown", (e) => {
     const s = shell.state;
     if (!s) return;
     app.pointer = { id: e.pointerId, touch: e.pointerType !== "mouse" };
-    if (canDraw()) app.hover = view.nearest(s, e.clientX, e.clientY)?.edge ?? -1;
+    if (canDraw()) setHover(view.nearest(s, e.clientX, e.clientY)?.edge ?? -1);
     try {
       canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -421,7 +458,7 @@ function wireInput(): void {
   });
   canvas.addEventListener("pointercancel", () => {
     app.pointer = null;
-    app.hover = -1;
+    setHover(-1);
   });
   canvas.addEventListener("pointerup", (e) => {
     const s = shell.state;
@@ -436,6 +473,7 @@ function wireInput(): void {
     if (!hit) {
       app.preview = -1;
       if (ptr.touch) app.hover = -1;
+      redraw();
       renderActions(s);
       return;
     }
@@ -443,11 +481,12 @@ function wireInput(): void {
     const twoTaps = ptr.touch && (view.cell < FINGER || hit.dist > 0.3);
     if (twoTaps && app.preview !== hit.edge) {
       app.preview = hit.edge;
+      redraw();
       renderActions(s);
       return;
     }
     send(hit.edge);
-    if (ptr.touch) app.hover = -1;
+    if (ptr.touch) setHover(-1);
   });
 
   $("take-all").addEventListener("click", (e) => {
@@ -472,8 +511,9 @@ function wireInput(): void {
     if ((e.target as HTMLElement).closest("input, select, textarea, button")) return;
     if (e.key === "Escape") {
       app.preview = -1;
+      redraw();
       if (shell.state) renderActions(shell.state);
-    } else if ((e.key === "t" || e.key === "T") && canDraw() && shell.state && capturable(shell.state).length) {
+    } else if ((e.key === "t" || e.key === "T") && canDraw() && app.caps.length) {
       shell.send({ t: "takeAll" });
     }
   });
@@ -493,6 +533,7 @@ function layout(): void {
   const availW = col.clientWidth - 4;
   const availH = Math.max(240, window.innerHeight - top - actions.offsetHeight - 30);
   view.fit(v.w, v.h, availW, availH);
+  redraw();
 }
 
 let resizeQueued = false;

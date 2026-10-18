@@ -1,6 +1,7 @@
 import type { BasePlayer, CpuLevel } from "@warrick/kit/shared/protocol";
 import { mulberry32, randomSeed, shuffle } from "@warrick/kit/shared/rng";
 import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
 import { cpuMove, timeoutMove } from "../shared/ai";
 import { boardSize, isLine, isOver, newBoard, playLine } from "../shared/board";
 import { capturable, lastSide } from "../shared/chains";
@@ -21,6 +22,8 @@ export const CPU_THINK_MS = 800;
 export const CPU_RUN_MS = 250;
 /** How long an absent player's turn waits before the game plays it for them. */
 export const AWAY_MS = 5000;
+/** The kit's turn clock: reloading gives back the clock you had, not a new one. */
+const CLOCK: ClockRules = { awayMs: AWAY_MS };
 
 export function newGameState(code: string, now: number): GameState {
   return {
@@ -33,6 +36,8 @@ export function newGameState(code: string, now: number): GameState {
     turn: -1,
     order: [],
     turnDeadline: null,
+    clockEnd: null,
+    clockTopUp: false,
     timer: null,
     game: 0,
   };
@@ -77,19 +82,11 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const p = this.player(id);
     if (!p || p.cpu || p.connected === connected) return;
     super.setConnected(id, connected);
-    // Coming back on your turn gives you a fresh clock; dropping out shortens it.
+    // Dropping out on your turn shortens the clock; coming back gives you what you had, never more.
     const s = this.s;
     if (s.phase !== "playing" || s.seats[s.turn] !== id) return;
     const now = this.io.now();
-    if (connected) {
-      s.turnDeadline = s.settings.turnSeconds ? now + s.settings.turnSeconds * 1000 : null;
-      s.timer = s.turnDeadline ? { kind: "turn", at: s.turnDeadline } : null;
-    } else {
-      const at = Math.min(s.turnDeadline ?? Infinity, now + AWAY_MS);
-      s.turnDeadline = at;
-      s.timer = { kind: "away", at };
-    }
-    this.touch();
+    this.armTurn(connected ? turnHolderBack(s, CLOCK, now) : turnHolderLeft(s, CLOCK, now), connected);
   }
 
   // ---------------------------------------------------------------- game flow
@@ -101,6 +98,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const { w, h } = boardSize(s.settings.size, this.participants.length);
     Object.assign(s, newBoard(w, h));
     s.seats = shuffle(rng, this.participants.map((p) => p.id));
+    this.uniqueSeatColors();
     s.order = [];
     s.phase = "playing";
     s.game++;
@@ -109,7 +107,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
   }
 
   protected resetForLobby(): void {
-    Object.assign(this.s, { w: 0, h: 0, lines: [], boxes: [], seats: [], turn: -1, order: [], turnDeadline: null, timer: null });
+    Object.assign(this.s, { w: 0, h: 0, lines: [], boxes: [], seats: [], turn: -1, order: [], turnDeadline: null, clockEnd: null, timer: null });
   }
 
   /** `fresh` is a new turn; otherwise the same seat goes again after a capture. */
@@ -119,18 +117,41 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const now = this.io.now();
     s.turn = seat;
     if (p?.cpu) {
-      s.turnDeadline = null;
+      startTurnClock(s, CLOCK, now, null, true);
       s.timer = { kind: "cpu", at: now + (fresh ? CPU_THINK_MS : CPU_RUN_MS) };
-    } else if (!p || !this.io.isConnected(p.id)) {
-      s.turnDeadline = now + AWAY_MS;
-      s.timer = { kind: "away", at: s.turnDeadline };
-    } else if (s.settings.turnSeconds) {
-      s.turnDeadline = now + s.settings.turnSeconds * 1000;
-      s.timer = { kind: "turn", at: s.turnDeadline };
     } else {
-      s.turnDeadline = null;
-      s.timer = null;
+      // The clock starts again with every line, captures included.
+      const here = !!p && this.io.isConnected(p.id);
+      this.armTurn(startTurnClock(s, CLOCK, now, s.settings.turnSeconds * 1000, here), here);
     }
+    this.touch();
+  }
+
+  /**
+   * Every seat gets a colour of its own: lines and boxes are told apart by colour. They can
+   * clash: past the palette the lobby hands out colours again, and a watcher who takes a seat
+   * keeps theirs. Whoever joined first keeps it.
+   */
+  private uniqueSeatColors(): void {
+    const players = this.s.players;
+    const taken = new Set<string>();
+    const clashing: PlayerState[] = [];
+    for (const p of players) {
+      if (this.seatOf(p.id) < 0) continue;
+      if (taken.has(p.color)) clashing.push(p);
+      else taken.add(p.color);
+    }
+    for (const p of clashing) {
+      const free = this.colors.filter((c) => !taken.has(c));
+      // Rather one that nobody watching has either.
+      p.color = free.find((c) => !players.some((o) => o.color === c)) ?? free[0];
+      taken.add(p.color);
+    }
+  }
+
+  /** Arm the timer for the turn's deadline: the clock if they're here, the short wait if not. */
+  private armTurn(at: number | null, here: boolean): void {
+    this.s.timer = at === null ? null : { kind: here ? "turn" : "away", at };
     this.touch();
   }
 
@@ -183,6 +204,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.phase = "results";
     s.turn = -1;
     s.turnDeadline = null;
+    s.clockEnd = null;
     s.timer = null;
     const rows = standings(s);
     const winners = rows.filter((r) => r.place === 1).map((r) => r.player?.name ?? "?");
@@ -201,7 +223,15 @@ export class Game extends Lobby<GameState, ServerMsg> {
   onTimer(): void {
     const s = this.s;
     const t = s.timer;
-    if (!t || this.io.now() < t.at - 25) return;
+    if (!t) return;
+    const now = this.io.now();
+    if (t.kind === "cpu") {
+      if (now < t.at - 25) return;
+    } else if (!turnTimeUp(s, CLOCK, now)) {
+      // Not yet; or it passed long ago while nobody was here to notice, and they get AWAY_MS more.
+      if (s.turnDeadline !== t.at) this.armTurn(s.turnDeadline, this.io.isConnected(s.seats[s.turn] ?? ""));
+      return;
+    }
     s.timer = null;
     if (s.phase !== "playing") return this.touch();
     const seat = s.turn;

@@ -237,6 +237,48 @@ describe("timers", () => {
     expect(t.s.timer).toBeNull();
   });
 
+  it("gives a player who comes back the clock they had, not a new one", () => {
+    const t = twoHumans(20);
+    const end = t.s.turnDeadline!;
+    const away = (gone: boolean) => {
+      if (gone) t.connected.delete(t.first);
+      else t.connected.add(t.first);
+      t.game().setConnected(t.first, !gone);
+    };
+    t.advance(5_000);
+    away(true);
+    expect(t.s.timer).toEqual({ kind: "away", at: end - 15_000 + AWAY_MS });
+    t.advance(1_000);
+    away(false);
+    expect(t.s.timer).toEqual({ kind: "turn", at: end });
+    // Reloading with a second left: once, 5 seconds to find the line again.
+    t.advance(13_000);
+    away(true);
+    away(false);
+    expect(t.s.timer).toEqual({ kind: "turn", at: end + 4_000 });
+    // A line that completes nothing passes the turn; the next player gets the whole clock.
+    t.game().line(t.first, t.s.lines.indexOf(-1));
+    expect(t.s.timer).toEqual({ kind: "turn", at: end + 19_000 });
+    expect(t.s.clockTopUp).toBe(false);
+  });
+
+  it("gives every seat a colour of its own", () => {
+    const t = setup();
+    const people = ["A", "B", "C", "D", "E", "F", "G", "H", "I"].map((n) => t.human(n));
+    const [a, b] = people;
+    const late = people[8];
+    // Eight colours: the ninth person watches, in A's colour.
+    expect(late.spectator).toBe(true);
+    expect(late.color).toBe(a.color);
+    // B leaves before the start, and the watcher takes the seat.
+    t.game().leave(b.id);
+    t.game().start(a.id);
+    expect(t.s.seats).toContain(late.id);
+    const colors = t.s.seats.map((id) => t.s.players.find((p) => p.id === id)!.color);
+    expect(new Set(colors).size).toBe(8);
+    expect(late.color).toBe(b.color);
+  });
+
   it("keeps a leaver's seat and boxes, and plays their turns", () => {
     const t = twoHumans();
     t.game().line(t.first, 0);

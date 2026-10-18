@@ -151,6 +151,26 @@ describe("hard", () => {
   });
 });
 
+describe("thinking time", () => {
+  it("stays quick for hard with 8 players on the largest board", () => {
+    // Whole games between hard CPUs on 11 × 8. These seeds reach the slowest decisions found,
+    // where the endgame model has the most to look at.
+    let slowest = 0;
+    for (const seed of [23, 15]) {
+      const r = mulberry32(seed);
+      const b = newBoard(11, 8);
+      let seat = 0;
+      while (!isOver(b)) {
+        const t0 = performance.now();
+        const e = cpuMove(b, 8, seat, "hard", r);
+        slowest = Math.max(slowest, performance.now() - t0);
+        if (!playLine(b, e, seat).length) seat = (seat + 1) % 8;
+      }
+    }
+    expect(slowest).toBeLessThan(200);
+  });
+});
+
 describe("running out of time", () => {
   it("takes the boxes it can first", () => {
     const b = endgameBoard("opened");

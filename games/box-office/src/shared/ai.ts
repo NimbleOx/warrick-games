@@ -16,7 +16,7 @@ import {
   safeLines,
   takeAll,
 } from "./chains";
-import { better, endgame, margin, rotate } from "./endgame";
+import { EndgameMemo, better, endgame, margin, rotate } from "./endgame";
 
 /** Hard looks ahead through every order of the safe lines once this few are left. */
 export const SEARCH_SAFE = 10;
@@ -76,16 +76,18 @@ export function cheapestLine(b: Board, rng: Rng): number {
 // ------------------------------------------------------------------ hard
 
 function hardMove(b: Board, players: number, me: number, rng: Rng): number {
-  if (capturable(b).length) return hardCapture(b, players, me);
+  // One memo for the decision: its endgames overlap, and it goes when the decision's made.
+  const memo = new EndgameMemo();
+  if (capturable(b).length) return hardCapture(b, players, me, memo);
   const safe = safeLines(b);
   if (safe.length > SEARCH_SAFE) return pick(rng, safe);
-  if (safe.length) return safeSearch(b, players, me, safe, rng);
-  return hardOpen(b, players, me, rng);
+  if (safe.length) return safeSearch(b, players, me, safe, rng, memo);
+  return hardOpen(b, players, me, rng, memo);
 }
 
 /** Final box counts if the endgame model plays out from `after`, with `opener` to move. */
-function project(base: number[], after: Board, opener: number, players: number): number[] {
-  const rel = endgame(components(after), players);
+function project(base: number[], after: Board, opener: number, players: number, memo: EndgameMemo): number[] {
+  const rel = endgame(components(after), players, memo);
   const abs = rotate(rel, opener, players);
   return base.map((v, i) => v + abs[i]);
 }
@@ -95,7 +97,7 @@ function project(base: number[], after: Board, opener: number, players: number):
  * the smallest runs first, and at the last 2 boxes of a chain (4 of a loop) decide whether
  * to take them or decline them, whichever leaves Hard better off against the best of the rest.
  */
-function hardCapture(b: Board, players: number, me: number): number {
+function hardCapture(b: Board, players: number, me: number, memo: EndgameMemo): number {
   const after = cloneBoard(b);
   takeAll(after, me);
   const order = captureOrder(b);
@@ -110,8 +112,8 @@ function hardCapture(b: Board, players: number, me: number): number {
   kept[me] += offer.keep;
   const given = base.slice();
   given[next] += offer.keep;
-  const ifTake = project(kept, after, me, players);
-  const ifDecline = project(given, after, next, players);
+  const ifTake = project(kept, after, me, players, memo);
+  const ifDecline = project(given, after, next, players, memo);
   return margin(ifDecline, me) > margin(ifTake, me) ? offer.line : take;
 }
 
@@ -120,7 +122,7 @@ function hardCapture(b: Board, players: number, me: number): number {
  * boxes they give away (and whether the receiver could decline), and play out each group:
  * the receiver takes or declines, whichever is better for them, then the model runs the rest.
  */
-function hardOpen(b: Board, players: number, me: number, rng: Rng): number {
+function hardOpen(b: Board, players: number, me: number, rng: Rng, memo: EndgameMemo): number {
   const base = boxCounts(b, players);
   const receiver = (me + 1) % players;
   const after2 = (me + 2) % players;
@@ -138,12 +140,12 @@ function hardOpen(b: Board, players: number, me: number, rng: Rng): number {
     }
     const took = base.slice();
     took[receiver] += taken.length;
-    let result = project(took, after, receiver, players);
+    let result = project(took, after, receiver, players, memo);
     if (keep) {
       const split = base.slice();
       split[receiver] += taken.length - keep;
       split[after2] += keep;
-      const declined = project(split, after, after2, players);
+      const declined = project(split, after, after2, players, memo);
       if (better(declined, result, receiver)) result = declined;
     }
     groups.set(key, { lines: [e], score: margin(result, me), given: taken.length });
@@ -160,11 +162,11 @@ function hardOpen(b: Board, players: number, me: number, rng: Rng): number {
  * chain. Search every order they can be drawn in (safe lines never capture, so the turn just
  * passes) and score the positions where none are left with the endgame model.
  */
-function safeSearch(b: Board, players: number, me: number, safe: number[], rng: Rng): number {
+function safeSearch(b: Board, players: number, me: number, safe: number[], rng: Rng, memo: EndgameMemo): number {
   const work = cloneBoard(b);
-  const memo = new Map<number, number[]>();
+  const byMask = new Map<number, number[]>();
   const rec = (mask: number, depth: number): number[] => {
-    const hit = memo.get(mask);
+    const hit = byMask.get(mask);
     if (hit) return hit;
     const mover = (me + depth) % players;
     let best: number[] | null = null;
@@ -175,8 +177,8 @@ function safeSearch(b: Board, players: number, me: number, safe: number[], rng: 
       work.lines[safe[i]] = NONE;
       if (!best || better(v, best, mover)) best = v;
     }
-    best ??= rotate(endgame(components(work), players), mover, players);
-    memo.set(mask, best);
+    best ??= rotate(endgame(components(work), players, memo), mover, players);
+    byMask.set(mask, best);
     return best;
   };
 

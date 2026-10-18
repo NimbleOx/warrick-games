@@ -59,9 +59,10 @@ export interface ShellOptions<S extends BaseState, M extends AnyMsg> {
 }
 
 /**
- * Everything around a game's own screen, the same in every game: the home card, creating and
- * joining, invite links, the lobby, chat, the connection and reconnecting, leaving, and the
- * mute button. The game's index.html holds only its game screen; the shell adds the rest.
+ * Everything around a game's own screen, the same in every game: the home card and its link
+ * back to the hub, creating and joining, invite links, the lobby, chat, the connection and
+ * reconnecting, leaving, and the mute button. The game's index.html holds only its game
+ * screen; the shell adds the rest.
  *
  * Buttons anywhere with data-action="leave", "start" or "lobby" leave the game, start it (or
  * the next round), and go back to the lobby. Every `.conn` element shows the connection,
@@ -414,6 +415,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     const html = `
     <section id="screen-home" class="screen screen-home">
       <canvas id="attract" class="attract" aria-hidden="true"></canvas>
+      <a class="btn btn-small hub-link" href="/"><span aria-hidden="true">←</span> All games</a>
       <div class="home-card">
         <h1 class="logo">${o.logo}</h1>
         <p class="tagline">${o.tagline}</p>

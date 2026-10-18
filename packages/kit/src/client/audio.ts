@@ -35,6 +35,14 @@ export function unlockAudio(): void {
   if (ctx.state === "suspended") void ctx.resume();
 }
 
+/**
+ * The audio context and the output every sound goes through (mute turns it down), once audio is
+ * unlocked: for a game's own sounds that keep going, like an engine. Null before then.
+ */
+export function audioOut(): { ctx: AudioContext; out: AudioNode } | null {
+  return ctx && master ? { ctx, out: master } : null;
+}
+
 function ready(): AudioContext | null {
   return ctx && master && !isMuted() && ctx.state === "running" ? ctx : null;
 }

@@ -19,7 +19,7 @@ What every Warrick game shares, so each game's folder holds only its game: rooms
 | `@warrick/kit/client/dom` | `$`, `$$`, `esc`, `setHtml` and `setText` (only when changed), `toast`, `store` (localStorage under the game's prefix), `personalBest` and `reloadOnce` |
 | `@warrick/kit/client/color` | `hexToRgb`, `mix` and `rgba`: colour arithmetic for canvas drawing |
 | `@warrick/kit/client/format` | `formatClock(ms)`: m:ss for HUD clocks |
-| `@warrick/kit/client/audio` | the synthesized-sound core (`tone`, `noiseBurst`, mute); each game builds its own `sfx` |
+| `@warrick/kit/client/audio` | the synthesized-sound core (`tone`, `noiseBurst`, mute, and `audioOut` for sounds that keep going); each game builds its own `sfx` |
 | `@warrick/kit/style.css` | base styles: colours as custom properties, buttons, home, lobby, chat, modals, results table, toast |
 | `@warrick/kit/testing/room` | runs a game's real `Room` in Node with fake sockets and storage, for its tests (see below) |
 

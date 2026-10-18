@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { TANK_HALF_W, WORLD_W } from "../src/shared/constants";
 import { mulberry32 } from "@warrick/kit/shared/rng";
 import { World, launchFor, maxPowerFor } from "../src/shared/sim";
-import { carveCrater, generateTerrain, TERRAIN_STYLES } from "../src/shared/terrain";
+import {
+  carveCrater,
+  generateTerrain,
+  ROUGHNESS,
+  TERRAIN_STYLES,
+  type Roughness,
+  type TerrainStyle,
+} from "../src/shared/terrain";
 import { WEAPON_ORDER, type WeaponId } from "../src/shared/weapons";
 
 function flatWorld(walls: "open" | "bounce" | "wrap" = "open") {
@@ -49,12 +56,31 @@ function shoot(w: World, weapon: WeaponId, angle: number, power: number, seed = 
 }
 
 describe("terrain", () => {
-  it("generates every style within the map", () => {
+  it("generates every style at every roughness within the map", () => {
     for (const style of TERRAIN_STYLES) {
-      const h = generateTerrain(mulberry32(7), style);
-      expect(h).toHaveLength(WORLD_W);
-      expect(Math.min(...h)).toBeGreaterThan(0);
-      expect(h.every(Number.isInteger)).toBe(true);
+      for (const roughness of ROUGHNESS) {
+        const h = generateTerrain(mulberry32(7), style, roughness);
+        expect(h).toHaveLength(WORLD_W);
+        expect(Math.min(...h)).toBeGreaterThan(0);
+        expect(h.every(Number.isInteger)).toBe(true);
+      }
+    }
+  });
+
+  it("makes each roughness bumpier than the one before, in every style", () => {
+    // How far the ground climbs and falls from one side to the other, over 20 maps.
+    const climb = (style: TerrainStyle, roughness: Roughness) => {
+      let total = 0;
+      for (let seed = 1; seed <= 20; seed++) {
+        const h = generateTerrain(mulberry32(seed), style, roughness);
+        for (let x = 1; x < h.length; x++) total += Math.abs(h[x] - h[x - 1]);
+      }
+      return total;
+    };
+    for (const style of TERRAIN_STYLES) {
+      const [smooth, rough, jagged] = ROUGHNESS.map((r) => climb(style, r));
+      expect(rough, style).toBeGreaterThan(smooth * 1.15);
+      expect(jagged, style).toBeGreaterThan(rough * 1.15);
     }
   });
 

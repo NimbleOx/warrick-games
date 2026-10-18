@@ -1,6 +1,7 @@
 import { DEFAULT_COLORS as PLAYER_COLORS } from "@warrick/kit/shared/constants";
 import { THEME_COUNT, TICK_MS, TURRET_Y, WORLD_W } from "../shared/constants";
 import { mulberry32, randInt, randomSeed, type Rng } from "@warrick/kit/shared/rng";
+import { DEFAULT_SETTINGS } from "../shared/protocol";
 import { World, launchFor } from "../shared/sim";
 import { TERRAIN_STYLES, flattenPad, generateTerrain } from "../shared/terrain";
 import type { WeaponId } from "../shared/weapons";
@@ -61,7 +62,8 @@ export class Attract {
 
   private reset(): void {
     const rng = this.rng;
-    const heights = generateTerrain(rng, TERRAIN_STYLES[randInt(rng, 0, TERRAIN_STYLES.length - 1)]);
+    const style = TERRAIN_STYLES[randInt(rng, 0, TERRAIN_STYLES.length - 1)];
+    const heights = generateTerrain(rng, style, DEFAULT_SETTINGS.roughness);
     this.theme = randInt(rng, 0, THEME_COUNT - 1);
     this.tanks.clear();
     const n = 5;

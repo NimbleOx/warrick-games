@@ -31,7 +31,7 @@ function fakeCanvas() {
 }
 
 function world(wind = 0): World {
-  const heights = generateTerrain(mulberry32(1), "hills");
+  const heights = generateTerrain(mulberry32(1), "hills", "smooth");
   const tanks = [300, 900].map((x, i) => ({
     id: `p${i + 1}`,
     x,

@@ -1,6 +1,7 @@
 import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
 import { DRAW_TURNS_EACH, MAX_POWER, SUDDEN_DEATH_TURNS_EACH } from "./constants";
 import { maxPowerFor, type ShotInput, type WallMode } from "./sim";
+import { ROUGHNESS, type Roughness } from "./terrain";
 import type { Inventory, ShopId, WeaponId } from "./weapons";
 
 export type Phase = "lobby" | "playing" | "roundover" | "shop" | "gameover";
@@ -12,6 +13,8 @@ export interface Settings {
   startCash: number;
   maxWind: number;
   walls: WallMode;
+  /** How rough each round's ground is. A game saved before it was a setting gets the default. */
+  roughness: Roughness;
   /** 0 = no limit. */
   turnSeconds: number;
 }
@@ -21,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   startCash: 10000,
   maxWind: 10,
   walls: "open",
+  roughness: "rough",
   turnSeconds: 60,
 };
 
@@ -29,6 +33,7 @@ export const SETTING_CHOICES = {
   startCash: [0, 10000, 25000, 50000, 100000],
   maxWind: [0, 5, 10, 20],
   walls: ["open", "bounce", "wrap"] as WallMode[],
+  roughness: ROUGHNESS,
   turnSeconds: [0, 30, 60, 90],
 };
 

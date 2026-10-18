@@ -18,12 +18,28 @@ const STYLE: Record<TerrainStyle, StyleParams> = {
   valley: { roughness: 0.5, lo: 0.08, hi: 0.68, blur: 5 },
 };
 
+/** How rough the ground is, the host's choice. The style still sets its overall shape. */
+export type Roughness = "smooth" | "rough" | "jagged";
+export const ROUGHNESS: Roughness[] = ["smooth", "rough", "jagged"];
+
+/**
+ * What each roughness does to a style: `detail` adds to how much of each scale's bumps the next
+ * smaller scale keeps (more hills on the hills, and sharper edges), and the blur is scaled by `blur`.
+ * Smooth is the ground as it was before roughness was a setting.
+ */
+const ROUGH: Record<Roughness, { detail: number; blur: number }> = {
+  smooth: { detail: 0, blur: 1 },
+  rough: { detail: 0.08, blur: 0.4 },
+  jagged: { detail: 0.15, blur: 0.15 },
+};
+
 /**
  * Midpoint-displacement heightmap, stretched to fill the style's vertical band.
  * Generated on the server only and sent to clients, so it may use any math.
  */
-export function generateTerrain(rng: Rng, style: TerrainStyle): number[] {
+export function generateTerrain(rng: Rng, style: TerrainStyle, roughness: Roughness): number[] {
   const p = STYLE[style];
+  const r = ROUGH[roughness];
   const N = 2048;
   const pts = new Float64Array(N + 1);
   pts[0] = rng();
@@ -35,7 +51,7 @@ export function generateTerrain(rng: Rng, style: TerrainStyle): number[] {
     for (let i = half; i < N; i += step) {
       pts[i] = (pts[i - half] + pts[i + half]) / 2 + (rng() - 0.5) * scale;
     }
-    scale *= p.roughness;
+    scale *= p.roughness + r.detail;
     step = half;
   }
 
@@ -52,7 +68,7 @@ export function generateTerrain(rng: Rng, style: TerrainStyle): number[] {
     }
     heights.push(v);
   }
-  heights = boxBlur(heights, p.blur);
+  heights = boxBlur(heights, Math.round(p.blur * r.blur));
 
   let min = Infinity;
   let max = -Infinity;

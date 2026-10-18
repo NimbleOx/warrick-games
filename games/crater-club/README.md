@@ -7,7 +7,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 ## Playing
 
 - **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/crater-club/g/K7Q2M`. Send either one to your friends.
-- The host picks the rounds, starting cash, wind, wall behavior and turn timer, and can add CPU opponents (easy, normal or hard).
+- The host picks the rounds, starting cash, wind, wall behavior, terrain and turn timer, and can add CPU opponents (easy, normal or hard). Terrain is how rough the ground is: smooth, rough (the default, closer to *Scorched Earth*) or jagged. Each round's ground is still hills, mountains, plains or a valley, at random.
 - Each round the tanks stand in a new random order, and who fires first passes round the players, so nobody starts more rounds than anyone else. The battle log says who starts; the rest of the order is random.
 - On your turn, aim with the sliders, the arrow keys (hold Shift for bigger steps), or by dragging on the map. Press **Fire** or Space.
 - Wind bends every shot. The HUD gives its strength, and wisps of air blowing across the sky show which way it blows and how hard.

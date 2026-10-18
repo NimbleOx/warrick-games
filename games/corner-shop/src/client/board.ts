@@ -209,10 +209,6 @@ export class BoardView {
     return true;
   }
 
-  get cssSize(): number {
-    return this.css;
-  }
-
   /** CSS pixels per square. */
   get cell(): number {
     return (this.css - 4) / this.size;

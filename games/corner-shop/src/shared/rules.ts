@@ -31,6 +31,8 @@ export interface Position {
   starts: readonly number[];
   /** Each seat's pieces left. A full tray means that seat hasn't placed yet. */
   trays: readonly (readonly PieceId[])[];
+  /** Seats that have stopped taking turns. Their starting squares are free for anyone. */
+  out?: readonly boolean[];
 }
 
 export interface Layout {
@@ -190,15 +192,6 @@ export function hasLegalMove(pos: Position, seat: number): boolean {
   return any;
 }
 
-/** The pieces in a seat's tray that fit somewhere right now. */
-export function fittingPieces(pos: Position, seat: number): Set<PieceId> {
-  const fits = new Set<PieceId>();
-  for (const piece of pos.trays[seat]) {
-    eachMove(pos, seat, () => (fits.add(piece), true), [piece]);
-  }
-  return fits;
-}
-
 // ------------------------------------------------------------------ scoring
 
 export function squaresLeft(tray: readonly PieceId[]): number {
@@ -217,10 +210,11 @@ export function scoreFor(tray: readonly PieceId[], lastPiece: PieceId | null): n
 
 // ------------------------------------------------------------------ helpers
 
+/** The other seats' starting squares that nobody else may cover yet: they haven't played there, and they're still in. */
 function reservedStarts(pos: Position, seat: number): number[] {
   const out: number[] = [];
   for (let s = 0; s < pos.starts.length; s++) {
-    if (s !== seat && isFirstMove(pos, s)) out.push(pos.starts[s]);
+    if (s !== seat && !pos.out?.[s] && isFirstMove(pos, s)) out.push(pos.starts[s]);
   }
   return out;
 }

@@ -102,6 +102,7 @@ const me = (s = shell.state): PlayerState | undefined => s?.players.find((p) => 
 const playing = (s = shell.state): boolean => !!s && s.phase === "playing" && (me(s)?.seat ?? -1) >= 0 && !me(s)!.out;
 const isMyTurn = (s = shell.state): boolean => playing(s) && s!.turnPlayerId === shell.me;
 const seatColor = (s: GameState, seat: number): string => s.players.find((p) => p.id === s.seats[seat])?.color ?? "#888";
+const seatOut = (s: GameState, seat: number): boolean => !!s.players.find((p) => p.id === s.seats[seat])?.out;
 
 // ------------------------------------------------------------------ shell hooks
 
@@ -180,7 +181,9 @@ function onState(s: GameState, prev: GameState | null): void {
 
 /** What you can still do on this board: the pieces that fit and your open corners. */
 function analyse(s: GameState): void {
-  const key = `${s.game}:${s.moves.length}:${shell.me}`;
+  // Someone going out frees their start, so that changes it too.
+  const outs = s.seats.map((_, seat) => (seatOut(s, seat) ? 1 : 0)).join("");
+  const key = `${s.game}:${s.moves.length}:${outs}:${shell.me}`;
   if (key === app.posKey && app.pos) return;
   app.posKey = key;
   app.pos = s.size ? positionOf(s) : null;
@@ -236,10 +239,17 @@ function clampGhost(x: number, y: number): { x: number; y: number } {
   return { x: Math.max(0, Math.min(size - o.w, x)), y: Math.max(0, Math.min(size - o.h, y)) };
 }
 
-/** Put the ghost's middle on a square. */
-function centreGhostOn(fx: number, fy: number): void {
+/** Put the ghost's middle on a square. True if it moved. */
+function centreGhostOn(fx: number, fy: number): boolean {
   const o = heldShape();
-  app.ghost = clampGhost(Math.floor(fx) - Math.floor((o.w - 1) / 2), Math.floor(fy) - Math.floor((o.h - 1) / 2));
+  return moveGhost(clampGhost(Math.floor(fx) - Math.floor((o.w - 1) / 2), Math.floor(fy) - Math.floor((o.h - 1) / 2)));
+}
+
+/** True if that's somewhere new. */
+function moveGhost(to: { x: number; y: number }): boolean {
+  const was = app.ghost;
+  app.ghost = to;
+  return !was || was.x !== to.x || was.y !== to.y;
 }
 
 function ghostCentre(): { x: number; y: number } | null {
@@ -315,7 +325,7 @@ function turnPiece(next: number): void {
   sfx.pick();
   if (app.pointer) centreGhostOn(app.pointer.x, app.pointer.y);
   else if (c) centreGhostOn(c.x, c.y);
-  render();
+  renderGhost();
 }
 
 const rotate = (dir: 1 | -1 = 1) => turnPiece(rotateT(app.t, dir));
@@ -332,7 +342,7 @@ function nudge(dx: number, dy: number): void {
   if (!app.held || !app.ghost) return;
   app.ghost = clampGhost(app.ghost.x + dx, app.ghost.y + dy);
   app.pointer = null;
-  render();
+  renderGhost();
 }
 
 let placeWatchdog = 0;
@@ -399,7 +409,8 @@ function drawScene(now: number): void {
     board: s.board,
     moves: s.moves,
     colors,
-    starts: s.starts.map((cell, seat) => ({ cell, color: colors[seat] })),
+    // An out seat's start is free for anyone, so it loses its ring.
+    starts: s.starts.map((cell, seat) => ({ cell, color: colors[seat] })).filter((_, seat) => !seatOut(s, seat)),
     showLast: s.moves.length > 0,
     flash: app.flash ? { cells: app.flash.cells, t: (now - app.flash.at) / 700 } : null,
   };
@@ -424,6 +435,22 @@ function render(): void {
   renderGameOver(s);
 }
 
+/** The piece in hand moved or turned: only the board, the Place button and the hint change. */
+function renderGhost(): void {
+  app.dirty = true;
+  const s = shell.state;
+  if (!s || s.phase === "lobby") return;
+  renderTools(s);
+  renderHint(s);
+}
+
+/** Set an element's HTML only when it's different, so hovering and tooltips survive. */
+function setHtml(el: HTMLElement, html: string): void {
+  if (el.dataset.html === html) return;
+  el.innerHTML = html;
+  el.dataset.html = html;
+}
+
 function renderHud(s: GameState): void {
   const turn = shell.player(s.turnPlayerId);
   let who = "";
@@ -433,16 +460,14 @@ function renderHud(s: GameState): void {
   } else if (s.phase === "gameover") {
     who = `<span class="who">Game over</span><button class="btn btn-small" id="show-results">Scores</button>`;
   }
-  const el = $("hud-turn");
-  if (el.dataset.html !== who) {
-    el.innerHTML = who;
-    el.dataset.html = who;
-  }
+  setHtml($("hud-turn"), who);
   const p = me(s);
-  $("hud-me").innerHTML =
+  setHtml(
+    $("hud-me"),
     p && p.seat >= 0
       ? `<span><span class="label">Score</span> <b>${p.score}</b></span><span><span class="label">Left</span> <b>${p.tray.length}</b></span>`
-      : `<span class="muted">Watching</span>`;
+      : `<span class="muted">Watching</span>`,
+  );
 }
 
 function renderTray(s: GameState): void {
@@ -506,7 +531,7 @@ function renderHint(s: GameState): void {
     text = `Waiting for ${shell.player(s.turnPlayerId)?.name ?? "the others"}… you can pick a piece and plan meanwhile.`;
   }
   const el = $("hint");
-  el.textContent = text;
+  if (el.textContent !== text) el.textContent = text;
   const check = app.held ? ghostCheck() : null;
   el.classList.toggle("bad", !!app.held && !!check?.error);
   el.classList.toggle("good", !!app.held && !!check && !check.error && isMyTurn(s));
@@ -536,7 +561,7 @@ function renderPlayers(s: GameState): void {
   });
   const watchers = s.players.filter((p) => p.seat < 0);
   if (watchers.length) rows.push(`<li class="muted watchers">Watching: ${watchers.map((p) => esc(p.name)).join(", ")}</li>`);
-  $("game-players").innerHTML = rows.join("");
+  setHtml($("game-players"), rows.join(""));
 }
 
 function flashBanner(html: string, ms: number): void {
@@ -560,11 +585,14 @@ function renderGameOver(s: GameState): void {
   const youWin = s.winners.includes(shell.me);
   $("gameover-title").textContent = youWin ? (winners.length > 1 ? "Shared win!" : "You win!") : "Game over";
   const names = winners.map((p) => `<b style="color:${p.color}">${esc(p.name)}</b>`);
-  $("gameover-winner").innerHTML = winners.length
+  setHtml(
+    $("gameover-winner"),
+    winners.length
     ? `${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} share the win` : `${names[0]} wins`} with ${winners[0].score} point${Math.abs(winners[0].score) === 1 ? "" : "s"}.`
-    : "";
+      : "",
+  );
   let place = 0;
-  $("gameover-rows").innerHTML = ranked
+  const rows = ranked
     .map((p, i) => {
       if (i === 0 || p.score !== ranked[i - 1].score) place = i + 1;
       const tie = ranked.filter((o) => o.score === p.score).length > 1;
@@ -575,10 +603,11 @@ function renderGameOver(s: GameState): void {
         <td>${p.score}${bonus}</td><td>${p.tray.length}</td><td>${squaresLeft(p.tray)}</td></tr>`;
     })
     .join("");
+  setHtml($("gameover-rows"), rows);
   const back = $<HTMLButtonElement>("gameover-lobby");
   const host = shell.canHost(s);
   back.disabled = !host;
-  back.textContent = host ? "Back to lobby" : `Waiting for ${esc(shell.player(s.hostId)?.name ?? "host")}…`;
+  back.textContent = host ? "Back to lobby" : `Waiting for ${shell.player(s.hostId)?.name ?? "host"}…`;
 }
 
 function tickClock(): void {
@@ -623,11 +652,11 @@ function overBoard(e: PointerEvent): boolean {
   return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
 }
 
-/** While dragging a piece with a finger, hold it above the finger so it can be seen. */
-function followPointer(e: PointerEvent, touch: boolean): void {
+/** While dragging a piece with a finger, hold it above the finger so it can be seen. True if it moved. */
+function followPointer(e: PointerEvent, touch: boolean): boolean {
   const c = boardCell(e);
   if (touch) c.y -= 1.2 + heldShape().h / 2;
-  centreGhostOn(c.x, c.y);
+  return centreGhostOn(c.x, c.y);
 }
 
 /** Keep getting a pointer's moves after it leaves the element (it may already be gone). */
@@ -664,10 +693,7 @@ function wire(): void {
     const d = app.drag;
     if (!d || d.kind !== "tray" || d.pointerId !== e.pointerId) return;
     if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) d.moved = true;
-    if (d.moved && overBoard(e)) {
-      followPointer(e, d.touch);
-      render();
-    }
+    if (d.moved && overBoard(e) && followPointer(e, d.touch)) renderGhost();
   });
   const endTrayDrag = (e: PointerEvent, cancelled: boolean) => {
     const d = app.drag;
@@ -705,10 +731,7 @@ function wire(): void {
   canvas.addEventListener("pointermove", (e) => {
     if (e.pointerType === "mouse") {
       app.pointer = boardCell(e);
-      if (app.held && !app.drag) {
-        centreGhostOn(app.pointer.x, app.pointer.y);
-        render();
-      }
+      if (app.held && !app.drag && centreGhostOn(app.pointer.x, app.pointer.y)) renderGhost();
       return;
     }
     const d = app.drag;
@@ -717,10 +740,7 @@ function wire(): void {
     const dx = (e.clientX - d.x0) / cell;
     const dy = (e.clientY - d.y0) / cell;
     if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 6) d.moved = true;
-    if (d.moved) {
-      app.ghost = clampGhost(Math.round(d.gx + dx), Math.round(d.gy + dy));
-      render();
-    }
+    if (d.moved && moveGhost(clampGhost(Math.round(d.gx + dx), Math.round(d.gy + dy)))) renderGhost();
   });
   canvas.addEventListener("pointerleave", (e) => {
     if (e.pointerType === "mouse") app.pointer = null;
@@ -746,7 +766,7 @@ function wire(): void {
       // A tap moves the piece there.
       const c = boardCell(e);
       centreGhostOn(c.x, c.y);
-      render();
+      renderGhost();
     }
   });
   canvas.addEventListener("pointercancel", () => (app.drag = null));

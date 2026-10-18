@@ -59,7 +59,12 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   /** Player ids by seat. Turns go in seat order. */
   seats: string[];
   turnPlayerId: string | null;
+  /** When the turn ends by itself (the kit's turn clock): its clock, or sooner while the player is away. */
   turnDeadline: number | null;
+  /** When the turn's clock runs out (null: no limit). Missing in a game saved before it had one. */
+  clockEnd?: number | null;
+  /** This turn's top-up, for someone back with almost no time left, has been used. */
+  clockTopUp?: boolean;
   timer: Timer | null;
   moves: Placed[];
   winners: string[];
@@ -76,6 +81,7 @@ export function positionOf(s: GameState): Position {
     cells: Int8Array.from(s.board),
     starts: s.starts,
     trays: s.seats.map((id) => s.players.find((p) => p.id === id)?.tray ?? []),
+    out: s.seats.map((id) => !!s.players.find((p) => p.id === id)?.out),
   };
 }
 

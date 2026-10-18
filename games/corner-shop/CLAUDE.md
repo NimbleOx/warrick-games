@@ -14,12 +14,12 @@ A turn-based territory game like *Blokus*. Everyone has the same 21 pieces: ever
   - Your first piece must cover your starting square.
   - Every later piece must touch at least one of your own pieces corner to corner, and none of them along an edge.
   - Other colours can touch your pieces anywhere.
-  - Nobody can cover another player's starting square before that player has placed their first piece. (This only matters if someone misses their first turn; without it, a neighbour could shut them out of the game.)
+  - Nobody can cover another player's starting square before that player has placed their first piece, unless that player is out. (This only matters if someone misses their first turn; without it, a neighbour could shut them out of the game.)
 - If you have no legal move when your turn comes, you're out of moves: you're passed automatically for the rest of the game, the log says so, and your row in the player list says "out of moves". (Pieces are never removed, so once you're stuck you stay stuck.) Placing your last piece also puts you out.
 - The game ends when nobody can move.
 - Scoring: −1 for each square left in your tray. Place all 21 pieces and you score +15 instead, or +20 if the monomino was your last piece. Highest score wins, and ties share the win.
 - Turn timer: the host picks off, 30, 60 or 90 seconds (default 60). Running out passes that one turn; you're still in the game and play again next time round.
-- If the player whose turn it is isn't connected, their turn passes after 10 seconds. A player who misses 3 turns in a row while away is out, so a game can't stall on someone who has gone for good. Leaving the game with the Leave button puts you out straight away; your pieces stay on the board and your score counts.
+- If the player whose turn it is isn't connected, their turn passes after 10 seconds. Back in time, they get the clock they had, not a new one (the kit's turn clock). A player who misses 3 turns in a row while away is out, so a game can't stall on someone who has gone for good. Leaving the game with the Leave button puts you out straight away; your pieces stay on the board and your score counts.
 - Controls:
   - Pick a piece from your tray. Pieces that don't fit anywhere right now are greyed out and say so.
   - Rotate with R, right-click or the mouse wheel. Flip with F. Esc puts the piece back.

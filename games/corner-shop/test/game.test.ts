@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MONOMINO, PIECE_IDS } from "../src/shared/pieces";
-import { positionOf, seated, type GameState } from "../src/shared/protocol";
-import { EMPTY, legalMoves, scoreFor } from "../src/shared/rules";
+import { COLORS, positionOf, seated, type GameState } from "../src/shared/protocol";
+import { EMPTY, isFirstMove, legalMoves, moveCells, placementError, scoreFor } from "../src/shared/rules";
 import { AWAY_LIMIT, AWAY_MS, CPU_MS, Game, newGameState } from "../src/worker/game";
 
 function setup() {
@@ -218,21 +218,113 @@ describe("game flow", () => {
     expect(t.s.turnPlayerId).toBe(a.id);
   });
 
-  it("gives a player who comes back their turn clock again", () => {
+  it("gives a player who comes back the clock they had, not a new one", () => {
     const t = setup();
     const a = t.human("A");
-    const b = t.human("B");
+    t.human("B");
     t.game().updateSettings(a.id, { turnSeconds: 60 });
     t.game().start(a.id);
     const p = t.current();
-    t.connected.delete(p.id);
-    t.game().setConnected(p.id, false);
+    const end = t.now + 60_000;
+    const away = (gone: boolean) => {
+      if (gone) t.connected.delete(p.id);
+      else t.connected.add(p.id);
+      t.game().setConnected(p.id, !gone);
+    };
+    away(true);
     expect(t.s.timer).toEqual({ kind: "away", at: t.now + AWAY_MS });
     t.advance(2000);
-    t.connected.add(p.id);
-    t.game().setConnected(p.id, true);
-    expect(t.s.timer).toEqual({ kind: "turn", at: t.now + 60_000 });
-    void b;
+    away(false);
+    expect(t.s.timer).toEqual({ kind: "turn", at: end });
+
+    // Reloading with a second left: once a turn, 5 seconds to find the piece again. No more.
+    t.advance(57_000);
+    away(true);
+    expect(t.s.timer).toEqual({ kind: "away", at: end });
+    away(false);
+    expect(t.s.timer).toEqual({ kind: "turn", at: t.now + 5000 });
+    t.advance(3000);
+    away(true);
+    away(false);
+    expect(t.s.timer).toEqual({ kind: "turn", at: end });
+    t.game().onTimer();
+    expect(t.s.turnPlayerId).not.toBe(p.id);
+    expect(p.missed).toBe(0);
+  });
+
+  it("only counts missed turns in a row: a turn they're here for starts the count again", () => {
+    const t = setup();
+    const a = t.human("A");
+    const b = t.human("B");
+    t.game().updateSettings(a.id, { turnSeconds: 30 });
+    t.game().start(a.id);
+    const setHere = (here: boolean) => {
+      if (here) t.connected.add(b.id);
+      else t.connected.delete(b.id);
+      t.game().setConnected(b.id, here);
+    };
+    setHere(false);
+    // B misses two turns while away.
+    for (let i = 0; i < AWAY_LIMIT - 1; i++) {
+      if (t.s.turnPlayerId === a.id) playAny(t);
+      expect(t.s.timer).toMatchObject({ kind: "away" });
+      t.runTimers(1);
+    }
+    expect(b.missed).toBe(AWAY_LIMIT - 1);
+    // B is back before their next turn, then lets the clock run out.
+    setHere(true);
+    expect(b.missed).toBe(AWAY_LIMIT - 1);
+    playAny(t);
+    expect(t.s.turnPlayerId).toBe(b.id);
+    expect(b.missed).toBe(0);
+    t.runTimers(1);
+    expect(t.s.turnPlayerId).toBe(a.id);
+    // Away again: one missed turn, not the third in a row.
+    setHere(false);
+    playAny(t);
+    t.runTimers(1);
+    expect(b.missed).toBe(1);
+    expect(b.out).toBeNull();
+  });
+
+  it("frees the start of a player who goes out before their first piece", () => {
+    const t = setup();
+    const a = t.human("A");
+    const b = t.human("B");
+    t.game().start(a.id);
+    if (t.s.turnPlayerId === b.id) playAny(t);
+    // A leaves before placing anything. B plays on alone.
+    t.game().leave(a.id);
+    expect(a.out).toBe("left");
+    if (isFirstMove(positionOf(t.s), b.seat)) playAny(t);
+    expect(t.s.turnPlayerId).toBe(b.id);
+    // A piece of B's diagonal to A's start (as if B had worked its way over there).
+    const start = t.s.starts[a.seat];
+    t.s.board[start + t.s.size + 1] = b.seat;
+    const pos = positionOf(t.s);
+    expect(pos.out).toEqual(t.s.seats.map((id) => id === a.id));
+    const cover = legalMoves(pos, b.seat).find((m) => moveCells(t.s.size, m)!.includes(start))!;
+    expect(cover).toBeDefined();
+    // While A was still in, that was A's square.
+    expect(placementError({ ...pos, out: undefined }, b.seat, cover)).toBe("That's another player's starting square");
+    t.game().place(b.id, cover);
+    expect(t.s.board[start]).toBe(b.seat);
+  });
+
+  it("gives every seat a colour of its own", () => {
+    const t = setup();
+    const names = ["A", "B", "C", "D", "E", "F", "G"];
+    const [a, b, c, d, , , g] = names.map((n) => t.human(n));
+    // Six colours: the seventh person shares A's.
+    expect(g.color).toBe(a.color);
+    // Three seats come free, and the watchers take them at the start, colours and all.
+    for (const p of [b, c, d]) t.game().leave(p.id);
+    t.game().start(a.id);
+    const seats = seated(t.s);
+    expect(seats.map((p) => p.name).sort()).toEqual(["A", "E", "F", "G"]);
+    expect(new Set(seats.map((p) => p.color)).size).toBe(4);
+    expect(a.color).toBe(COLORS[0]);
+    expect(g.color).not.toBe(COLORS[0]);
   });
 
   it("puts a player who leaves mid-game out, and moves the turn on", () => {

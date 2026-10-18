@@ -1,7 +1,8 @@
+import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
 import type { CpuLevel } from "./ai";
 import type { Garbage, LaneSnap, Placement } from "./engine";
 
-export type { CpuLevel, Garbage, LaneSnap, Placement };
+export type { CpuLevel, Garbage, LaneSnap, LogEntry, Placement };
 
 export type Phase = "lobby" | "playing" | "results";
 export type Speed = "relaxed" | "normal" | "frantic";
@@ -49,14 +50,7 @@ export function gravityMs(level: number): number {
   return Math.pow(0.8 - (level - 1) * 0.007, level - 1) * 1000;
 }
 
-export interface PlayerState {
-  id: string;
-  name: string;
-  color: string;
-  cpu: CpuLevel | null;
-  connected: boolean;
-  /** Watching: they arrived mid-round, or all eight seats were taken. */
-  spectator: boolean;
+export interface PlayerState extends BasePlayer {
   /** Board slot in the current round, or -1. */
   slot: number;
   /** Rounds won in this room. */
@@ -84,25 +78,10 @@ export interface RoundResult {
   standings: Standing[];
 }
 
-export interface GameState {
-  code: string;
-  createdAt: number;
-  lastActive: number;
+export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
-  hostId: string;
-  settings: Settings;
-  players: PlayerState[];
   round: number;
   results: RoundResult | null;
-  nextPlayerNum: number;
-}
-
-export interface LogEntry {
-  at: number;
-  kind: "chat" | "event";
-  from?: string;
-  color?: string;
-  text: string;
 }
 
 /** One player's board as the server has it. */
@@ -165,31 +144,15 @@ export interface Frame {
 }
 
 export type ClientMsg =
-  | { t: "hello"; token: string; name: string }
-  | { t: "color"; color: string }
-  | { t: "settings"; settings: Partial<Settings> }
-  | { t: "addCpu"; level: CpuLevel }
-  | { t: "kick"; id: string }
-  | { t: "start" }
-  | { t: "lobby" }
+  | LobbyMsg
   /** A piece locked: `k` is how many pieces came before it, `g` the newest garbage seen, `ck` the board's checksum after. */
   | { t: "lock"; e: number; k: number; pl: Placement; g: number; ck: number }
-  | { t: "resync" }
-  | { t: "chat"; text: string }
-  | { t: "leave" }
-  | { t: "ping" };
+  | { t: "resync" };
 
 export type ServerMsg =
+  | Exclude<RoomMsg<GameState>, { t: "welcome" }>
   | { t: "welcome"; you: string; state: GameState; log: LogEntry[]; snap: RoundSnap | null; now: number }
-  | { t: "state"; state: GameState; now: number }
   | { t: "snap"; snap: RoundSnap; now: number }
   | Frame
   /** The server overruled this player's browser: here's their board as it really is. */
-  | { t: "fix"; s: number; seat: SeatSnap }
-  | { t: "log"; entries: LogEntry[] }
-  | { t: "error"; message: string }
-  | { t: "kicked" }
-  | { t: "pong"; now: number };
-
-export const CLOSE_NOT_FOUND = 4404;
-export const CLOSE_KICKED = 4403;
+  | { t: "fix"; s: number; seat: SeatSnap };

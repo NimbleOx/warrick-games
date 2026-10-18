@@ -1,5 +1,5 @@
 // Small seeded PRNG (mulberry32). Integer-only ops, so it produces the same
-// sequence in every JS engine, which keeps seeded tests and CPU games reproducible.
+// sequence in every JS engine: seeded tests, CPU games and client-side replays depend on that.
 export type Rng = () => number;
 
 export function mulberry32(seed: number): Rng {
@@ -27,4 +27,16 @@ export function shuffle<T>(rng: Rng, arr: T[]): T[] {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+
+/**
+ * One mulberry32 step on an explicit state, for generators that have to live
+ * in plain data (each head's gap timer). Returns the new state and a value in [0, 1).
+ */
+export function rngStep(state: number): { state: number; value: number } {
+  const a = (state + 0x6d2b79f5) >>> 0;
+  let t = a;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return { state: a, value: ((t ^ (t >>> 14)) >>> 0) / 4294967296 };
 }

@@ -3,7 +3,7 @@ import { choose } from "../src/shared/ai";
 import { COUNTDOWN_MS, TICK_MS } from "../src/shared/constants";
 import { Lane } from "../src/shared/engine";
 import { attackScale, gravityMs, levelAt, type Frame, type GameState, type Op, type ServerMsg } from "../src/shared/protocol";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Game, GameError, newGameState } from "../src/worker/game";
 
 function setup() {

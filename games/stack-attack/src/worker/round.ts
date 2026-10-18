@@ -1,9 +1,10 @@
 import { choose, cpuPace, type CpuLevel } from "../shared/ai";
-import { COLS, LOCK_DELAY_MS, MAX_LOCK_RESETS, MAX_PLAYERS, SPAWN_X, SPAWN_Y } from "../shared/constants";
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
+import { COLS, LOCK_DELAY_MS, MAX_LOCK_RESETS, SPAWN_X, SPAWN_Y } from "../shared/constants";
 import { Lane, reachable, type LockResult, type Placement } from "../shared/engine";
 import { isPiece } from "../shared/pieces";
 import { attackScale, gravityMs, levelAt, type Aim, type Op, type RoundSnap, type SeatSnap, type Speed } from "../shared/protocol";
-import { shuffle, type Rng } from "../shared/rng";
+import { shuffle, type Rng } from "@warrick/kit/shared/rng";
 
 /** A disconnected player gets this long to come back before the autopilot takes their board. */
 const AWAY_GRACE_MS = 2500;

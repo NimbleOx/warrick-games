@@ -1,0 +1,19 @@
+{
+  "name": "@warrick/kit",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "What every Warrick game shares: rooms, lobby, networking, the page shell, base styles and build config.",
+  "exports": {
+    "./style.css": "./src/client/style.css",
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./vite": "./src/vite.ts",
+    "./shared/*": "./src/shared/*.ts",
+    "./worker/*": "./src/worker/*.ts",
+    "./client/*": "./src/client/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  }
+}

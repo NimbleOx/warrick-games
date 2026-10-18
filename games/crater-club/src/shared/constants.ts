@@ -19,7 +19,6 @@ export const BARREL_LEN = 14;
 
 export const START_HEALTH = 100;
 export const SHIELD_HP = 60;
-export const MAX_PLAYERS = 8;
 
 // Economy and scoring.
 export const CASH_PER_DAMAGE = 40;
@@ -28,21 +27,6 @@ export const CASH_SURVIVE = 2000;
 export const CASH_WIN = 4000;
 export const SCORE_PER_KILL = 100;
 export const SCORE_PER_WIN = 250;
-
-export const PLAYER_COLORS = [
-  "#ff4d4d", // red
-  "#4da6ff", // blue
-  "#5ce65c", // green
-  "#ffd23f", // yellow
-  "#ff6bd6", // pink
-  "#3ff0e0", // cyan
-  "#ff9a3c", // orange
-  "#e8e8e8", // white
-] as const;
-
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const CODE_LENGTH = 5;
-export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 
 /** Number of sky/terrain palettes the client knows how to draw. */
 export const THEME_COUNT = 6;

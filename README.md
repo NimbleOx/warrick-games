@@ -23,16 +23,19 @@ The dev ports are the ones in `.claude/launch.json`, so every game can run at th
 ```
 hub/            the page at warrick.games/: static files on the Custom Domain warrick.games
 games/<name>/   one game: Vite client, Worker, one Durable Object per room, on the route warrick.games/<name>*
+packages/kit/   what the games share: rooms, the lobby, networking, the page shell, base styles, build config
 ```
 
-This is an npm workspace. The shared tooling (Vite, the Cloudflare Vite plugin, wrangler, Vitest, TypeScript) is in the root `package.json`, with one `package-lock.json`. The games don't share code yet; each has its own copy of the room, lobby and networking code it took from Crater Club.
+This is an npm workspace. The shared tooling (Vite, the Cloudflare Vite plugin, wrangler, Vitest, TypeScript) is in the root `package.json`, with one `package-lock.json`.
+
+The games' shared code lives in `packages/kit` (`@warrick/kit`; see its README): the Durable Object base, the lobby rules, the Worker router, the reconnecting socket, the home/lobby/chat shell, the sound core, the base stylesheet and the Vite and TypeScript config. Each game keeps only its own rules, screen and look. Stack Attack and Crater Club are on the kit; the other games still have their own copies of that code, taken from Crater Club, and are moving over one at a time.
 
 ## Commands
 
 ```bash
 npm install                            # once, at the root
 npm run dev -w games/crater-club       # one game (or `npm run dev` inside its folder)
-npm test                               # every workspace
+npm test                               # every workspace, the kit included
 npm run typecheck
 npm run deploy -w games/crater-club    # deploy one game
 npm run deploy -w hub
@@ -46,9 +49,8 @@ npm run deploy -w hub
 
 ## Adding a game
 
-1. Create `games/<name>/` and give it a free port in `.claude/launch.json`.
-2. Serve it under its path: Vite `base: "/<name>/"`, the client's fetch and WebSocket URLs built from `import.meta.env.BASE_URL`, the Worker's API under `/<name>/api/...`, and `run_worker_first: ["/<name>/api/*"]`.
-3. Nest its built client under `dist/client/<name>/`. Workers static assets are looked up by request path and ignore Vite's `base`. Crater Club's `vite.config.ts` has a small plugin that does this; copy it.
-4. Give its `wrangler.jsonc` the route `{ "pattern": "warrick.games/<name>*", "zone_name": "warrick.games" }` and set `workers_dev: false`.
-5. Prefix its `localStorage` keys (`cc.`, `lc.`, …): every game shares the warrick.games origin.
-6. Deploy the game, then turn its card in `hub/public/index.html` from "Coming soon" into a link and deploy the hub.
+1. Create `games/<name>/` and give it a free port in `.claude/launch.json`. Start from Stack Attack (real-time) or Crater Club (turn-based): both are built on the kit.
+2. Build it on `@warrick/kit` (see its README): `vite.config.ts` is `gameConfig("<name>")`, which sets Vite's `base` to `/<name>/` and nests the built client under `dist/client/<name>/` (Workers static assets are looked up by request path and ignore Vite's `base`); the Worker is `gameWorker("<name>")`, with its API under `/<name>/api/...`; the client's `Shell` builds every URL from `import.meta.env.BASE_URL`.
+3. Give its `wrangler.jsonc` the route `{ "pattern": "warrick.games/<name>*", "zone_name": "warrick.games" }`, `workers_dev: false` and `run_worker_first: ["/<name>/api/*"]`.
+4. Pick its `localStorage` prefix (`cc`, `lc`, …) and pass it to the `Shell`: every game shares the warrick.games origin.
+5. Deploy the game, then turn its card in `hub/public/index.html` from "Coming soon" into a link and deploy the hub.

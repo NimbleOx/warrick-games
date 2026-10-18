@@ -2,7 +2,7 @@ import { choose, type CpuLevel } from "../shared/ai";
 import { COLS, SPAWN_Y, VISIBLE } from "../shared/constants";
 import { Lane, type Placement } from "../shared/engine";
 import { SHAPES } from "../shared/pieces";
-import { mulberry32, randomSeed } from "../shared/rng";
+import { mulberry32, randomSeed } from "@warrick/kit/shared/rng";
 import { PIECE_COLORS } from "./render";
 
 const LEVELS: CpuLevel[] = ["hard", "normal", "easy", "hard", "normal", "normal", "hard", "easy"];

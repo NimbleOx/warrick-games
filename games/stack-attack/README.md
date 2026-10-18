@@ -34,7 +34,7 @@ npm run deploy     # vite build && wrangler deploy
 That creates a Worker called `stack-attack` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets. It's served at **https://warrick.games/stack-attack/** through the zone route `warrick.games/stack-attack*` in `wrangler.jsonc`, next to the hub and the other games; see the repo README for how the routing works.
 
 - Vite's `base` is `/stack-attack/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/stack-attack/api/`.
-- The `nestClientUnderBase` plugin in `vite.config.ts` moves the client build into `dist/client/stack-attack/`, because Workers static assets ignore Vite's `base`. Check a build before deploying: `npm run build && npx vite preview`, then confirm `/stack-attack/assets/*.js` and `/stack-attack/g/ABCDE` both return 200.
+- `vite.config.ts` is the kit's `gameConfig("stack-attack")`, which moves the client build into `dist/client/stack-attack/`, because Workers static assets ignore Vite's `base`. Check a build before deploying: `npm run build && npx vite preview`, then confirm `/stack-attack/assets/*.js` and `/stack-attack/g/ABCDE` both return 200.
 - `localStorage` keys start with `sa.`.
 - After the first deploy, turn Stack Attack's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
 
@@ -65,9 +65,12 @@ src/shared/    code used by both sides
   engine.ts      Board, Lane (one player's game: lock, clear, attack, garbage), T-spins, the reachability search
   ai.ts          CPU players and the disconnected-player autopilot
   protocol.ts    settings, gravity curve, game state and message types
-src/worker/    index.ts (routes), room.ts (Durable Object + tick loop), game.ts (lobby and match rules),
+src/worker/    index.ts (routes), room.ts (Durable Object: lock messages, the tick loop), game.ts (match rules),
                round.ts (one round: checking locks, routing garbage, KOs, CPUs)
-src/client/    main.ts (UI + networking glue), pilot.ts (your piece: auto-shift, gravity, lock delay),
-               render.ts (canvas), input.ts (keys + touch buttons), net.ts, audio.ts, attract.ts (home-screen demo)
+src/client/    main.ts (the game screen and its hooks into the shell), pilot.ts (your piece: auto-shift,
+               gravity, lock delay), render.ts (canvas), input.ts (keys + touch buttons), audio.ts (sounds),
+               attract.ts (home-screen demo)
 test/          Vitest tests: pieces, clears, T-spins, garbage timing, replay, CPUs, game flow
 ```
+
+The room, lobby rules, router, socket (with the heartbeat that keeps a round's room within its CPU budget), home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).

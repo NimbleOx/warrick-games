@@ -1,4 +1,4 @@
-import { mulberry32, shuffle, type Rng } from "./rng";
+import { mulberry32, shuffle, type Rng } from "@warrick/kit/shared/rng";
 
 // Cell values on a board: 0 is empty, 1–7 are the pieces, 8 is garbage.
 export const I = 1;

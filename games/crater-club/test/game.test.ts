@@ -40,12 +40,23 @@ describe("game flow", () => {
     expect(t.s.phase).toBe("playing");
     expect(t.s.round).toBe(1);
     expect(t.s.terrain).toHaveLength(1200);
+    // The lobby is closed while the game is on.
+    expect(() => t.game().addCpu(host.id, "easy")).toThrow("Wait for the round to end");
 
     // The human never fires, so their turns time out; the CPUs fight it out.
     t.runTimers();
     expect(t.s.phase).toBe("gameover");
     expect(t.s.round).toBe(2);
     expect(t.s.shotCount).toBeGreaterThan(0);
+
+    // Back to the lobby: the board and the money reset for the next game.
+    t.game().backToLobby(host.id);
+    expect(t.s.phase).toBe("lobby");
+    expect(t.s.round).toBe(0);
+    expect(t.s.terrain).toEqual([]);
+    expect(t.s.timer).toBeNull();
+    expect(t.s.players.every((p) => p.tank === null && p.money === t.s.settings.startCash)).toBe(true);
+    expect(() => t.game().backToLobby(host.id)).toThrow("Not right now");
   });
 
   it("only lets the current player fire", () => {

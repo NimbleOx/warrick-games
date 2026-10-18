@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WORLD_W } from "../src/shared/constants";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { World, launchFor, maxPowerFor } from "../src/shared/sim";
 import { carveCrater, generateTerrain, TERRAIN_STYLES } from "../src/shared/terrain";
 import type { WeaponId } from "../src/shared/weapons";

@@ -1,5 +1,5 @@
 import { TANK_HALF_W, WORLD_H, WORLD_W } from "./constants";
-import type { Rng } from "./rng";
+import type { Rng } from "@warrick/kit/shared/rng";
 
 export type TerrainStyle = "hills" | "mountains" | "plains" | "valley";
 export const TERRAIN_STYLES: TerrainStyle[] = ["hills", "mountains", "plains", "valley"];

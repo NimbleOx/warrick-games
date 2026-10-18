@@ -37,11 +37,11 @@ It's served at **https://warrick.games/crater-club/**, one path on a site shared
 
 Everything lives under the base path `/crater-club/`:
 
-- `vite.config.ts` sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`.
-- The Worker's API is at `/crater-club/api/...`, and `run_worker_first` matches that.
-- Workers static assets are looked up by request path and ignore Vite's `base`. So a small plugin in `vite.config.ts` moves the client build into `dist/client/crater-club/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
+- `vite.config.ts` is the kit's `gameConfig("crater-club")`: it sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`.
+- The Worker's API is at `/crater-club/api/...` (the kit's `gameWorker("crater-club")`), and `run_worker_first` matches that.
+- Workers static assets are looked up by request path and ignore Vite's `base`, so `gameConfig` moves the client build into `dist/client/crater-club/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
 
-To move the game to another path, change `base` in `vite.config.ts`, the route `pattern`, `run_worker_first`, and the paths in `src/worker/index.ts`.
+To move the game to another path, change the slug in `vite.config.ts` and `src/worker/index.ts`, the route `pattern` and `run_worker_first`.
 
 If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
 
@@ -65,7 +65,10 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 
 ```
 src/shared/    code used by both sides: constants, weapons, terrain, the shot simulation, protocol types
-src/worker/    index.ts (routes), room.ts (Durable Object), game.ts (rules), ai.ts (CPU players)
-src/client/    main.ts (UI + networking glue), render.ts (canvas), net.ts, audio.ts, attract.ts (home-screen demo)
+src/worker/    index.ts (routes), room.ts (Durable Object: messages and the turn timer), game.ts (rules), ai.ts (CPU players)
+src/client/    main.ts (the game screen and its hooks into the shell), render.ts (canvas), audio.ts (sounds),
+               attract.ts (home-screen demo)
 test/          Vitest tests for the simulation and the game flow
 ```
+
+The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).

@@ -1,0 +1,10 @@
+{
+  // The parts of the kit that need no runtime types. The rest (the room and router need the
+  // Workers runtime, the client the DOM and Vite) is checked by each game's own typecheck.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["vitest"]
+  },
+  "include": ["src/shared", "src/worker/lobby.ts", "test"]
+}

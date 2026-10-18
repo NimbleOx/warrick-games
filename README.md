@@ -57,7 +57,7 @@ npm run deploy -w hub
 ## Adding a game
 
 1. Create `games/<name>/` and give it a free port in `.claude/launch.json`. Start from a game like it: Stack Attack or Turf War (real-time), Crater Club (turn-based), or Light Cycles (real-time rounds with timers between them).
-2. Build it on `@warrick/kit` (see its README): `vite.config.ts` is `gameConfig("<name>")`, which sets Vite's `base` to `/<name>/` and nests the built client under `dist/client/<name>/` (Workers static assets are looked up by request path and ignore Vite's `base`); the Worker is `gameWorker("<name>")`, with its API under `/<name>/api/...`; the client's `Shell` builds every URL from `import.meta.env.BASE_URL`.
+2. Build it on `@warrick/kit` (see its README): `vite.config.ts` is `gameConfig("<name>")`, which sets Vite's `base` to `/<name>/` and nests the built client under `dist/client/<name>/` (Workers static assets are looked up by request path and ignore Vite's `base`); the Worker is `gameWorker("<name>")`, with its API under `/<name>/api/...`; the client's `Shell` builds every URL from `import.meta.env.BASE_URL`. Its `tsconfig.worker.json` includes the kit's `worker-runtime.d.ts`, and its `cf-typegen` script is `wrangler types --include-runtime=false`, so its own `worker-configuration.d.ts` holds only its bindings.
 3. Give its `wrangler.jsonc` the route `{ "pattern": "warrick.games/<name>*", "zone_name": "warrick.games" }`, `workers_dev: false` and `run_worker_first: ["/<name>/api/*"]`.
 4. Pick its `localStorage` prefix (`cc`, `lc`, …) and pass it to the `Shell`: every game shares the warrick.games origin.
 5. Deploy the game, then turn its card in `hub/public/index.html` from "Coming soon" into a link and deploy the hub.

@@ -1,0 +1,8 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // Not a Worker: this only tells `npm run cf-typegen -w packages/kit` which Workers runtime to
+  // write the types for, into worker-runtime.d.ts. Every game's worker is checked against that
+  // file, so keep this date the same as the games' own `compatibility_date`.
+  "name": "warrick-kit-types",
+  "compatibility_date": "2026-10-01"
+}

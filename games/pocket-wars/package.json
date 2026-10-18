@@ -10,6 +10,6 @@
     "deploy": "vite build && wrangler deploy",
     "typecheck": "tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "vitest run",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types --include-runtime=false"
   }
 }

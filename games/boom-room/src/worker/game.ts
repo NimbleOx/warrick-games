@@ -1,6 +1,6 @@
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randInt, randomSeed } from "@warrick/kit/shared/rng";
-import { GameError, Lobby, baseState } from "@warrick/kit/worker/lobby";
+import { GameError, Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
 import { Match } from "../shared/ai";
 import { Arena, arenaSize, type ArenaEvent } from "../shared/arena";
 import { THEME_COUNT, TICK_MS } from "../shared/constants";
@@ -43,6 +43,16 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
   protected readonly cpuNames = CPU_NAMES;
   protected readonly finishedPhase = "gameover";
 
+  /** `deltas` says whether every page here takes ticks as deltas (see ArenaDelta) rather than whole. */
+  constructor(
+    s: GameState,
+    io: GameIO,
+    live: Live | null = null,
+    private readonly deltas: () => boolean = () => false,
+  ) {
+    super(s, io, live);
+  }
+
   protected betweenRounds(): boolean {
     return this.s.phase === "lobby";
   }
@@ -76,6 +86,8 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     for (const p of [...this.s.players]) {
       if (!p.cpu && !p.connected) this.removePlayer(p.id);
     }
+    // Someone who came when every seat was taken gets one if it's free now.
+    this.promoteSpectators();
     if (this.participants.length < 2) throw new GameError("Need at least two bombers — add a CPU?");
     for (const p of this.s.players) {
       p.wins = p.kills = p.deaths = p.items = 0;
@@ -134,7 +146,7 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     this.touch();
     // A new round goes out with its first frame, right after the state, so clients never see
     // the round without the arena. (This message carries the state, so the room sends no other.)
-    this.outbox.push({ t: "state", state: s, now: this.io.now() }, { t: "frame", f: arena.snapshot(false) });
+    this.outbox.push({ t: "state", state: s, now: this.io.now() }, { t: "frame", f: arena.frame(false).full });
   }
 
   /** The room lost its in-memory round (the object restarted): deal a fresh one. */
@@ -153,14 +165,24 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     if (bomb) arena.placeBomb(id);
   }
 
-  /** One step of the arena, on the room's tick: send everyone the frame, and score the round once it's decided. */
+  /** A page that lost track of the arena gets all of it again. */
+  sync(id: string): void {
+    const arena = this.live?.arena;
+    if (!arena || this.s.phase !== "playing") return;
+    this.direct.push({ pid: id, msg: { t: "frame", f: arena.catchUp() } });
+  }
+
+  /**
+   * One step of the arena, on the room's tick: send everyone the frame (as a delta when every
+   * page takes them), and score the round once it's decided.
+   */
   tick(): void {
     const m = this.live;
     if (!m || this.s.phase !== "playing") return;
     if (!m.arena.result) m.step(TICK_MS);
-    const frame = m.arena.snapshot(true);
-    this.outbox.push({ t: "frame", f: frame });
-    this.onArenaEvents(frame.ev);
+    const { full, delta } = m.arena.frame(true);
+    this.outbox.push(this.deltas() ? { t: "delta", f: delta } : { t: "frame", f: full });
+    this.onArenaEvents(full.ev);
     if (m.arena.result) this.roundOver();
   }
 

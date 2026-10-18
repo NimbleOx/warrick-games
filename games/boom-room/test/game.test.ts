@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { applyDelta, type ArenaSnap } from "../src/shared/arena";
 import { TICK_MS } from "../src/shared/constants";
 import { Game, newGameState, type GameIO, type Live } from "../src/worker/game";
 
@@ -7,10 +8,10 @@ function setup() {
   const connected = new Set<string>();
   const s = newGameState("ABCDE", now);
   const io: GameIO = { now: () => now, isConnected: (id) => connected.has(id) };
-  /** The round in play, kept between actions the way the room keeps it. */
-  const room = { live: null as Live | null };
+  /** The round in play, kept between actions the way the room keeps it; and whether every page takes deltas. */
+  const room = { live: null as Live | null, deltas: false };
   const game = () => {
-    const g = new Game(s, io, room.live);
+    const g = new Game(s, io, room.live, () => room.deltas);
     Object.defineProperty(g, "live", { get: () => room.live, set: (m: Live | null) => (room.live = m) });
     return g;
   };
@@ -160,6 +161,74 @@ describe("game flow", () => {
     const tick = t.game();
     tick.tick();
     expect(tick.outbox.map((m) => m.t)).toEqual(["frame"]);
+  });
+
+  it("seats someone who came to a full lobby at the start, if a seat has come free", () => {
+    const t = setup();
+    const host = t.game().addHuman("Host");
+    const b = t.game().addHuman("B");
+    t.connected.add(host.id).add(b.id);
+    for (let i = 0; i < 6; i++) t.game().addCpu(host.id, "easy");
+    const late = t.game().addHuman("Late");
+    t.connected.add(late.id);
+    expect(late.spectator).toBe(true);
+    t.game().leave(b.id);
+    t.connected.delete(b.id);
+    t.game().start(host.id);
+    const seated = t.s.players.find((p) => p.id === late.id)!;
+    expect(seated.spectator).toBe(false);
+    expect(seated.inRound).toBe(true);
+    expect(t.room.live?.arena.player(late.id)).toBeDefined();
+    expect(t.room.live?.arena.players).toHaveLength(8);
+  });
+
+  it("sends ticks as deltas only while every page takes them", () => {
+    const t = setup();
+    const host = t.game().addHuman("Host");
+    t.connected.add(host.id);
+    t.game().addCpu(host.id, "easy");
+    const start = t.game();
+    start.start(host.id);
+    const first = start.outbox.find((m) => m.t === "frame");
+    let seen = first?.t === "frame" ? first.f : null;
+    const frames: string[] = [];
+    for (let n = 0; n < 200; n++) {
+      t.room.deltas = n >= 50 && n < 150;
+      const g = t.game();
+      g.tick();
+      const [msg] = g.outbox;
+      frames.push(msg.t);
+      if (msg.t === "frame") seen = msg.f;
+      if (msg.t === "delta") seen = applyDelta(seen!, msg.f);
+      // The snapshot is the arena now, without the tick's events.
+      expect({ ...seen!, ev: [] }).toEqual(t.room.live!.arena.snapshot(false));
+    }
+    expect(frames.slice(0, 50).every((f) => f === "frame")).toBe(true);
+    expect(frames.slice(50, 150).every((f) => f === "delta")).toBe(true);
+    expect(frames.slice(150).every((f) => f === "frame")).toBe(true);
+  });
+
+  it("sends the whole arena to a page that lost track, and the next delta fits it", () => {
+    const t = setup();
+    const host = t.game().addHuman("Host");
+    const b = t.game().addHuman("B");
+    t.connected.add(host.id).add(b.id);
+    t.game().addCpu(host.id, "easy");
+    t.game().start(host.id);
+    t.room.deltas = true;
+    for (let n = 0; n < 100; n++) t.game().tick();
+    const g = t.game();
+    g.sync(b.id);
+    expect(g.direct).toHaveLength(1);
+    const { pid, msg } = g.direct[0];
+    expect(pid).toBe(b.id);
+    expect(msg.t).toBe("frame");
+    const tick = t.game();
+    tick.tick();
+    const [next] = tick.outbox;
+    expect(next.t).toBe("delta");
+    const caughtUp = applyDelta((msg as { f: ArenaSnap }).f, (next as { f: ArenaSnap }).f);
+    expect(caughtUp).toEqual(t.room.live!.arena.snapshot(false));
   });
 
   it("keeps a player who leaves mid-game in the standings, and drops them from the next round", () => {

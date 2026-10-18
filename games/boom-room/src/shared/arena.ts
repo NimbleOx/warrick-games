@@ -1,6 +1,8 @@
 import {
   BASE_SPEED,
   BOMB_SLIDE_SPEED,
+  BUDGET_BANK_SECS,
+  BUDGET_BANK_TILES,
   COUNTDOWN_MS,
   CURSE_IMMUNE_MS,
   CURSE_MS,
@@ -170,7 +172,7 @@ export interface SnapFlame {
   u: number;
 }
 
-/** Everything a client needs to draw the arena. Sent every tick. */
+/** Everything a client needs to draw the arena. */
 export interface ArenaSnap {
   time: number;
   cols: number;
@@ -186,6 +188,70 @@ export interface ArenaSnap {
   /** Blocks about to land in sudden death: [cell, landsAt]. */
   falls: [number, number][];
   ev: ArenaEvent[];
+}
+
+/**
+ * A tick's frame as a change to the one before, for a client that kept it: `applyDelta` lays it
+ * over that one. Only `time` is always here. The grid and the round's fixed fields, the bombs,
+ * flames and falling blocks come when they change, and each bomber with only the fields of theirs
+ * that changed, so most ticks carry little more than who moved.
+ */
+export interface ArenaDelta extends Partial<Omit<ArenaSnap, "players">> {
+  time: number;
+  players?: (Partial<SnapPlayer> & { id: string })[];
+}
+
+const DELTA_FIELDS = ["cols", "rows", "theme", "grid", "goAt", "hurryAt"] as const;
+const DELTA_LISTS = ["bombs", "flames", "falls"] as const;
+
+/** Do two lists of flat records (or tuples) hold the same values? */
+function sameRows(a: readonly object[], b: readonly object[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] as Record<string, unknown>;
+    const y = b[i] as Record<string, unknown>;
+    for (const k in x) if (x[k] !== y[k]) return false;
+  }
+  return true;
+}
+
+/** `snap` as a change to `prev` (see ArenaDelta). With nothing to go on, that's all of it. */
+export function diffSnaps(prev: ArenaSnap | null, snap: ArenaSnap): ArenaDelta {
+  if (!prev) return snap;
+  const d: Record<string, unknown> = { time: snap.time };
+  for (const k of DELTA_FIELDS) if (snap[k] !== prev[k]) d[k] = snap[k];
+  for (const k of DELTA_LISTS) if (!sameRows(snap[k], prev[k])) d[k] = snap[k];
+  const players: Record<string, unknown>[] = [];
+  for (const p of snap.players) {
+    const was = prev.players.find((q) => q.id === p.id);
+    if (!was) {
+      players.push({ ...p });
+      continue;
+    }
+    const changed: Record<string, unknown> = { id: p.id };
+    let any = false;
+    for (const k of Object.keys(p) as (keyof SnapPlayer)[]) {
+      if (p[k] !== was[k]) {
+        changed[k] = p[k];
+        any = true;
+      }
+    }
+    if (any) players.push(changed);
+  }
+  if (players.length) d.players = players;
+  if (snap.ev.length) d.ev = snap.ev;
+  return d as unknown as ArenaDelta;
+}
+
+/** The snapshot a delta makes of the one before it. */
+export function applyDelta(prev: ArenaSnap, d: ArenaDelta): ArenaSnap {
+  const players = d.players
+    ? prev.players.map((p) => {
+        const q = d.players!.find((u) => u.id === p.id);
+        return q ? { ...p, ...q } : p;
+      })
+    : prev.players;
+  return { ...prev, ...d, players, ev: d.ev ?? [] };
 }
 
 export interface ArenaResult {
@@ -251,6 +317,8 @@ export class Arena {
   private hurried = false;
   private wentGo = false;
   private endAt = 0;
+  /** The frame everyone was last sent, which the next delta is a change to. */
+  private sent: ArenaSnap | null = null;
 
   constructor(rng: Rng, ids: string[], opts: ArenaOpts) {
     this.rng = rng;
@@ -456,7 +524,8 @@ export class Arena {
   /**
    * A browser reports where its bomber is. Accept it if it's a place you could
    * have walked to since the last report; otherwise keep the old position and
-   * bump `fix` so the client snaps back.
+   * bump `fix` so the client snaps back. A walk that could only have gone
+   * through fire ends there, the way it would have if each step had been seen.
    */
   clientMove(id: string, rawX: unknown, rawY: unknown, rawDir: unknown): boolean {
     const p = this.player(id);
@@ -476,10 +545,24 @@ export class Arena {
     if (this.time < this.goAt || this.result) return reject();
     if (x !== Math.round(x) && y !== Math.round(y)) return reject(); // off both lanes
     const need = Math.abs(x - p.x) + Math.abs(y - p.y);
+    // Overspending is carried as debt, so the slack for rounding can't be spent again on every report.
     if (need > p.budget + 0.08) return reject();
     if (!this.legalSpot(p, x, y)) return reject();
-    if (!this.reachable(p, this.cellAt(p.x, p.y), this.cellAt(x, y), Math.ceil(need) + 1)) return reject();
-    p.budget = Math.max(0, p.budget - need);
+    const from = this.cellAt(p.x, p.y);
+    const to = this.cellAt(x, y);
+    const steps = Math.ceil(need) + 1;
+    const path = this.route(p, from, to, steps);
+    if (!path) return reject();
+    const burning = (c: number) => this.flames.has(c);
+    const fire = path.find(burning);
+    if (fire !== undefined && !this.route(p, from, to, steps, burning)) {
+      p.x = fire % this.cols;
+      p.y = (fire - p.x) / this.cols;
+      p.fix++;
+      this.kill(p, this.flames.get(fire)!.owner);
+      return false;
+    }
+    p.budget -= need;
     p.x = x;
     p.y = y;
     return true;
@@ -498,11 +581,15 @@ export class Arena {
     return true;
   }
 
-  private reachable(p: ArenaPlayer, from: number, to: number, maxSteps: number): boolean {
-    if (from === to) return true;
+  /**
+   * The tiles of a shortest walk from `from` to `to` of at most `maxSteps` steps, both ends
+   * included, keeping out of tiles `avoid` says no to; null if there's none.
+   */
+  private route(p: ArenaPlayer, from: number, to: number, maxSteps: number, avoid?: (c: number) => boolean): number[] | null {
+    if (from === to) return [from];
     const blocked = this.blockedFor(p);
+    const cameFrom = new Map([[from, -1]]);
     let frontier = [from];
-    const seen = new Set(frontier);
     for (let step = 0; step < maxSteps && frontier.length; step++) {
       const next: number[] = [];
       for (const c of frontier) {
@@ -512,15 +599,19 @@ export class Arena {
           const nx = cx + DX[d];
           const ny = cy + DY[d];
           const n = this.idx(nx, ny);
-          if (seen.has(n) || blocked(nx, ny)) continue;
-          if (n === to) return true;
-          seen.add(n);
+          if (cameFrom.has(n) || blocked(nx, ny) || avoid?.(n)) continue;
+          cameFrom.set(n, c);
+          if (n === to) {
+            const path = [n];
+            for (let back = c; back !== -1; back = cameFrom.get(back)!) path.unshift(back);
+            return path;
+          }
           next.push(n);
         }
       }
       frontier = next;
     }
-    return false;
+    return null;
   }
 
   // ---------------------------------------------------------------- simulation
@@ -538,7 +629,7 @@ export class Arena {
     for (const p of this.players) {
       if (!p.alive) continue;
       const speed = this.speedOf(p);
-      p.budget = Math.min(speed * 0.6 + 0.6, p.budget + (speed * 1.3 * dt) / 1000);
+      p.budget = Math.min(speed * BUDGET_BANK_SECS + BUDGET_BANK_TILES, p.budget + (speed * dt) / 1000);
     }
 
     if (live) {
@@ -878,6 +969,27 @@ export class Arena {
       falls: this.upcomingDrops(FALL_SHOW_MS),
       ev,
     };
+  }
+
+  /**
+   * The next frame for everyone, whole and as a delta from the last one this returned. Call it
+   * for every frame that goes to everyone, whichever of the two is sent.
+   */
+  frame(drain: boolean): { full: ArenaSnap; delta: ArenaDelta } {
+    const full = this.snapshot(drain);
+    const delta = diffSnaps(this.sent, full);
+    this.sent = full;
+    return { full, delta };
+  }
+
+  /**
+   * A whole snapshot for one client (joining, or lost track). Things can change between ticks,
+   * so it may differ from what everyone else has: the next delta carries everything, which fits
+   * both.
+   */
+  catchUp(): ArenaSnap {
+    this.sent = null;
+    return this.snapshot(false);
   }
 }
 

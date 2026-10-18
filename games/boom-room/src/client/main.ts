@@ -1,7 +1,7 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc, toast } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { snapTileSolid, type ArenaEvent, type ArenaSnap, type SnapPlayer } from "../shared/arena";
+import { applyDelta, snapTileSolid, type ArenaDelta, type ArenaEvent, type ArenaSnap, type SnapPlayer } from "../shared/arena";
 import { FUSE_MS, SHORT_FUSE_MS } from "../shared/constants";
 import { OPPOSITE, moveActor, overlaps, type BlockedFn, type Dir } from "../shared/movement";
 import { SETTING_CHOICES, rankPlayers, type ClientMsg, type GameState, type PlayerState, type ServerMsg } from "../shared/protocol";
@@ -67,6 +67,8 @@ const app = {
   countShown: -1,
   lastFrame: 0,
   winKey: "",
+  /** Asked for the whole arena after a delta that didn't fit, and waiting for it. */
+  syncing: false,
 };
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
@@ -133,6 +135,7 @@ function onReset(): void {
 
 function clearArena(): void {
   app.snap = null;
+  app.syncing = false;
   app.frames = [];
   app.local = null;
   app.pending = [];
@@ -142,7 +145,22 @@ function clearArena(): void {
 // ------------------------------------------------------------------ messages
 
 function onMessage(msg: ServerMsg): void {
-  if (msg.t === "frame") onFrame(msg.f);
+  if (msg.t === "frame") {
+    app.syncing = false;
+    onFrame(msg.f);
+  } else if (msg.t === "delta") {
+    onDelta(msg.f);
+  }
+}
+
+function onDelta(d: ArenaDelta): void {
+  const prev = app.snap;
+  if (!prev || d.time < prev.time) {
+    // Nothing to lay it over: ask for the whole arena, and skip deltas until it comes.
+    if (!app.syncing) app.syncing = shell.send({ t: "sync" });
+    return;
+  }
+  if (!app.syncing) onFrame(applyDelta(prev, d));
 }
 
 function onState(s: GameState, prev: GameState | null): void {
@@ -167,6 +185,8 @@ function onFrame(f: ArenaSnap): void {
     app.countShown = -1;
     app.clock = NaN;
     renderer.reset();
+    // Ticks can come as deltas from here on. Said for every new arena: the room forgets when it sleeps.
+    shell.send({ t: "deltas" });
   }
   const sample = f.time - now;
   if (!Number.isFinite(app.clock) || Math.abs(sample - app.clock) > 400) app.clock = sample;

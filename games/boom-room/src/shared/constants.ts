@@ -22,6 +22,15 @@ export const SLOW_SPEED = 2.2;
 export const FAST_SPEED = 9;
 export const BOMB_SLIDE_SPEED = 9;
 
+/**
+ * The positions a browser reports spend a movement budget that refills at the bomber's own speed,
+ * so nobody can outrun it for long. It banks this many seconds of walking plus BUDGET_BANK_TILES:
+ * enough for moves the network held up and then delivered all at once, but not a dash saved up
+ * by standing still.
+ */
+export const BUDGET_BANK_SECS = 0.4;
+export const BUDGET_BANK_TILES = 0.4;
+
 export const START_BOMBS = 1;
 export const START_FIRE = 2;
 export const MAX_BOMBS = 8;

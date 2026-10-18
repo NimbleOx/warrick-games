@@ -15,6 +15,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Turf War | `/turf-war/` | `games/turf-war` | live | 5178 |
 | Pill Panic | `/pill-panic/` | `games/pill-panic` | live | 5179 |
 | Stack Attack | `/stack-attack/` | `games/stack-attack` | live | 5180 |
+| Dice Dominion | `/dice-dominion/` | `games/dice-dominion` | not deployed | 5181 |
 
 The dev ports are the ones in `.claude/launch.json`, so every game can run at the same time.
 

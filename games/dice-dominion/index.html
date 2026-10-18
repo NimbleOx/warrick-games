@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Dice Dominion</title>
+    <meta name="description" content="Roll for territory with friends, after Dice Wars. No accounts — create a game and share the code." />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">DICE DOMINION <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="fast" class="btn btn-ghost btn-small btn-fast" aria-pressed="false" hidden>
+            <span aria-hidden="true">⏩</span><span class="long"> Fast CPUs</span>
+          </button>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="stage-col">
+          <div class="hud">
+            <div class="hud-turn" id="hud-turn"></div>
+            <button id="end-turn" class="btn btn-primary btn-end" disabled>End turn</button>
+          </div>
+
+          <div class="stage" id="stage">
+            <canvas id="map" aria-label="The map"></canvas>
+            <div class="banner" id="banner" hidden></div>
+          </div>
+
+          <div class="rollbar" id="rollbar" role="status" aria-live="polite"></div>
+          <p class="hint-line" id="hint"></p>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel">
+            <div class="panel-head"><h2>Players</h2></div>
+            <ul id="game-players" class="game-players"></ul>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Battle log</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" placeholder="Taunt your neighbours…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Final standings -->
+      <div class="modal-back" id="gameover" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="gameover-title">
+          <h2 id="gameover-title" class="results-title">Game over</h2>
+          <p class="winner-line" id="gameover-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Player</th><th>Lasted</th><th>Captured</th><th>Most land</th></tr>
+            </thead>
+            <tbody id="gameover-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <span class="spacer"></span>
+            <button id="gameover-lobby" class="btn btn-primary" data-action="lobby">Back to lobby</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

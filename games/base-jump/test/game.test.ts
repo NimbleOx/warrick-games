@@ -2,47 +2,8 @@ import { describe, expect, it } from "vitest";
 import { applyFrame, Battle, type Frame } from "../src/shared/battle";
 import { COUNTDOWN_TICKS } from "../src/shared/constants";
 import type { ServerMsg, Snapshot } from "../src/shared/protocol";
-import { Game, GameError, newGameState, type Live } from "../src/worker/game";
-
-function setup() {
-  let now = 1_000_000;
-  const connected = new Set<string>();
-  const s = newGameState("ABCDE", now);
-  let live: Live | null = null;
-  const sent: ServerMsg[] = [];
-  const io = { now: () => now, isConnected: (id: string) => connected.has(id) };
-  /** Like the Durable Object: a fresh Game per action, with the live round carried over. */
-  const act = <T>(fn: (g: Game) => T): T => {
-    const g = new Game(s, io, live);
-    const out = fn(g);
-    live = g.live;
-    sent.push(...g.outbox);
-    return out;
-  };
-  const human = (name: string) => {
-    const p = act((g) => g.addHuman(name));
-    connected.add(p.id);
-    return p;
-  };
-  return {
-    s,
-    act,
-    human,
-    sent,
-    get live() {
-      return live;
-    },
-    forget() {
-      live = null;
-    },
-    advance(ms: number) {
-      now += ms;
-    },
-    tick(n = 1) {
-      for (let i = 0; i < n && s.phase === "playing"; i++) act((g) => g.tick());
-    },
-  };
-}
+import { GameError } from "../src/worker/game";
+import { gameSetup as setup } from "./helpers";
 
 const frames = (sent: ServerMsg[]) => sent.filter((m): m is Frame => m.t === "f");
 

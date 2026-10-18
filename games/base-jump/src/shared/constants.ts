@@ -5,8 +5,12 @@
 export const TICKS_PER_SEC = 10;
 export const TICK_MS = 1000 / TICKS_PER_SEC;
 
-/** Frozen "3, 2, 1" at the start of a round. */
+/** Real-time: a frozen "3, 2, 1" at the start of a round. */
 export const COUNTDOWN_TICKS = 3 * TICKS_PER_SEC;
+/** Turns: once everyone has planned, the battle plays this many ticks before the next plan. */
+export const TURN_TICKS = 5 * TICKS_PER_SEC;
+/** Turns: the most orders in one player's plan for a turn. */
+export const MAX_PLAN = 40;
 /** Every this many ticks a frame carries a checksum of the battle, so clients can spot drift. */
 export const CHECKSUM_EVERY = 50;
 

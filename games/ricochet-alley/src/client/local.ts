@@ -1,8 +1,9 @@
 import { CpuBrain, type CpuLevel } from "../shared/ai";
-import { HANG_TICKS, MAZE_LOOPINESS, MAZE_SIZES, PLAYER_COLORS, THEME_COUNT, TICK_MS, type MazeSize } from "../shared/constants";
+import { DEFAULT_COLORS } from "@warrick/kit/shared/constants";
+import { HANG_TICKS, MAZE_LOOPINESS, MAZE_SIZES, THEME_COUNT, TICK_MS, type MazeSize } from "../shared/constants";
 import { headingRad } from "../shared/headings";
 import { generateMaze, pickSpawns } from "../shared/maze";
-import { mulberry32, randInt, randomSeed, type Rng } from "../shared/rng";
+import { mulberry32, randInt, randomSeed, type Rng } from "@warrick/kit/shared/rng";
 import { World, startingTanks } from "../shared/sim";
 import { sfx } from "./audio";
 import { BulletField, lerpHeading } from "./predict";
@@ -47,7 +48,7 @@ export class LocalMatch {
   }
 
   get colors(): string[] {
-    return this.names.map((_, i) => PLAYER_COLORS[i % PLAYER_COLORS.length]);
+    return this.names.map((_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
   }
 
   newRound(now: number): void {

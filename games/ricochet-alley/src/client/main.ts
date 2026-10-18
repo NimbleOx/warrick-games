@@ -1,35 +1,25 @@
+import { $, esc, store } from "@warrick/kit/client/dom";
+import { Shell, type Screen } from "@warrick/kit/client/shell";
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import type { CpuLevel } from "../shared/ai";
-import { CODE_RE, MAX_BULLETS, MAX_PLAYERS, MUZZLE, PLAYER_COLORS, type MazeSize } from "../shared/constants";
+import { MAX_BULLETS, MUZZLE, type MazeSize } from "../shared/constants";
 import { COS, SIN } from "../shared/headings";
 import {
   SETTING_CHOICES,
   rankPlayers,
+  type ClientMsg,
   type GameState,
-  type LogEntry,
-  type PlayerState,
+  type MazeChoice,
   type ServerMsg,
-  type Settings,
 } from "../shared/protocol";
 import type { WorldSnapshot } from "../shared/sim";
-import { isMuted, setMuted, sfx, unlockAudio } from "./audio";
+import { sfx } from "./audio";
 import { Controls } from "./input";
 import { LocalMatch } from "./local";
-import { Connection, type NetStatus } from "./net";
 import { Renderer } from "./render";
 import { NetRound } from "./round";
 
 // ------------------------------------------------------------------ helpers
-
-// The app lives under Vite's `base` ("/ricochet-alley/"): BASE is the home screen, gamePath() a game.
-const BASE = import.meta.env.BASE_URL;
-const gamePath = (code: string) => `${BASE}g/${code}`;
-
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const $$ = <T extends HTMLElement = HTMLElement>(sel: string) => Array.from(document.querySelectorAll<T>(sel));
-
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
 
 /**
  * Dev aid: `?as=bob` makes this tab a separate player (its own token, name and last game), so one browser
@@ -46,52 +36,33 @@ const devAs = (() => {
   }
 })();
 
-function store(key: string, value?: string | null): string | null {
-  if (devAs) key = `${key}.${devAs}`;
-  try {
-    if (value === undefined) return localStorage.getItem(key);
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Private mode etc. — identity just won't survive a reload.
-  }
-  return value ?? null;
-}
+const MAZE_LABELS: Record<MazeChoice, string> = {
+  auto: "Auto — grows with players",
+  small: "Small (7×5)",
+  medium: "Medium (9×6)",
+  large: "Large (12×8)",
+};
 
-function playerToken(): string {
-  let t = store("ra.token");
-  if (!t || !/^[\w-]{8,64}$/.test(t)) {
-    t = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-    store("ra.token", t);
-  }
-  return t;
-}
-
-let toastTimer = 0;
-function toast(text: string, kind: "error" | "info" = "error"): void {
-  const el = $("toast");
-  el.textContent = text;
-  el.className = `toast ${kind}`;
-  el.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (el.hidden = true), 3200);
-}
+const HOW_TO_PLAY = `
+  <div class="panel how-panel">
+    <div class="panel-head"><h2>How to play</h2></div>
+    <ul class="how">
+      <li><kbd>↑</kbd><kbd>↓</kbd> drive, <kbd>←</kbd><kbd>→</kbd> turn, <kbd>Space</kbd> fire. On a phone: the stick and the Fire button.</li>
+      <li>Tap a turn key to nudge your aim; hold it to spin.</li>
+      <li>You have 5 bullets. Each bounces off walls for 6 seconds, then you get it back.</li>
+      <li>One hit kills — and that includes your own bullets coming back.</li>
+      <li>Last tank standing scores a point. A new maze every round.</li>
+    </ul>
+  </div>`;
 
 // ------------------------------------------------------------------ app state
 
-type Screen = "home" | "lobby" | "game";
-
 const app = {
-  screen: "home" as Screen,
-  conn: null as Connection | null,
-  code: "",
-  me: "",
-  state: null as GameState | null,
-  log: [] as LogEntry[],
-  skew: 0,
   round: null as NetRound | null,
   /** Input sequence number for this connection; the server acks the latest it has applied. */
   seq: 0,
+  /** The round in progress that came with the welcome: it's started once the welcome's state is in. */
+  welcome: null as { world: WorldSnapshot | null } | null,
   /** Local time until which a status banner (GO!, you were hit) stays up. */
   flash: { html: "", until: 0 },
   lastCount: -1,
@@ -100,21 +71,39 @@ const app = {
   sandbox: null as LocalMatch | null,
 };
 
-const token = playerToken();
-if (devAs && !store("ra.name")) store("ra.name", devAs);
+const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
+  slug: "ricochet-alley",
+  title: "Ricochet Alley",
+  prefix: devAs ? `ra.${devAs}` : "ra",
+  logo: "RICOCHET<br />ALLEY",
+  tagline: "Tank battles in a maze. Bullets bounce.<br />No accounts — just share a code.",
+  placeholder: "Commander",
+  footer: "In the spirit of <em>Combat</em> (1977) and <em>Tank Trouble</em>.",
+  settings: {
+    target: { label: "First to", fmt: (v: number) => `${v} point${v === 1 ? "" : "s"}` },
+    maze: { label: "Maze", fmt: (v: MazeChoice) => MAZE_LABELS[v] ?? v },
+  },
+  choices: SETTING_CHOICES,
+  onWelcome,
+  onMessage,
+  onState,
+  onScreen,
+  onReset,
+  confirmLeave: (s) =>
+    s.phase !== "lobby" && s.phase !== "gameover" && !shell.mine?.spectator ? "Leave this game? Your points go with you." : null,
+  isLive: (s) => s.phase === "playing",
+});
+// How to play sits beside the chat in the lobby.
+$("screen-lobby").querySelector(".chat-panel")!.insertAdjacentHTML("beforebegin", HOW_TO_PLAY);
+
+if (devAs && !store("name")) store("name", devAs);
 const renderer = new Renderer($<HTMLCanvasElement>("game-canvas"));
 const attractRenderer = new Renderer($<HTMLCanvasElement>("attract"));
 const attract = new LocalMatch(attractRenderer, { human: false, cpus: ["hard", "normal", "hard", "normal"], size: "large", sound: false });
 
-const serverNow = () => Date.now() + app.skew;
-const me = (s = app.state): PlayerState | undefined => s?.players.find((p) => p.id === app.me);
-const playerById = (id: string | null | undefined) => app.state?.players.find((p) => p.id === id);
-const canHost = (s = app.state) => {
-  if (!s) return false;
-  if (s.hostId === app.me) return true;
-  const host = s.players.find((p) => p.id === s.hostId);
-  return !host || !host.connected;
-};
+const serverNow = () => shell.serverNow();
+const playerById = (id: string | null | undefined) => shell.player(id);
+const canHost = (s: GameState) => shell.canHost(s);
 
 const controls = new Controls(
   {
@@ -125,10 +114,11 @@ const controls = new Controls(
       }
       app.seq++;
       app.round?.input(app.seq, bits);
-      app.conn?.send({ t: "in", s: app.seq, b: bits });
+      shell.send({ t: "in", s: app.seq, b: bits });
     },
     fire,
-    active: () => app.screen === "game" && (!!app.sandbox || app.state?.phase === "playing" || app.state?.phase === "countdown"),
+    active: () =>
+      shell.screen === "game" && (!!app.sandbox || shell.state?.phase === "playing" || shell.state?.phase === "countdown"),
     heading: () => {
       if (app.sandbox) return app.sandbox.world.tanks[0].alive ? app.sandbox.world.tanks[0].h : null;
       return app.round?.myAlive ? (app.round.predictor.pose?.h ?? null) : null;
@@ -137,25 +127,9 @@ const controls = new Controls(
   { stick: $("stick"), knob: $("stick-knob"), fire: $("touch-fire") },
 );
 
-// ------------------------------------------------------------------ routing
+// ------------------------------------------------------------------ shell hooks
 
-function route(): void {
-  const m = location.pathname.slice(BASE.length).match(/^g\/([A-Za-z0-9]{5})\/?$/);
-  const code = m?.[1].toUpperCase();
-  if (code && CODE_RE.test(code)) {
-    // Coming back to a game you were in (reload, reconnect): straight back in.
-    if (store("ra.lastGame") === code && store("ra.name")) void joinGame(code);
-    else showHome(code);
-  } else {
-    showHome(null);
-  }
-}
-
-function showScreen(screen: Screen): void {
-  app.screen = screen;
-  $("screen-home").hidden = screen !== "home";
-  $("screen-lobby").hidden = screen !== "lobby";
-  $("screen-game").hidden = screen !== "game";
+function onScreen(screen: Screen): void {
   if (screen === "game") {
     $("touch").hidden = !matchMedia("(pointer: coarse)").matches;
     layoutStage();
@@ -165,173 +139,50 @@ function showScreen(screen: Screen): void {
   if (screen === "home") resizeAttract();
 }
 
-function showHome(inviteCode: string | null): void {
-  disconnect();
-  showScreen("home");
-  document.title = "Ricochet Alley";
-  $("home-error").textContent = "";
-  const nameInput = $<HTMLInputElement>("home-name");
-  nameInput.value = store("ra.name") ?? "";
-  $("home-join-invite").hidden = !inviteCode;
-  $("home-default").hidden = !!inviteCode;
-  if (inviteCode) {
-    $("home-invite-code").textContent = inviteCode;
-    $("home-join-invite-btn").dataset.code = inviteCode;
-  }
-  if (!nameInput.value) nameInput.focus();
-}
-
-function readName(): string | null {
-  const input = $<HTMLInputElement>("home-name");
-  const name = input.value.trim().slice(0, 16);
-  if (!name) {
-    $("home-error").textContent = "Pick a name first.";
-    input.focus();
-    return null;
-  }
-  store("ra.name", name);
-  return name;
-}
-
-async function createGame(): Promise<void> {
-  if (!readName()) return;
-  const btn = $<HTMLButtonElement>("home-create");
-  btn.disabled = true;
-  try {
-    const res = await fetch(`${BASE}api/games`, { method: "POST" });
-    const body = (await res.json()) as { code?: string; error?: string };
-    if (!res.ok || !body.code) throw new Error(body.error ?? "Couldn't create a game");
-    history.pushState(null, "", gamePath(body.code));
-    await joinGame(body.code);
-  } catch (err) {
-    $("home-error").textContent = err instanceof Error ? err.message : String(err);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function joinGame(code: string): Promise<void> {
-  code = code.toUpperCase();
-  if (!CODE_RE.test(code)) {
-    $("home-error").textContent = "Codes are 5 letters/numbers.";
-    return;
-  }
-  const name = store("ra.name") ?? readName();
-  if (!name) return;
-  try {
-    const res = await fetch(`${BASE}api/games/${code}`);
-    if (res.status === 404) {
-      store("ra.lastGame", null);
-      if (location.pathname !== BASE) history.replaceState(null, "", BASE);
-      showHome(null);
-      $("home-error").textContent = `No game with code ${code}. It may have expired.`;
-      return;
-    }
-    if (!res.ok) throw new Error("The server didn't answer. Try again?");
-  } catch (err) {
-    showHome(code);
-    $("home-error").textContent = err instanceof Error ? err.message : String(err);
-    return;
-  }
-
-  disconnect();
-  store("ra.lastGame", code);
-  if (location.pathname !== gamePath(code)) history.pushState(null, "", gamePath(code));
-  app.code = code;
-  app.state = null;
-  app.log = [];
-  app.me = "";
-  $("lobby-code").textContent = code;
-  $<HTMLInputElement>("lobby-link").value = location.origin + gamePath(code);
-  $("game-code-small").textContent = code;
-  $("lobby-players").innerHTML = `<li class="muted">Connecting…</li>`;
-  showScreen("lobby");
-
-  app.conn = new Connection(code, {
-    hello: () => ({ t: "hello", token, name: store("ra.name") ?? name }),
-    message: onMessage,
-    status: onStatus,
-    fatal: (reason) => {
-      store("ra.lastGame", null);
-      history.pushState(null, "", BASE);
-      showHome(null);
-      $("home-error").textContent = reason;
-    },
-  });
-}
-
-function disconnect(): void {
-  app.conn?.close();
-  app.conn = null;
-  app.state = null;
+/** Left the game, or lost it for good. */
+function onReset(): void {
   app.round = null;
+  app.welcome = null;
   $("gameover").hidden = true;
-}
-
-function leave(): void {
-  const s = app.state;
-  if (s && s.phase !== "lobby" && s.phase !== "gameover" && !me(s)?.spectator && !confirm("Leave this game? Your points go with you.")) return;
-  app.conn?.send({ t: "leave" });
-  store("ra.lastGame", null);
-  history.pushState(null, "", BASE);
-  showHome(null);
-}
-
-function onStatus(status: NetStatus): void {
-  for (const el of [$("lobby-conn"), $("game-conn")]) {
-    el.dataset.status = status;
-    el.textContent = status === "open" ? "" : status === "connecting" ? "Connecting…" : "Reconnecting…";
-  }
-  if (status !== "open") app.round?.clock.reset();
 }
 
 // ------------------------------------------------------------------ messages
 
+function onWelcome(msg: ServerMsg): void {
+  if (msg.t !== "welcome") return;
+  // A new connection starts input numbering over.
+  app.seq = 0;
+  app.round = null;
+  app.welcome = { world: msg.world };
+}
+
 function onMessage(msg: ServerMsg): void {
-  if ("now" in msg) app.skew = msg.now - Date.now();
   switch (msg.t) {
-    case "welcome":
-      app.me = msg.you;
-      app.log = msg.log;
-      // A new connection starts input numbering over; re-send whatever is held right now.
-      app.seq = 0;
-      app.round = null;
-      applyState(msg.state);
-      if (msg.world) startRound(msg.world);
-      if (controls.bits) {
-        app.seq++;
-        (app.round as NetRound | null)?.input(app.seq, controls.bits);
-        app.conn?.send({ t: "in", s: app.seq, b: controls.bits });
-      }
-      renderLog();
-      break;
-    case "state":
-      applyState(msg.state);
-      break;
     case "round":
       startRound(msg.world);
       break;
     case "f":
       app.round?.frame(msg, performance.now());
       break;
-    case "log":
-      app.log.push(...msg.entries);
-      if (app.log.length > 120) app.log.splice(0, app.log.length - 120);
-      renderLog();
-      break;
-    case "error":
-      toast(msg.message);
-      break;
   }
 }
 
-function applyState(s: GameState): void {
-  const prev = app.state;
-  app.state = s;
+function onState(s: GameState, prev: GameState | null): void {
   if (s.phase === "lobby") app.round = null;
   if (prev?.phase !== s.phase) onPhase(prev, s);
   document.title = s.phase === "lobby" ? `Ricochet Alley · ${s.code}` : `Round ${s.round} · Ricochet Alley`;
   render();
+  const welcome = app.welcome;
+  if (welcome) {
+    app.welcome = null;
+    if (welcome.world) startRound(welcome.world);
+    // Re-send whatever is held right now.
+    if (controls.bits) {
+      app.seq++;
+      app.round?.input(app.seq, controls.bits);
+      shell.send({ t: "in", s: app.seq, b: controls.bits });
+    }
+  }
 }
 
 function onPhase(prev: GameState | null, s: GameState): void {
@@ -339,13 +190,13 @@ function onPhase(prev: GameState | null, s: GameState): void {
     sfx.go();
     flash(`<span class="big">GO!</span>`, 700);
   }
-  if (s.phase === "roundover" && s.roundWinnerId === app.me) sfx.win();
+  if (s.phase === "roundover" && s.roundWinnerId === shell.me) sfx.win();
 }
 
 function startRound(world: WorldSnapshot): void {
-  const s = app.state;
+  const s = shell.state;
   if (!s?.setup) return;
-  app.round = new NetRound(s.setup, world, app.me, app.seq, controls.bits, {
+  app.round = new NetRound(s.setup, world, shell.me, app.seq, controls.bits, {
     tankInfo: (i) => {
       const p = playerById(s.setup!.tanks[i]);
       return { name: p?.name ?? "?", color: p?.color ?? "#888888" };
@@ -391,7 +242,7 @@ function fire(): void {
     return;
   }
   const r = app.round;
-  const s = app.state;
+  const s = shell.state;
   if (!r || !s || s.phase !== "playing" || !r.myAlive) return;
   if (r.myBullets() >= MAX_BULLETS) {
     sfx.empty();
@@ -401,7 +252,7 @@ function fire(): void {
     pips.classList.add("empty");
     return;
   }
-  app.conn?.send({ t: "in", s: app.seq, b: controls.bits, f: 1 });
+  shell.send({ t: "in", s: app.seq, b: controls.bits, f: 1 });
   const p = r.predictor.pose;
   if (p) renderer.muzzle(p.x + COS[p.h] * MUZZLE, p.y + SIN[p.h] * MUZZLE, performance.now());
   sfx.fire();
@@ -415,11 +266,11 @@ function flash(html: string, ms: number): void {
 
 function frame(now: number): void {
   requestAnimationFrame(frame);
-  if (app.screen === "home") {
+  if (shell.screen === "home") {
     attract.frame(now);
     return;
   }
-  if (app.screen !== "game") return;
+  if (shell.screen !== "game") return;
   controls.update();
   if (app.sandbox) {
     app.sandbox.frame(now);
@@ -427,7 +278,7 @@ function frame(now: number): void {
     return;
   }
   const r = app.round;
-  const s = app.state;
+  const s = shell.state;
   if (r && s) {
     r.update(now, s.phase === "playing", () => controls.update());
     const { tanks, bullets } = r.draw(now);
@@ -443,93 +294,13 @@ function frame(now: number): void {
   renderBanner(now);
 }
 
-// ------------------------------------------------------------------ rendering: top level
-
-function render(): void {
-  const s = app.state;
-  if (!s || app.screen === "home") return;
-  if (s.phase === "lobby") {
-    if (app.screen !== "lobby") showScreen("lobby");
-    renderLobby(s);
-  } else {
-    if (app.screen !== "game") showScreen("game");
-    renderGame(s);
-  }
-}
-
-// ------------------------------------------------------------------ lobby
-
-const SETTING_LABELS: Record<keyof Settings, { label: string; fmt: (v: never) => string }> = {
-  target: { label: "First to", fmt: (v: number) => `${v} point${v === 1 ? "" : "s"}` },
-  maze: {
-    label: "Maze",
-    fmt: (v: string) => ({ auto: "Auto — grows with players", small: "Small (7×5)", medium: "Medium (9×6)", large: "Large (12×8)" })[v] ?? v,
-  },
-};
-
-function renderLobby(s: GameState): void {
-  const host = canHost(s);
-  const participants = s.players.filter((p) => !p.spectator);
-  $("lobby-count").textContent = `${participants.length}/${MAX_PLAYERS}`;
-
-  $("lobby-players").innerHTML = s.players
-    .map((p) => {
-      const tags = [
-        p.id === app.me ? `<span class="tag tag-you">you</span>` : "",
-        p.id === s.hostId ? `<span class="tag tag-host">host</span>` : "",
-        p.cpu ? `<span class="tag">CPU · ${p.cpu}</span>` : "",
-        p.spectator ? `<span class="tag">watching — game full</span>` : "",
-        !p.cpu && !p.connected ? `<span class="tag">offline</span>` : "",
-      ].join("");
-      const kick =
-        host && p.id !== app.me
-          ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button>`
-          : "";
-      return `<li class="${!p.cpu && !p.connected ? "offline" : ""}">
-        <span class="chip" style="background:${p.color}"></span>
-        <span class="pname">${esc(p.name)}</span>${tags}<span class="spacer"></span>${kick}</li>`;
-    })
-    .join("");
-
-  $("lobby-cpu").hidden = !host;
-  for (const b of $$<HTMLButtonElement>("#lobby-cpu button")) {
-    b.disabled = participants.length >= MAX_PLAYERS;
-    b.title = b.disabled ? `The game is full (${MAX_PLAYERS} tanks)` : "";
-  }
-
-  const mine = me(s);
-  const taken = new Set(s.players.filter((p) => p.id !== app.me).map((p) => p.color));
-  $("lobby-colors").innerHTML = PLAYER_COLORS.map(
-    (c) => `<button class="swatch" style="background:${c}" data-color="${c}" aria-label="Color ${c}"
-      aria-pressed="${mine?.color === c}" ${taken.has(c) ? "disabled" : ""}></button>`,
-  ).join("");
-
-  const settings = $("lobby-settings");
-  settings.innerHTML = (Object.keys(SETTING_LABELS) as (keyof Settings)[])
-    .map((key) => {
-      const { label, fmt } = SETTING_LABELS[key];
-      const value = s.settings[key];
-      const control = host
-        ? `<select data-setting="${key}">${(SETTING_CHOICES[key] as (string | number)[])
-            .map((v) => `<option value="${v}" ${v === value ? "selected" : ""}>${esc((fmt as (v: unknown) => string)(v))}</option>`)
-            .join("")}</select>`
-        : `<span class="value">${esc((fmt as (v: unknown) => string)(value))}</span>`;
-      return `<label class="setting"><span class="label">${label}</span>${control}</label>`;
-    })
-    .join("");
-
-  const start = $<HTMLButtonElement>("lobby-start");
-  start.hidden = !host;
-  start.disabled = participants.length < 2;
-  const hostName = playerById(s.hostId)?.name ?? "the host";
-  $("lobby-wait").textContent = host
-    ? participants.length < 2
-      ? "You need at least two tanks. Invite a friend or add a CPU."
-      : ""
-    : `Waiting for ${hostName} to start the game…`;
-}
-
 // ------------------------------------------------------------------ game
+
+/** The shell draws the lobby; this draws the game screen. */
+function render(): void {
+  const s = shell.state;
+  if (s && s.phase !== "lobby" && shell.screen === "game") renderGame(s);
+}
 
 function renderGame(s: GameState): void {
   renderHud(s);
@@ -541,7 +312,7 @@ function renderHud(s: GameState): void {
   $("hud-round").textContent = s.round ? String(s.round) : "—";
   $("hud-target").textContent = String(s.settings.target);
   const r = app.round;
-  const mine = me(s);
+  const mine = shell.mine;
   const left = r?.aliveCount ?? 0;
   let html: string;
   if (mine?.spectator) {
@@ -585,13 +356,13 @@ function renderPlayers(s: GameState): void {
       const i = r ? r.setup.tanks.indexOf(p.id) : -1;
       const out = s.phase !== "lobby" && (i < 0 || (r && !r.alive[i]));
       const tags = [
-        p.id === app.me ? `<span class="tag tag-you">you</span>` : "",
+        p.id === shell.me ? `<span class="tag tag-you">you</span>` : "",
         p.cpu ? `<span class="tag">CPU</span>` : "",
         p.spectator ? `<span class="tag">next round</span>` : "",
         !p.cpu && !p.connected ? `<span class="tag">away</span>` : "",
       ].join("");
       const pct = Math.min(100, (p.score / s.settings.target) * 100);
-      return `<li class="${[out ? "dead" : "", p.id === app.me ? "me" : "", !p.cpu && !p.connected ? "offline" : ""].join(" ")}">
+      return `<li class="${[out ? "dead" : "", p.id === shell.me ? "me" : "", !p.cpu && !p.connected ? "offline" : ""].join(" ")}">
         <span class="chip" style="background:${p.color}"></span>
         <span class="pname">${esc(p.name)} ${tags}</span>
         <span class="pts">${p.score}</span>
@@ -606,7 +377,7 @@ function renderPlayers(s: GameState): void {
 }
 
 function renderBanner(now: number): void {
-  const s = app.state;
+  const s = shell.state;
   const el = $("banner");
   let html = "";
   let cls = "banner";
@@ -622,7 +393,7 @@ function renderBanner(now: number): void {
     const w = playerById(s.roundWinnerId);
     const champ = s.players.find((p) => !p.spectator && p.score >= s.settings.target);
     const next = s.phaseDeadline ? Math.max(0, Math.ceil((s.phaseDeadline - serverNow()) / 1000)) : 0;
-    const title = w ? (w.id === app.me ? "You win the round!" : `${esc(w.name)} wins the round`) : "Draw!";
+    const title = w ? (w.id === shell.me ? "You win the round!" : `${esc(w.name)} wins the round`) : "Draw!";
     const sub = champ ? `…and that's the game.` : w ? `${w.score} of ${s.settings.target} · next round in ${next}` : `Nobody scores · next round in ${next}`;
     html = `<span class="big" style="${w ? `color:${w.color}` : ""}">${title}</span><span class="sub">${sub}</span>`;
   } else if (app.flash.until > now) {
@@ -658,27 +429,10 @@ function renderGameOver(s: GameState): void {
   $("gameover-hint").textContent = host ? "" : "Only the host can take everyone back to the lobby.";
 }
 
-// ------------------------------------------------------------------ log & chat
-
-function renderLog(): void {
-  const html = app.log
-    .map((e) =>
-      e.kind === "chat"
-        ? `<li><span class="who" style="color:${e.color ?? "inherit"}">${esc(e.from ?? "?")}:</span> ${esc(e.text)}</li>`
-        : `<li class="ev">${esc(e.text)}</li>`,
-    )
-    .join("");
-  for (const ol of $$("[data-log]")) {
-    const atBottom = ol.scrollHeight - ol.scrollTop - ol.clientHeight < 40;
-    ol.innerHTML = html;
-    if (atBottom) ol.scrollTop = ol.scrollHeight;
-  }
-}
-
 // ------------------------------------------------------------------ layout
 
 function layoutStage(): void {
-  if (app.screen !== "game") return;
+  if (shell.screen !== "game") return;
   const col = $("stage-col");
   const stage = $("stage");
   const top = stage.getBoundingClientRect().top;
@@ -701,7 +455,7 @@ function resizeAttract(): void {
 function startSandbox(params: URLSearchParams): void {
   const cpus = (params.get("cpus") ?? "normal,normal,normal").split(",") as CpuLevel[];
   app.sandbox = new LocalMatch(renderer, { human: true, cpus, size: (params.get("size") ?? "medium") as MazeSize, sound: true });
-  showScreen("game");
+  shell.showScreen("game");
   $("hud-target").textContent = "—";
   window.addEventListener("keydown", (e) => {
     if (e.code === "KeyR" && app.sandbox) app.sandbox.newRound(performance.now());
@@ -724,101 +478,21 @@ function renderSandboxHud(): void {
 // ------------------------------------------------------------------ wiring
 
 function wire(): void {
-  window.addEventListener("popstate", route);
-  window.addEventListener("resize", () => (app.screen === "home" ? resizeAttract() : layoutStage()));
+  window.addEventListener("resize", () => (shell.screen === "home" ? resizeAttract() : layoutStage()));
   new ResizeObserver(() => layoutStage()).observe($("stage-col"));
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") app.conn?.nudge();
-  });
-  for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, unlockAudio, { passive: true });
-
-  // Home
-  $("home-name").addEventListener("change", (e) => store("ra.name", (e.target as HTMLInputElement).value.trim()));
-  $("home-create").addEventListener("click", () => void createGame());
-  $("home-join-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (readName()) void joinGame($<HTMLInputElement>("home-code").value.trim());
-  });
-  $("home-code").addEventListener("input", (e) => {
-    const el = e.target as HTMLInputElement;
-    el.value = el.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  });
-  $("home-join-invite-btn").addEventListener("click", (e) => {
-    if (readName()) void joinGame((e.currentTarget as HTMLElement).dataset.code ?? "");
-  });
-  $("home-not-this").addEventListener("click", () => {
-    history.pushState(null, "", BASE);
-    showHome(null);
-  });
-
-  // Shared
-  for (const b of $$("[data-action=leave]")) b.addEventListener("click", leave);
-  for (const form of $$<HTMLFormElement>("[data-chat]")) {
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const input = form.querySelector("input")!;
-      const text = input.value.trim();
-      if (text) app.conn?.send({ t: "chat", text });
-      input.value = "";
-      // Hand the keyboard back to the game.
-      if (app.screen === "game") input.blur();
-    });
-  }
-
-  // Lobby
-  $("lobby-copy").addEventListener("click", async () => {
-    const link = $<HTMLInputElement>("lobby-link");
-    try {
-      await navigator.clipboard.writeText(link.value);
-      toast("Invite link copied", "info");
-    } catch {
-      link.select();
-      toast("Press Ctrl/⌘+C to copy", "info");
-    }
-  });
-  $("lobby-link").addEventListener("focus", (e) => (e.target as HTMLInputElement).select());
-  $("lobby-players").addEventListener("click", (e) => {
-    const id = (e.target as HTMLElement).closest<HTMLElement>("[data-kick]")?.dataset.kick;
-    if (id) app.conn?.send({ t: "kick", id });
-  });
-  $("lobby-cpu").addEventListener("click", (e) => {
-    const level = (e.target as HTMLElement).closest<HTMLElement>("[data-cpu]")?.dataset.cpu;
-    if (level) app.conn?.send({ t: "addCpu", level: level as CpuLevel });
-  });
-  $("lobby-colors").addEventListener("click", (e) => {
-    const color = (e.target as HTMLElement).closest<HTMLElement>("[data-color]")?.dataset.color;
-    if (color) app.conn?.send({ t: "color", color });
-  });
-  $("lobby-settings").addEventListener("change", (e) => {
-    const el = e.target as HTMLSelectElement;
-    const key = el.dataset.setting as keyof Settings | undefined;
-    if (!key) return;
-    const value = key === "maze" ? el.value : Number(el.value);
-    app.conn?.send({ t: "settings", settings: { [key]: value } });
-  });
-  $("lobby-start").addEventListener("click", () => app.conn?.send({ t: "start" }));
-  $("gameover-lobby").addEventListener("click", () => app.conn?.send({ t: "lobby" }));
+  // While the connection is down no frames come, so the clock's idea of the server's timing goes stale.
+  new MutationObserver(() => {
+    if ($("game-conn").dataset.status !== "open") app.round?.clock.reset();
+  }).observe($("game-conn"), { attributes: true, attributeFilter: ["data-status"] });
 
   // Clicking the stage or a tank list shouldn't leave a button focused (it would swallow Space).
   $("stage").addEventListener("pointerdown", () => (document.activeElement as HTMLElement | null)?.blur());
-
-  const mute = $("mute");
-  const paintMute = () => {
-    mute.textContent = isMuted() ? "🔇" : "🔊";
-    mute.setAttribute("aria-pressed", String(isMuted()));
-  };
-  paintMute();
-  mute.addEventListener("click", () => {
-    setMuted(!isMuted());
-    paintMute();
-    mute.blur();
-  });
 }
 
 wire();
+shell.start();
 const params = new URLSearchParams(location.search);
 if (import.meta.env.DEV && params.has("sandbox")) startSandbox(params);
-else route();
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) Object.assign(window, { __ra: { app, renderer, controls } });
+if (import.meta.env.DEV) Object.assign(window, { __ra: { app, shell, renderer, controls } });

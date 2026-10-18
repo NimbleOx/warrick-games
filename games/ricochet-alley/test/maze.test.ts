@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CELL, MAZE_LOOPINESS, MAZE_SIZES, WALL_T } from "../src/shared/constants";
 import { COS, HEADINGS, SIN, headingDiff, headingTo } from "../src/shared/headings";
 import { bfs, cellAt, generateMaze, isOpen, pathBetween, pickSpawns, wallRects, type Maze } from "../src/shared/maze";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 
 function countInterior(m: Maze): number {
   let n = 0;

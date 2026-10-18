@@ -1,9 +1,10 @@
+import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
 import type { CpuLevel } from "./ai";
 import type { MazeSize } from "./constants";
 import type { Maze } from "./maze";
 import type { WorldSnapshot } from "./sim";
 
-export type { CpuLevel };
+export type { CpuLevel, LogEntry };
 
 export type Phase = "lobby" | "countdown" | "playing" | "roundover" | "gameover";
 export type MazeChoice = "auto" | MazeSize;
@@ -30,16 +31,9 @@ export function mazeSizeFor(choice: MazeChoice, tanks: number): MazeSize {
   return tanks <= 3 ? "small" : tanks <= 5 ? "medium" : "large";
 }
 
-export interface PlayerState {
-  id: string;
-  name: string;
-  color: string;
-  cpu: CpuLevel | null;
-  connected: boolean;
+export interface PlayerState extends BasePlayer {
   /** When a human's last connection dropped (null while connected). */
   awaySince: number | null;
-  /** Watching, not playing: joined mid-match and waiting for the next round, or the game was full. */
-  spectator: boolean;
   /** Rounds won. */
   score: number;
   kills: number;
@@ -62,28 +56,13 @@ export interface RoundSetup {
   start: WorldSnapshot;
 }
 
-export interface GameState {
-  code: string;
-  createdAt: number;
-  lastActive: number;
+export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
-  hostId: string;
-  settings: Settings;
-  players: PlayerState[];
   round: number;
   setup: RoundSetup | null;
   roundWinnerId: string | null;
   phaseDeadline: number | null;
   timer: Timer | null;
-  nextPlayerNum: number;
-}
-
-export interface LogEntry {
-  at: number;
-  kind: "chat" | "event";
-  from?: string;
-  color?: string;
-  text: string;
 }
 
 /**
@@ -110,34 +89,18 @@ export interface Frame {
 }
 
 export type ClientMsg =
-  | { t: "hello"; token: string; name: string }
-  | { t: "color"; color: string }
-  | { t: "settings"; settings: Partial<Settings> }
-  | { t: "addCpu"; level: CpuLevel }
-  | { t: "kick"; id: string }
-  | { t: "start" }
+  | LobbyMsg
   /** Held input bits changed (s = sequence number), and/or fire was pressed (f). */
-  | { t: "in"; s: number; b: number; f?: 1 }
-  | { t: "chat"; text: string }
-  | { t: "lobby" }
-  | { t: "leave" }
-  | { t: "ping" };
+  | { t: "in"; s: number; b: number; f?: 1 };
 
 export type ServerMsg =
+  | Exclude<RoomMsg<GameState>, { t: "welcome" }>
   | { t: "welcome"; you: string; state: GameState; world: WorldSnapshot | null; log: LogEntry[]; now: number }
-  | { t: "state"; state: GameState; now: number }
   /** A fresh round's starting world (also sent when a round restarts). */
   | { t: "round"; world: WorldSnapshot }
-  | Frame
-  | { t: "log"; entries: LogEntry[] }
-  | { t: "error"; message: string }
-  | { t: "kicked" }
-  | { t: "pong"; now: number };
+  | Frame;
 
 /** Final standings order. */
 export function rankPlayers(a: PlayerState, b: PlayerState): number {
   return b.score - a.score || b.kills - a.kills || a.selfHits - b.selfHits;
 }
-
-export const CLOSE_NOT_FOUND = 4404;
-export const CLOSE_KICKED = 4403;

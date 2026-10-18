@@ -81,12 +81,7 @@ export function wallsFor(maze: Maze): Walls {
  * One tick of driving: turn, move, then slide out of walls and other tanks. `others` are treated as fixed,
  * so tanks block each other rather than push. Shared by the server and by the client predicting its own tank.
  */
-export function moveTank(
-  t: Vec & { h: number; tt: number },
-  bits: number,
-  walls: Rect[],
-  others: readonly Vec[],
-): void {
+export function moveTank(t: Vec & { h: number; tt: number }, bits: number, walls: Rect[], others: readonly Vec[]): void {
   const turn = (bits & IN_RIGHT ? 1 : 0) - (bits & IN_LEFT ? 1 : 0);
   if (turn === 0) {
     t.tt = 0;
@@ -187,7 +182,7 @@ export class World {
     const events: SimEvent[] = [];
     this.tick++;
 
-    for (let i = 0; i < this.bullets.length; ) {
+    for (let i = 0; i < this.bullets.length;) {
       const b = this.bullets[i];
       const path = moveBullet(b, this.walls.bullet);
       if (!path) {

@@ -3,7 +3,18 @@ import { mulberry32, randomSeed, type Rng } from "@warrick/kit/shared/rng";
 import { seatFunds } from "../shared/constants";
 import { cpuNext } from "../shared/ai";
 import { MAPS, type MapDef } from "../shared/maps";
-import { actProblem, applyAct, applyBuild, buildProblem, endTurn, newBoard, startTurn, unitTile, winnerSeat, type Board } from "../shared/rules";
+import {
+  actProblem,
+  applyAct,
+  applyBuild,
+  buildProblem,
+  endTurn,
+  newBoard,
+  startTurn,
+  unitTile,
+  winnerSeat,
+  type Board,
+} from "../shared/rules";
 import { Renderer } from "./render";
 
 const DEMO_MAPS = ["twin-rivers", "mirror-lake", "four-corners"];

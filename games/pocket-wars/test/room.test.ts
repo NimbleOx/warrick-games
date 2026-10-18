@@ -161,7 +161,10 @@ describe("starting", () => {
     const before = structuredClone(state(r));
     const puts = r.storage.puts();
     await r.say(ann, { t: "start" });
-    expect(ann.last("error")).toEqual({ t: "error", message: "Four Corners is a 4-player map and there are 3 players. Pick another map, or Auto." });
+    expect(ann.last("error")).toEqual({
+      t: "error",
+      message: "Four Corners is a 4-player map and there are 3 players. Pick another map, or Auto.",
+    });
     expect(state(r)).toEqual(before);
     expect(r.storage.puts()).toBe(puts);
 

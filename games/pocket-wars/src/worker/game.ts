@@ -17,7 +17,14 @@ import {
   seatFunds,
 } from "../shared/constants";
 import { MAPS, mapsFor, type MapDef } from "../shared/maps";
-import { DEFAULT_SETTINGS, SETTING_CHOICES, type GameState, type PlayerState, type ServerMsg, type Stats } from "../shared/protocol";
+import {
+  DEFAULT_SETTINGS,
+  SETTING_CHOICES,
+  type GameState,
+  type PlayerState,
+  type ServerMsg,
+  type Stats,
+} from "../shared/protocol";
 import {
   actProblem,
   applyAct,
@@ -188,7 +195,10 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const n = this.participants.length;
     const rng = mulberry32(randomSeed());
     const m = this.pickMap(n, rng);
-    const order = shuffle(rng, this.participants.map((p) => p.id));
+    const order = shuffle(
+      rng,
+      this.participants.map((p) => p.id),
+    );
     s.mapId = m.id;
     s.board = newBoard(m, seatFunds(m.players));
     s.order = order;
@@ -430,13 +440,16 @@ export class Game extends Lobby<GameState, ServerMsg> {
     if (ev.lost) {
       p.stats.lost++;
       if (victim) victim.stats.kills++;
-      this.event(`💥 ${victim?.name ?? "The defender"}'s ${UNITS[ev.targetType!].name} destroyed ${p.name}'s ${UNITS[ev.type].name}`);
+      this.event(
+        `💥 ${victim?.name ?? "The defender"}'s ${UNITS[ev.targetType!].name} destroyed ${p.name}'s ${UNITS[ev.type].name}`,
+      );
     }
     if (ev.captured) {
       p.stats.captured++;
       const kind = this.map.buildings[ev.building!].kind;
       const home = this.map.hq.indexOf(ev.building!);
-      if (kind === "hq" && home >= 0 && ev.out?.includes(home)) this.event(`🚩 ${p.name} captured ${this.seatPlayer(home)?.name}'s HQ!`);
+      if (kind === "hq" && home >= 0 && ev.out?.includes(home))
+        this.event(`🚩 ${p.name} captured ${this.seatPlayer(home)?.name}'s HQ!`);
       else this.event(`🚩 ${p.name} captured ${kind === "hq" ? "an HQ" : `a ${kind}`}`);
     }
     for (const seat of ev.out ?? []) {
@@ -477,7 +490,8 @@ export class Game extends Lobby<GameState, ServerMsg> {
         return this.finishTurn();
       }
       const ev = this.doAct(p, mv.act);
-      anim = (ev.path.length - 1) * MOVE_MS_PER_TILE + (ev.action === "attack" ? ATTACK_MS : ev.action === "capture" ? CAPTURE_MS : 0);
+      anim =
+        (ev.path.length - 1) * MOVE_MS_PER_TILE + (ev.action === "attack" ? ATTACK_MS : ev.action === "capture" ? CAPTURE_MS : 0);
     } else {
       const problem = buildProblem(m, b, p.seat, mv.at, mv.unit);
       if (problem) {

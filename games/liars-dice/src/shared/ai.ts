@@ -195,7 +195,8 @@ function hard(view: CpuView, rng: Rng): Move {
     const gain = view.hand.length < view.maxDice ? o.exactly : 0;
     options.push({ move: SPOT, loss: 1 - o.exactly - gain + noise() });
   }
-  for (const r of raises(view, last, odds, total)) options.push({ move: { t: "bid", ...r.bid }, loss: (1 - r.p) * press + noise() });
+  for (const r of raises(view, last, odds, total))
+    options.push({ move: { t: "bid", ...r.bid }, loss: (1 - r.p) * press + noise() });
   // Sometimes push the bid up by one more than it has to, if that's still likely.
   if (rng() < 0.2) {
     for (const r of raises(view, last, odds, total, 1)) {

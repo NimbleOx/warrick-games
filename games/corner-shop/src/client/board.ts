@@ -106,7 +106,8 @@ export function drawBoard(ctx: CanvasRenderingContext2D, sc: BoardScene, ox: num
   }
   ctx.stroke();
 
-  if (sc.showLast && moves.length) outline(ctx, moves[moves.length - 1].cells, size, ox, oy, cell, "rgb(255 255 255 / 0.9)", Math.max(1.5, cell * 0.1));
+  if (sc.showLast && moves.length)
+    outline(ctx, moves[moves.length - 1].cells, size, ox, oy, cell, "rgb(255 255 255 / 0.9)", Math.max(1.5, cell * 0.1));
 
   if (sc.flash && sc.flash.t < 1) {
     ctx.fillStyle = `rgb(255 255 255 / ${0.55 * (1 - sc.flash.t)})`;
@@ -155,7 +156,16 @@ export function drawBoard(ctx: CanvasRenderingContext2D, sc: BoardScene, ox: num
 }
 
 /** Stroke the outside edges of a set of squares. */
-function outline(ctx: CanvasRenderingContext2D, cells: readonly number[], size: number, ox: number, oy: number, cell: number, color: string, width: number): void {
+function outline(
+  ctx: CanvasRenderingContext2D,
+  cells: readonly number[],
+  size: number,
+  ox: number,
+  oy: number,
+  cell: number,
+  color: string,
+  width: number,
+): void {
   const set = new Set(cells);
   const h = width / 2;
   ctx.strokeStyle = color;

@@ -228,7 +228,7 @@ describe("determinism", () => {
     let x = seed;
     for (let t = 0; t < 600; t += 3) {
       x = (Math.imul(x, 1103515245) + 12345) >>> 0;
-      inputs.push([t, x % 8, ((x >>> 8) % 3) - 1 as -1 | 0 | 1]);
+      inputs.push([t, x % 8, (((x >>> 8) % 3) - 1) as -1 | 0 | 1]);
     }
     return { setup, inputs };
   }
@@ -259,7 +259,11 @@ describe("determinism", () => {
   it("replays a snapshot taken mid-round to the same state", () => {
     const { setup, inputs } = scripted(11);
     const a = live(setup, inputs, 200);
-    const b = Round.replay(setup, inputs.filter((i) => i[0] < 200), 200);
+    const b = Round.replay(
+      setup,
+      inputs.filter((i) => i[0] < 200),
+      200,
+    );
     expect(b.tick).toBe(a.tick);
     expect(b.checksum()).toBe(a.checksum());
     expect(hash(b.grid)).toBe(hash(a.grid));

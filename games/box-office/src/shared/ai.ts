@@ -189,7 +189,10 @@ function safeSearch(b: Board, players: number, me: number, safe: number[], rng: 
     work.lines[safe[i]] = me;
     const gains = rec(1 << i, 1);
     work.lines[safe[i]] = NONE;
-    const score = margin(base.map((v, j) => v + gains[j]), me);
+    const score = margin(
+      base.map((v, j) => v + gains[j]),
+      me,
+    );
     if (score > bestScore) {
       bestScore = score;
       bestLines = [safe[i]];

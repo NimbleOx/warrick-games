@@ -13,7 +13,8 @@ function board(rows: (number | "R")[][]): Board {
 
 function rows(b: Board): (number | "R")[][] {
   const out: (number | "R")[][] = [];
-  for (let y = 0; y < b.size; y++) out.push(b.cells.slice(y * b.size, (y + 1) * b.size).map((v) => (v < 0 ? "R" : v ? 2 ** v : 0)));
+  for (let y = 0; y < b.size; y++)
+    out.push(b.cells.slice(y * b.size, (y + 1) * b.size).map((v) => (v < 0 ? "R" : v ? 2 ** v : 0)));
   return out;
 }
 

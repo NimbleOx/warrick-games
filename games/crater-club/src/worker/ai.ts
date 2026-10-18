@@ -12,7 +12,15 @@ const ERROR: Record<CpuLevel, { angle: number; power: number }> = {
 };
 
 const ATTACK_WEAPONS: WeaponId[] = [
-  "deaths_head", "nuke", "mirv", "baby_nuke", "funky_bomb", "leapfrog", "missile", "roller", "baby_missile",
+  "deaths_head",
+  "nuke",
+  "mirv",
+  "baby_nuke",
+  "funky_bomb",
+  "leapfrog",
+  "missile",
+  "roller",
+  "baby_missile",
 ];
 
 /** Search angle/power space for the shot that lands closest to a target, then fumble it a bit. */

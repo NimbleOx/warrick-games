@@ -149,7 +149,15 @@ export class Renderer {
   // ---------------------------------------------------------------- effects
 
   float(m: MapDef, tile: number, text: string, color: string, delay = 0): void {
-    this.add({ kind: "float", x: tile % m.w, y: Math.floor(tile / m.w), start: performance.now() + delay, dur: 1100, text, color });
+    this.add({
+      kind: "float",
+      x: tile % m.w,
+      y: Math.floor(tile / m.w),
+      start: performance.now() + delay,
+      dur: 1100,
+      text,
+      color,
+    });
   }
 
   boom(m: MapDef, tile: number, delay = 0): void {
@@ -193,7 +201,8 @@ export class Renderer {
 
     const o = sc.overlay ?? {};
     if (o.move) for (const t of o.move) tileFill(ctx, m, t, "rgba(90, 170, 255, 0.42)", "rgba(220, 240, 255, 0.55)", this.scale);
-    if (o.danger) for (const t of o.danger) tileFill(ctx, m, t, "rgba(255, 70, 70, 0.32)", "rgba(255, 190, 190, 0.45)", this.scale);
+    if (o.danger)
+      for (const t of o.danger) tileFill(ctx, m, t, "rgba(255, 70, 70, 0.32)", "rgba(255, 190, 190, 0.45)", this.scale);
     if (o.path && o.path.length > 1) drawPath(ctx, m, o.path, this.scale);
 
     const units = [...sc.b.units].filter((u) => !sc.hide?.has(u.id)).sort((a, c) => a.y - c.y);
@@ -217,7 +226,9 @@ export class Renderer {
     });
     // HP badges, in screen space so the digits stay sharp.
     for (const u of units) if (u.hp < MAX_HP) this.badge(u.x + 0.6, u.y + 0.6, String(Math.max(1, u.hp)), "#fff", "#111");
-    for (const g of sc.ghosts ?? []) if (g.unit.hp < MAX_HP && (g.alpha ?? 1) > 0.5) this.badge(g.x + 0.6, g.y + 0.6, String(Math.max(1, g.unit.hp)), "#fff", "#111");
+    for (const g of sc.ghosts ?? [])
+      if (g.unit.hp < MAX_HP && (g.alpha ?? 1) > 0.5)
+        this.badge(g.x + 0.6, g.y + 0.6, String(Math.max(1, g.unit.hp)), "#fff", "#111");
 
     if (o.targets) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
@@ -503,7 +514,14 @@ function waves(g: CanvasRenderingContext2D, x: number, y: number, color: string,
   }
 }
 
-function road(g: CanvasRenderingContext2D, x: number, y: number, full: boolean, at: (x: number, y: number) => Terrain | null, lw: number): void {
+function road(
+  g: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  full: boolean,
+  at: (x: number, y: number) => Terrain | null,
+  lw: number,
+): void {
   const w = 0.42;
   const a = (1 - w) / 2;
   const links = [
@@ -692,7 +710,15 @@ function star(g: CanvasRenderingContext2D, cx: number, cy: number, r: number, co
 // ------------------------------------------------------------------ units
 
 /** One unit in tile units at (x, y), facing right (1) or left (-1). Done units are greyed. */
-export function drawUnit(g: CanvasRenderingContext2D, type: UnitType, x: number, y: number, color: string, face: 1 | -1, done: boolean): void {
+export function drawUnit(
+  g: CanvasRenderingContext2D,
+  type: UnitType,
+  x: number,
+  y: number,
+  color: string,
+  face: 1 | -1,
+  done: boolean,
+): void {
   const body = done ? mix(color, "#6a6a6a", 0.65) : color;
   const dark = shade(body.startsWith("#") ? body : color, -0.45);
   const light = shade(body.startsWith("#") ? body : color, 0.35);

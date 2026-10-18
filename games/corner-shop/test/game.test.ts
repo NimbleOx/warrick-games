@@ -118,7 +118,9 @@ describe("game flow", () => {
     const other = current.id === a.id ? b : a;
     const move = legalMoves(positionOf(t.s), current.seat)[0];
     expect(() => t.game().place(other.id, move)).toThrow("It's not your turn");
-    expect(() => t.game().place(current.id, { ...move, x: move.x + 3 })).toThrow("Your first piece must cover your starting square");
+    expect(() => t.game().place(current.id, { ...move, x: move.x + 3 })).toThrow(
+      "Your first piece must cover your starting square",
+    );
     expect(() => t.game().place(current.id, { piece: "Q", orient: 0, x: 0, y: 0 } as never)).toThrow("That isn't a piece");
     expect(() => t.game().place(current.id, { ...move, x: 1.5 })).toThrow("That isn't a piece");
     t.game().place(current.id, move);
@@ -171,7 +173,12 @@ describe("game flow", () => {
     t.advance(30_000);
     t.game().onTimer();
     expect(t.current()).toBe(other);
-    t.game().place(other.id, { piece: MONOMINO, orient: 0, x: t.s.starts[other.seat] % 14, y: Math.floor(t.s.starts[other.seat] / 14) });
+    t.game().place(other.id, {
+      piece: MONOMINO,
+      orient: 0,
+      x: t.s.starts[other.seat] % 14,
+      y: Math.floor(t.s.starts[other.seat] / 14),
+    });
     // Now neither can move: both are passed, and the game is over.
     expect(stuck.out).toBe("stuck");
     expect(other.out).toBe("stuck");

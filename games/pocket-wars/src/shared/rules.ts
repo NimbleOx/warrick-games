@@ -409,7 +409,8 @@ export function buildProblem(m: MapDef, b: Board, seat: number, at: number, type
   if (bi < 0 || m.buildings[bi].kind !== "factory") return "Units are built at factories";
   if (b.owners[bi] !== seat) return "That factory isn't yours";
   if (unitAtTile(m, b, at)) return "Something is standing on that factory";
-  if (b.funds[seat] < UNITS[type].cost) return `Not enough funds: a ${UNITS[type].name} costs ${UNITS[type].cost.toLocaleString("en-US")}`;
+  if (b.funds[seat] < UNITS[type].cost)
+    return `Not enough funds: a ${UNITS[type].name} costs ${UNITS[type].cost.toLocaleString("en-US")}`;
   return null;
 }
 

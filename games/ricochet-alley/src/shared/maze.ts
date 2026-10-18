@@ -182,7 +182,7 @@ export function pathBetween(m: Maze, from: number, to: number): number[] {
   const { prev, dist } = bfs(m, from);
   if (dist[to] < 0) return [];
   const path = [to];
-  for (let c = to; c !== from; ) {
+  for (let c = to; c !== from;) {
     c = prev[c];
     path.push(c);
   }

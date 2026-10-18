@@ -279,7 +279,8 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     this.showScreen("lobby");
 
     this.conn = new Connection<C, M>(code, {
-      hello: () => ({ t: "hello", token: this.token, name: store("name") ?? name, build: buildId() ?? undefined }) as unknown as C,
+      hello: () =>
+        ({ t: "hello", token: this.token, name: store("name") ?? name, build: buildId() ?? undefined }) as unknown as C,
       message: (msg) => this.onMessage(msg),
       status: (s) => this.onStatus(s),
       stale: () => this.onStale(),
@@ -314,7 +315,15 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   }
 
   private onMessage(msg: M): void {
-    const m = msg as AnyMsg & { now?: number; c?: number; you?: string; log?: LogEntry[]; state?: S; entries?: LogEntry[]; message?: string };
+    const m = msg as AnyMsg & {
+      now?: number;
+      c?: number;
+      you?: string;
+      log?: LogEntry[];
+      state?: S;
+      entries?: LogEntry[];
+      message?: string;
+    };
     // A new connection (perhaps after the computer slept): measure the clock afresh.
     if (m.t === "welcome") this.clock.reset();
     if (m.t === "pong" && typeof m.now === "number" && typeof m.c === "number") this.clock.pong(m.now, m.c);
@@ -426,7 +435,9 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   private mount(): void {
     const o = this.o;
     const rules = o.rules?.length ? `<ul class="rules">${o.rules.map((r) => `<li>${r}</li>`).join("")}</ul>` : "";
-    const cpu = CPU_LEVELS.map((l) => `<button class="btn btn-small" data-cpu="${l}">${l[0].toUpperCase()}${l.slice(1)}</button>`).join("");
+    const cpu = CPU_LEVELS.map(
+      (l) => `<button class="btn btn-small" data-cpu="${l}">${l[0].toUpperCase()}${l.slice(1)}</button>`,
+    ).join("");
     const html = `
     <section id="screen-home" class="screen screen-home">
       <canvas id="attract" class="attract" aria-hidden="true"></canvas>

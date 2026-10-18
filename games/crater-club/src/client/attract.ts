@@ -59,7 +59,13 @@ export class Attract {
       const y = flattenPad(heights, x);
       const id = `d${i}`;
       tanks.push({ id, x, y, health: 100, alive: true, shield: 0, parachutes: 0 });
-      this.tanks.set(id, { name: "", color: PLAYER_COLORS[(i * 3) % PLAYER_COLORS.length], angle: 90, active: false, you: false });
+      this.tanks.set(id, {
+        name: "",
+        color: PLAYER_COLORS[(i * 3) % PLAYER_COLORS.length],
+        angle: 90,
+        active: false,
+        you: false,
+      });
     }
     this.world = new World({ heights, tanks, wind: randInt(rng, -6, 6), walls: "open" });
     this.renderer.newShot();

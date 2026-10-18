@@ -183,7 +183,15 @@ describe("calls", () => {
     // Three 4s and a wild one: 4, short of 5.
     const r = t.s.reveal!;
     expect(t.s.phase).toBe("reveal");
-    expect(r).toMatchObject({ kind: "liar", callerId: b.id, bidderId: a.id, count: 4, loserId: a.id, gainerId: null, outId: null });
+    expect(r).toMatchObject({
+      kind: "liar",
+      callerId: b.id,
+      bidderId: a.id,
+      count: 4,
+      loserId: a.id,
+      gainerId: null,
+      outId: null,
+    });
     expect(r.hands).toEqual([
       { id: a.id, dice: [1, 2, 4, 4, 6] },
       { id: b.id, dice: [3, 3, 4, 5, 5] },

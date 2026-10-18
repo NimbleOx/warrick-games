@@ -134,9 +134,33 @@ export type BoardSize = "small" | "medium" | "large";
 
 /** Columns × rows of boxes for 2..8 players. */
 const SIZES: Record<BoardSize, [number, number][]> = {
-  small: [[4, 4], [5, 4], [5, 5], [6, 5], [6, 6], [7, 6], [8, 6]],
-  medium: [[5, 5], [6, 5], [6, 6], [7, 6], [8, 6], [8, 7], [9, 7]],
-  large: [[7, 6], [8, 6], [8, 7], [9, 7], [9, 8], [10, 8], [11, 8]],
+  small: [
+    [4, 4],
+    [5, 4],
+    [5, 5],
+    [6, 5],
+    [6, 6],
+    [7, 6],
+    [8, 6],
+  ],
+  medium: [
+    [5, 5],
+    [6, 5],
+    [6, 6],
+    [7, 6],
+    [8, 6],
+    [8, 7],
+    [9, 7],
+  ],
+  large: [
+    [7, 6],
+    [8, 6],
+    [8, 7],
+    [9, 7],
+    [9, 8],
+    [10, 8],
+    [11, 8],
+  ],
 };
 
 export function boardSize(size: BoardSize, players: number): { w: number; h: number } {

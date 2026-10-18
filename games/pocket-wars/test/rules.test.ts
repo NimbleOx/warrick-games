@@ -17,13 +17,7 @@ import { DAMAGE, UNITS } from "../src/shared/units";
 import { at, boardWith, testMap, unitAt } from "./helpers";
 
 // 8 × 5 with plains, a forest, a mountain, a city, and each side's HQ and factory.
-const M = testMap([
-  "H1. . . . . . . ",
-  ". . . . . . . . ",
-  ". . T . ^ C-. . ",
-  ". . . . . . . . ",
-  "F1. . . . . F2H2",
-]);
+const M = testMap(["H1. . . . . . . ", ". . . . . . . . ", ". . T . ^ C-. . ", ". . . . . . . . ", "F1. . . . . F2H2"]);
 const CITY = M.buildingAt[at(M, 5, 2)];
 
 describe("damage", () => {
@@ -103,8 +97,12 @@ describe("artillery", () => {
     const b = setup();
     const art = b.units[0];
     expect(actProblem(M, b, 0, { unit: art.id, to: unitTile(M, art), action: "attack", target: 2 })).toBeNull();
-    expect(actProblem(M, b, 0, { unit: art.id, to: unitTile(M, art), action: "attack", target: 3 })).toBe("That target is out of range");
-    expect(actProblem(M, b, 0, { unit: art.id, to: unitTile(M, art), action: "attack", target: 4 })).toBe("That target is out of range");
+    expect(actProblem(M, b, 0, { unit: art.id, to: unitTile(M, art), action: "attack", target: 3 })).toBe(
+      "That target is out of range",
+    );
+    expect(actProblem(M, b, 0, { unit: art.id, to: unitTile(M, art), action: "attack", target: 4 })).toBe(
+      "That target is out of range",
+    );
   });
 
   it("can't move and fire in the same turn", () => {

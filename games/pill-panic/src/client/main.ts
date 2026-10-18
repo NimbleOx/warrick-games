@@ -577,7 +577,11 @@ function layout(): void {
     ownCanvas.resize(cell);
   }
   const width = narrow ? "none" : `${Math.max(260, bottleSize(cell, true).w)}px`;
-  for (const el of [$("own-col").querySelector<HTMLElement>(".own-head")!, $("own-col").querySelector<HTMLElement>(".own-stats")!, $("pad")]) {
+  for (const el of [
+    $("own-col").querySelector<HTMLElement>(".own-head")!,
+    $("own-col").querySelector<HTMLElement>(".own-stats")!,
+    $("pad"),
+  ]) {
     el.style.maxWidth = width;
   }
 }

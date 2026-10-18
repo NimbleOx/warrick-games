@@ -4,7 +4,17 @@ import type { CpuLevel } from "@warrick/kit/shared/protocol";
 import { cpuNext } from "../src/shared/ai";
 import { seatFunds } from "../src/shared/constants";
 import type { MapDef } from "../src/shared/maps";
-import { actProblem, applyAct, applyBuild, buildProblem, endTurn, newBoard, startTurn, winnerSeat, type Board } from "../src/shared/rules";
+import {
+  actProblem,
+  applyAct,
+  applyBuild,
+  buildProblem,
+  endTurn,
+  newBoard,
+  startTurn,
+  winnerSeat,
+  type Board,
+} from "../src/shared/rules";
 
 export interface SimResult {
   winner: number | null;
@@ -14,7 +24,13 @@ export interface SimResult {
   board: Board;
 }
 
-export function simulate(m: MapDef, levels: CpuLevel[], seed: number, maxDays = 60, funds: readonly number[] = seatFunds(m.players)): SimResult {
+export function simulate(
+  m: MapDef,
+  levels: CpuLevel[],
+  seed: number,
+  maxDays = 60,
+  funds: readonly number[] = seatFunds(m.players),
+): SimResult {
   const rng: Rng = mulberry32(seed);
   const b = newBoard(m, funds);
   const problems: string[] = [];

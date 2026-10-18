@@ -50,7 +50,14 @@ const ROUNDOVER_MS = 3500;
 const AWAY_GRACE_MS = 20000;
 
 export function newGameState(code: string, now: number): GameState {
-  return { ...baseState(code, now, DEFAULT_SETTINGS), round: 0, setup: null, roundWinnerId: null, phaseDeadline: null, timer: null };
+  return {
+    ...baseState(code, now, DEFAULT_SETTINGS),
+    round: 0,
+    setup: null,
+    roundWinnerId: null,
+    phaseDeadline: null,
+    timer: null,
+  };
 }
 
 export function newLive(): Live {
@@ -201,7 +208,10 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
       return;
     }
     const rng = mulberry32(randomSeed());
-    const ids = shuffle(rng, players.map((p) => p.id));
+    const ids = shuffle(
+      rng,
+      players.map((p) => p.id),
+    );
     const { cols, rows } = MAZE_SIZES[mazeSizeFor(s.settings.maze, ids.length)];
     const maze = generateMaze(rng, cols, rows, MAZE_LOOPINESS);
     const tanks = startingTanks(ids, pickSpawns(maze, ids.length, rng));
@@ -222,7 +232,8 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
       const brains = new Map<number, CpuBrain>();
       setup.tanks.forEach((id, i) => {
         const p = this.player(id);
-        if (!p) world.tanks[i].alive = false; // left while the round was being rebuilt
+        if (!p)
+          world.tanks[i].alive = false; // left while the round was being rebuilt
         else if (p.cpu) brains.set(i, new CpuBrain(p.cpu, mulberry32(randomSeed())));
       });
       this.live.round = { world, brains, hangUntil: -1 };

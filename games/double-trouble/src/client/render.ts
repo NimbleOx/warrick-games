@@ -132,7 +132,15 @@ function label(v: number): string {
 }
 
 /** One tile, or a rock, with its top-left at (x, y) and side s. */
-export function drawTile(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, v: number, numbers: boolean, cell = 0): void {
+export function drawTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  s: number,
+  v: number,
+  numbers: boolean,
+  cell = 0,
+): void {
   const r = Math.max(2, s * 0.09);
   if (v < 0) {
     drawRock(ctx, x, y, s, r, cell, v);
@@ -489,7 +497,13 @@ export class MiniView {
     const danger = !s.out && s.board.empties().length <= 2;
     ctx.lineWidth = 2;
     ctx.strokeStyle =
-      hit < 500 ? `rgb(255 107 214 / ${1 - hit / 500})` : land < 400 ? `rgb(255 154 60 / ${1 - land / 400})` : danger ? "#7a2a35" : LINE;
+      hit < 500
+        ? `rgb(255 107 214 / ${1 - hit / 500})`
+        : land < 400
+          ? `rgb(255 154 60 / ${1 - land / 400})`
+          : danger
+            ? "#7a2a35"
+            : LINE;
     ctx.beginPath();
     ctx.roundRect(bx - 1, 1, bw + 2, H - 2, u * 0.13);
     ctx.stroke();

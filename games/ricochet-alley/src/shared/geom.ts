@@ -66,15 +66,7 @@ export interface Path {
  * any number of times along the way, up to `maxBounces`; the next wall after that ends the path. Only + − × ÷,
  * so a path replays identically on every JS engine.
  */
-export function castPath(
-  rects: Rect[],
-  x: number,
-  y: number,
-  vx: number,
-  vy: number,
-  len = 1,
-  maxBounces = 16,
-): Path {
+export function castPath(rects: Rect[], x: number, y: number, vx: number, vy: number, len = 1, maxBounces = 16): Path {
   const pts = [x, y];
   let left = len;
   let bounces = 0;
@@ -116,15 +108,7 @@ export function castPath(
  * Smallest t in [0, 1] at which the segment (ax, ay) → (bx, by) comes within r of (cx, cy), or −1. A segment
  * that starts inside the circle hits at 0.
  */
-export function segmentHitsCircle(
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  cx: number,
-  cy: number,
-  r: number,
-): number {
+export function segmentHitsCircle(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, r: number): number {
   const mx = ax - cx;
   const my = ay - cy;
   const c = mx * mx + my * my - r * r;

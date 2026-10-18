@@ -31,14 +31,28 @@ function fakeCanvas() {
 
 function world(): World {
   const heights = generateTerrain(mulberry32(1), "hills");
-  const tanks = [300, 900].map((x, i) => ({ id: `p${i + 1}`, x, y: flattenPad(heights, x), health: 100, alive: true, shield: 0, parachutes: 0 }));
+  const tanks = [300, 900].map((x, i) => ({
+    id: `p${i + 1}`,
+    x,
+    y: flattenPad(heights, x),
+    health: 100,
+    alive: true,
+    shield: 0,
+    parachutes: 0,
+  }));
   return new World({ heights, tanks, wind: 0, walls: "open" });
 }
 
 function opts(over: { active?: string; angle?: number } = {}): DrawOpts {
   const tanks = new Map<string, TankInfo>();
   for (const id of ["p1", "p2"]) {
-    tanks.set(id, { name: id, color: "#ff4d5e", angle: id === "p1" ? (over.angle ?? 60) : 120, active: over.active === id, you: id === "p1" });
+    tanks.set(id, {
+      name: id,
+      color: "#ff4d5e",
+      angle: id === "p1" ? (over.angle ?? 60) : 120,
+      active: over.active === id,
+      you: id === "p1",
+    });
   }
   return { theme: 0, tanks, labels: true, aimGuide: null };
 }
@@ -55,12 +69,15 @@ let r: Renderer;
 
 beforeEach(() => {
   vi.stubGlobal("document", { createElement: () => fakeCanvas() });
-  vi.stubGlobal("ImageData", class {
-    data: Uint8ClampedArray;
-    constructor(w: number, h: number) {
-      this.data = new Uint8ClampedArray(w * h * 4);
-    }
-  });
+  vi.stubGlobal(
+    "ImageData",
+    class {
+      data: Uint8ClampedArray;
+      constructor(w: number, h: number) {
+        this.data = new Uint8ClampedArray(w * h * 4);
+      }
+    },
+  );
   vi.stubGlobal("window", { devicePixelRatio: 1 });
   canvas = fakeCanvas();
   r = new Renderer(canvas as unknown as HTMLCanvasElement);

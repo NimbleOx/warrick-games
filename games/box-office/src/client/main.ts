@@ -2,14 +2,7 @@ import { $, esc, toast } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { NONE, boardSize, boxCounts, boxesLeft, cloneBoard, geometry, type Board } from "../shared/board";
 import { capturable, takeAll } from "../shared/chains";
-import {
-  SETTING_CHOICES,
-  standings,
-  type BoardSize,
-  type ClientMsg,
-  type GameState,
-  type ServerMsg,
-} from "../shared/protocol";
+import { SETTING_CHOICES, standings, type BoardSize, type ClientMsg, type GameState, type ServerMsg } from "../shared/protocol";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
 import { BoardView, SETTLE_MS } from "./render";
@@ -151,8 +144,13 @@ function sync(s: GameState): void {
   const known = app.known;
   // A tab in the background doesn't animate: it catches up in one go.
   const fresh =
-    !v || document.hidden || app.game !== s.game || v.w !== s.w || v.h !== s.h ||
-    s.order.length < known.length || known.some((e, i) => s.order[i] !== e);
+    !v ||
+    document.hidden ||
+    app.game !== s.game ||
+    v.w !== s.w ||
+    v.h !== s.h ||
+    s.order.length < known.length ||
+    known.some((e, i) => s.order[i] !== e);
   app.known = s.order.slice();
   if (!fresh) {
     app.queue.push(...s.order.slice(known.length));
@@ -278,7 +276,9 @@ function renderHud(s: GameState): void {
   let who = "";
   if (s.phase === "playing") {
     const p = seatPlayer(s, s.turn);
-    const label = isMyTurn(s) ? "Your turn" : `${esc(p?.name ?? "?")}'s turn${p?.cpu ? `<span class="aside"> (thinking…)</span>` : ""}`;
+    const label = isMyTurn(s)
+      ? "Your turn"
+      : `${esc(p?.name ?? "?")}'s turn${p?.cpu ? `<span class="aside"> (thinking…)</span>` : ""}`;
     who = `<span class="chip" style="background:${p?.color ?? "#888"}"></span><span class="who">${label}</span>`;
   } else if (s.phase === "results") {
     who = `<span class="who">Game over</span>`;
@@ -337,7 +337,10 @@ function renderActions(s: GameState): void {
     else hint = "Your turn: draw a line between two dots.";
   } else {
     const p = seatPlayer(s, s.turn);
-    hint = p && !p.cpu && !p.connected ? `${esc(p.name)} is away. The game will move for them.` : `Waiting for ${esc(p?.name ?? "?")}…`;
+    hint =
+      p && !p.cpu && !p.connected
+        ? `${esc(p.name)} is away. The game will move for them.`
+        : `Waiting for ${esc(p?.name ?? "?")}…`;
   }
   const el = $("hint");
   if (el.innerHTML !== hint) el.innerHTML = hint;

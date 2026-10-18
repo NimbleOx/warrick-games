@@ -221,7 +221,13 @@ describe("clearing", () => {
 describe("garbage", () => {
   it("drops after the next capsule lands, and lands like loose halves", () => {
     const b = withPiece(bottleFrom(["......b."]), { a: RED, b: YELLOW });
-    b.addGarbage({ id: 1, p: [[0, BLUE], [4, RED]] });
+    b.addGarbage({
+      id: 1,
+      p: [
+        [0, BLUE],
+        [4, RED],
+      ],
+    });
     b.step(B_DROP);
     const events = settle(b);
     expect(events).toContainEqual({ k: "garbage", n: 2 });
@@ -232,8 +238,20 @@ describe("garbage", () => {
   it("doesn't attack back when garbage completes lines", () => {
     const b = withPiece(bottleFrom(["......b.", "rrr.yyy."]), { x: 0, y: 0, a: BLUE, b: BLUE });
     // The second attack drops in the row below the first, so it lands first.
-    b.addGarbage({ id: 1, p: [[3, BLUE], [7, BLUE]] });
-    b.addGarbage({ id: 2, p: [[3, RED], [7, YELLOW]] });
+    b.addGarbage({
+      id: 1,
+      p: [
+        [3, BLUE],
+        [7, BLUE],
+      ],
+    });
+    b.addGarbage({
+      id: 2,
+      p: [
+        [3, RED],
+        [7, YELLOW],
+      ],
+    });
     b.step(B_DROP);
     const events = settle(b);
     expect(events.filter((e) => e.k === "pop").length).toBeGreaterThan(0);
@@ -254,8 +272,20 @@ describe("determinism", () => {
     expect(b.checksum()).toBe(a.checksum());
     for (let i = 1000; i < 3000; i++) {
       if (i === 1500) {
-        a.addGarbage({ id: 1, p: [[1, RED], [5, BLUE]] });
-        b.addGarbage({ id: 1, p: [[1, RED], [5, BLUE]] });
+        a.addGarbage({
+          id: 1,
+          p: [
+            [1, RED],
+            [5, BLUE],
+          ],
+        });
+        b.addGarbage({
+          id: 1,
+          p: [
+            [1, RED],
+            [5, BLUE],
+          ],
+        });
       }
       a.step(masks[i]);
       b.step(masks[i]);

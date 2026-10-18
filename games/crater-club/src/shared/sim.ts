@@ -1,14 +1,4 @@
-import {
-  BARREL_LEN,
-  GRAVITY,
-  MAX_POWER,
-  MAX_SPEED,
-  TANK_H,
-  TANK_HALF_W,
-  TURRET_Y,
-  WIND_ACCEL,
-  WORLD_W,
-} from "./constants";
+import { BARREL_LEN, GRAVITY, MAX_POWER, MAX_SPEED, TANK_H, TANK_HALF_W, TURRET_Y, WIND_ACCEL, WORLD_W } from "./constants";
 import { mulberry32, type Rng } from "@warrick/kit/shared/rng";
 import { addDirt, carveCrater, supportHeight } from "./terrain";
 import { WEAPONS, type WeaponDef, type WeaponId, type WeaponKind } from "./weapons";
@@ -169,11 +159,7 @@ export class World {
   }
 
   get done(): boolean {
-    return (
-      this.projectiles.length === 0 &&
-      this.explosions.length === 0 &&
-      this.tanks.every((t) => !t.falling && t.dyingIn < 0)
-    );
+    return this.projectiles.length === 0 && this.explosions.length === 0 && this.tanks.every((t) => !t.falling && t.dyingIn < 0);
   }
 
   get timedOut(): boolean {
@@ -231,7 +217,10 @@ export class World {
   private makeProjectile(def: WeaponDef, x: number, y: number, vx: number, vy: number): Projectile {
     return {
       id: this.nextId++,
-      x, y, vx, vy,
+      x,
+      y,
+      vx,
+      vy,
       kind: def.kind,
       def,
       radius: def.radius,
@@ -422,7 +411,10 @@ export class World {
     const peak = 6 + Math.floor(r / 5);
     this.explosions.push({
       id: this.nextId++,
-      x, y, r, damage,
+      x,
+      y,
+      r,
+      damage,
       owner: opts.owner ?? this.shooterId,
       age: 0,
       peak,

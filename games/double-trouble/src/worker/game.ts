@@ -163,7 +163,9 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
     if (winner) {
       this.player(winner.id)!.wins++;
       this.event(
-        round.how === "goal" ? `${winner.name} made ${round.goal} and wins round ${s.round}!` : `${winner.name} wins round ${s.round}!`,
+        round.how === "goal"
+          ? `${winner.name} made ${round.goal} and wins round ${s.round}!`
+          : `${winner.name} wins round ${s.round}!`,
       );
     } else {
       this.event(`Round ${s.round} is over.`);

@@ -1,11 +1,36 @@
 // Dice faces as inline SVG, so they stay sharp at any size and pick up colours from CSS.
 const PIPS: Record<number, [number, number][]> = {
   1: [[50, 50]],
-  2: [[28, 28], [72, 72]],
-  3: [[28, 28], [50, 50], [72, 72]],
-  4: [[28, 28], [72, 28], [28, 72], [72, 72]],
-  5: [[28, 28], [72, 28], [50, 50], [28, 72], [72, 72]],
-  6: [[28, 25], [72, 25], [28, 50], [72, 50], [28, 75], [72, 75]],
+  2: [
+    [28, 28],
+    [72, 72],
+  ],
+  3: [
+    [28, 28],
+    [50, 50],
+    [72, 72],
+  ],
+  4: [
+    [28, 28],
+    [72, 28],
+    [28, 72],
+    [72, 72],
+  ],
+  5: [
+    [28, 28],
+    [72, 28],
+    [50, 50],
+    [28, 72],
+    [72, 72],
+  ],
+  6: [
+    [28, 25],
+    [72, 25],
+    [28, 50],
+    [72, 50],
+    [28, 75],
+    [72, 75],
+  ],
 };
 
 /** One die showing `face`. */
@@ -20,7 +45,15 @@ export function hiddenDie(cls = ""): string {
 }
 
 /** Draw a die on a canvas, centred on (x, y), `size` pixels across, turned by `angle`. */
-export function drawDie(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, angle: number, face: number, alpha = 1): void {
+export function drawDie(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  angle: number,
+  face: number,
+  alpha = 1,
+): void {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(x, y);
@@ -32,6 +65,7 @@ export function drawDie(ctx: CanvasRenderingContext2D, x: number, y: number, siz
   ctx.fillRect(-h, -h, size, size);
   ctx.fillStyle = face === 1 ? "#d23a4e" : "#1a1206";
   const r = Math.max(1, Math.round(size / 9));
-  for (const [px, py] of PIPS[face]) ctx.fillRect(Math.round(-h + (px / 100) * size - r / 2), Math.round(-h + (py / 100) * size - r / 2), r, r);
+  for (const [px, py] of PIPS[face])
+    ctx.fillRect(Math.round(-h + (px / 100) * size - r / 2), Math.round(-h + (py / 100) * size - r / 2), r, r);
   ctx.restore();
 }

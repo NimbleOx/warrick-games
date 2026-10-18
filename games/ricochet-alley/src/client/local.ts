@@ -58,7 +58,9 @@ export class LocalMatch {
     const tanks = startingTanks(ids, pickSpawns(maze, ids.length, this.rng));
     this.world = new World(maze, { tick: 0, nextId: 1, tanks, bullets: [] });
     this.field = new BulletField(this.world.walls.bullet);
-    this.brains = ids.map((_, i) => (this.opts.human && i === 0 ? null : new CpuBrain(this.opts.cpus[i - (this.opts.human ? 1 : 0)], mulberry32(randomSeed()))));
+    this.brains = ids.map((_, i) =>
+      this.opts.human && i === 0 ? null : new CpuBrain(this.opts.cpus[i - (this.opts.human ? 1 : 0)], mulberry32(randomSeed())),
+    );
     this.prev = tanks.map((t) => ({ x: t.x, y: t.y, h: t.h }));
     this.renderer.setMaze(maze, randInt(this.rng, 0, THEME_COUNT - 1));
     this.clock = now + 900; // a beat to look at the maze
@@ -100,7 +102,11 @@ export class LocalMatch {
       if (this.opts.sound) sfx.bounce();
     });
     if (import.meta.env.DEV && this.field.size !== w.bullets.length) {
-      console.warn("client bullets drifted from the world", this.field.ids(), w.bullets.map((b) => b.id));
+      console.warn(
+        "client bullets drifted from the world",
+        this.field.ids(),
+        w.bullets.map((b) => b.id),
+      );
     }
     if (this.hangUntil < 0 && w.aliveCount <= 1) this.hangUntil = w.tick + HANG_TICKS;
     if (this.hangUntil >= 0 && w.tick >= this.hangUntil && !this.nextRoundAt) {

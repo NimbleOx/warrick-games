@@ -102,7 +102,12 @@ $("screen-lobby").querySelector(".chat-panel")!.insertAdjacentHTML("beforebegin"
 if (devAs && !store("name")) store("name", devAs);
 const renderer = new Renderer($<HTMLCanvasElement>("game-canvas"));
 const attractRenderer = new Renderer($<HTMLCanvasElement>("attract"));
-const attract = new LocalMatch(attractRenderer, { human: false, cpus: ["hard", "normal", "hard", "normal"], size: "large", sound: false });
+const attract = new LocalMatch(attractRenderer, {
+  human: false,
+  cpus: ["hard", "normal", "hard", "normal"],
+  size: "large",
+  sound: false,
+});
 
 const serverNow = () => shell.serverNow();
 const playerById = (id: string | null | undefined) => shell.player(id);
@@ -215,7 +220,12 @@ function startRound(world: WorldSnapshot): void {
       sfx.boom();
       if (victim === r.me) {
         const by = playerById(r.setup.tanks[owner]);
-        flash(owner === victim ? `<span class="big">OOPS</span>Your own bullet got you.` : `<span class="big">HIT</span>${esc(by?.name ?? "Someone")} got you.`, 1800);
+        flash(
+          owner === victim
+            ? `<span class="big">OOPS</span>Your own bullet got you.`
+            : `<span class="big">HIT</span>${esc(by?.name ?? "Someone")} got you.`,
+          1800,
+        );
       }
     },
     bounced: (x, y) => {
@@ -283,7 +293,10 @@ function frame(now: number): void {
   if (r && s) {
     r.update(now, s.phase === "playing", () => controls.update());
     const { tanks, bullets } = r.draw(now);
-    renderer.draw({ tanks, bullets, findMe: s.phase === "countdown", names: s.phase === "countdown" || s.phase === "roundover" }, now);
+    renderer.draw(
+      { tanks, bullets, findMe: s.phase === "countdown", names: s.phase === "countdown" || s.phase === "roundover" },
+      now,
+    );
     renderPips(r);
     // Tanks fall between state messages; keep the HUD and the score list in step.
     const key = r.alive.join();
@@ -318,16 +331,21 @@ function renderHud(s: GameState): void {
   let html: string;
   if (mine?.spectator) {
     const full = s.players.filter((p) => !p.spectator).length >= MAX_PLAYERS;
-    html = full ? `<span class="dim">Watching — the game is full (${MAX_PLAYERS} tanks)</span>` : `<span class="dim">Watching — you're in from the next round</span>`;
+    html = full
+      ? `<span class="dim">Watching — the game is full (${MAX_PLAYERS} tanks)</span>`
+      : `<span class="dim">Watching — you're in from the next round</span>`;
   } else if (s.phase === "countdown") {
     html = `<span class="who">Round ${s.round}</span><span class="dim">Get ready…</span>`;
   } else if (s.phase === "playing") {
-    if (r && r.me >= 0 && !r.myAlive) html = `<span class="who">You're out</span><span class="dim">${left} tank${left === 1 ? "" : "s"} left</span>`;
+    if (r && r.me >= 0 && !r.myAlive)
+      html = `<span class="who">You're out</span><span class="dim">${left} tank${left === 1 ? "" : "s"} left</span>`;
     else if (r && r.me < 0) html = `<span class="dim">You sat this round out — you're in next round</span>`;
     else html = `<span class="who">Round ${s.round}</span><span class="dim">${left} tanks left</span>`;
   } else if (s.phase === "roundover") {
     const w = playerById(s.roundWinnerId);
-    html = w ? `<span class="chip" style="background:${w.color}"></span><span class="who">${esc(w.name)} wins the round</span>` : `<span class="who">Draw — nobody survived</span>`;
+    html = w
+      ? `<span class="chip" style="background:${w.color}"></span><span class="who">${esc(w.name)} wins the round</span>`
+      : `<span class="who">Draw — nobody survived</span>`;
   } else {
     html = `<span class="who">Game over</span>`;
   }
@@ -395,7 +413,11 @@ function renderBanner(now: number): void {
     const champ = s.players.find((p) => !p.spectator && p.score >= s.settings.target);
     const next = s.phaseDeadline ? Math.max(0, Math.ceil((s.phaseDeadline - serverNow()) / 1000)) : 0;
     const title = w ? (w.id === shell.me ? "You win the round!" : `${esc(w.name)} wins the round`) : "Draw!";
-    const sub = champ ? `…and that's the game.` : w ? `${w.score} of ${s.settings.target} · next round in ${next}` : `Nobody scores · next round in ${next}`;
+    const sub = champ
+      ? `…and that's the game.`
+      : w
+        ? `${w.score} of ${s.settings.target} · next round in ${next}`
+        : `Nobody scores · next round in ${next}`;
     html = `<span class="big" style="${w ? `color:${w.color}` : ""}">${title}</span><span class="sub">${sub}</span>`;
   } else if (app.flash.until > now) {
     html = app.flash.html;

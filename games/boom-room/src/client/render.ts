@@ -210,13 +210,24 @@ export class Renderer {
         this.floaters.push({ x, y: y - 30, text: style.label, color: style.color, born: now });
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2;
-          this.particles.push({ x, y, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, g: 0, size: 2, color: style.color, born: now, life: 380 });
+          this.particles.push({
+            x,
+            y,
+            vx: Math.cos(a) * 70,
+            vy: Math.sin(a) * 70,
+            g: 0,
+            size: 2,
+            color: style.color,
+            born: now,
+            life: 380,
+          });
         }
         break;
       }
       case "pass": {
         const p = posOf(ev.id);
-        if (p) this.floaters.push({ x: p.x * TILE + TILE / 2, y: p.y * TILE - 14, text: "CAUGHT IT!", color: "#c58bff", born: now });
+        if (p)
+          this.floaters.push({ x: p.x * TILE + TILE / 2, y: p.y * TILE - 14, text: "CAUGHT IT!", color: "#c58bff", born: now });
         break;
       }
       case "kick": {
@@ -228,7 +239,13 @@ export class Renderer {
         const p = posOf(ev.id);
         if (!p) break;
         this.corpses.set(ev.id, { x: p.x, y: p.y, color: p.color, face: p.face, born: now });
-        this.floaters.push({ x: p.x * TILE + TILE / 2, y: p.y * TILE - 16, text: ev.by ? "K.O.!" : "SQUASH", color: "#ff6b6b", born: now });
+        this.floaters.push({
+          x: p.x * TILE + TILE / 2,
+          y: p.y * TILE - 16,
+          text: ev.by ? "K.O.!" : "SQUASH",
+          color: "#ff6b6b",
+          born: now,
+        });
         break;
       }
       case "drop": {
@@ -244,7 +261,17 @@ export class Renderer {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = 20 + Math.random() * 40;
-      this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 20, g: -20, size: 3 + Math.random() * 3, color, born: now, life: 450 });
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v - 20,
+        g: -20,
+        size: 3 + Math.random() * 3,
+        color,
+        born: now,
+        life: 450,
+      });
     }
   }
 
@@ -252,7 +279,8 @@ export class Renderer {
 
   draw(view: ArenaView, now: number): void {
     const { snap } = view;
-    if (snap.cols !== this.cols || snap.rows !== this.rows) this.resize(this.cssWidth || this.canvas.clientWidth, snap.cols, snap.rows);
+    if (snap.cols !== this.cols || snap.rows !== this.rows)
+      this.resize(this.cssWidth || this.canvas.clientWidth, snap.cols, snap.rows);
     const ctx = this.ctx;
     const theme = THEMES[snap.theme % THEMES.length];
     const W = snap.cols * TILE;
@@ -426,7 +454,8 @@ export class Renderer {
     if (walls[c]) {
       const border = tx === 0 || ty === 0 || tx === cols - 1 || ty === rows - 1;
       const tile = this.wallTile(themeIndex, theme)[border ? 1 : 0];
-      for (let py = 0; py < ART; py++) d.set(tile.subarray(py * ART * 4, (py + 1) * ART * 4), ((ty * ART + py) * w + tx * ART) * 4);
+      for (let py = 0; py < ART; py++)
+        d.set(tile.subarray(py * ART * 4, (py + 1) * ART * 4), ((ty * ART + py) * w + tx * ART) * 4);
       return;
     }
     const base = hexToRgb(theme.floor[(tx + ty) % 2 ? 0 : 1]);
@@ -480,7 +509,10 @@ export class Renderer {
       dark: hexToRgb(theme.wall.dark),
     };
     const black: RGB = [0, 0, 0];
-    const tiles: [Uint8ClampedArray, Uint8ClampedArray] = [new Uint8ClampedArray(ART * ART * 4), new Uint8ClampedArray(ART * ART * 4)];
+    const tiles: [Uint8ClampedArray, Uint8ClampedArray] = [
+      new Uint8ClampedArray(ART * ART * 4),
+      new Uint8ClampedArray(ART * ART * 4),
+    ];
     for (let py = 0; py < ART; py++) {
       for (let px = 0; px < ART; px++) {
         const c = wallPixel(wall, px, py, BAYER[(py & 3) * 4 + (px & 3)] / 16);
@@ -1038,4 +1070,3 @@ function flame(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): 
   ctx.bezierCurveTo(x - s, y - s * 0.1, x - s * 0.2, y - s * 0.4, x, y - s * 1.25);
   ctx.fill();
 }
-

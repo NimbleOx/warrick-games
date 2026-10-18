@@ -79,7 +79,7 @@ function planTurns(): Int8Array {
   const ticks = new Uint16Array(n).fill(0xffff);
   ticks.fill(0, 0, HELD);
   const keys = new Int8Array(n);
-  for (let changed = true; changed; ) {
+  for (let changed = true; changed;) {
     changed = false;
     for (let s = HELD; s < n; s++) {
       for (let key = -1; key <= 1; key++) {

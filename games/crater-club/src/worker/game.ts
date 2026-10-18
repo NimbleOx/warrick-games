@@ -183,7 +183,10 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.theme = randInt(rng, 0, THEME_COUNT - 1);
     s.wind = s.settings.maxWind ? randInt(rng, -s.settings.maxWind, s.settings.maxWind) : 0;
 
-    const order = shuffle(rng, this.participants.map((p) => p.id));
+    const order = shuffle(
+      rng,
+      this.participants.map((p) => p.id),
+    );
     const margin = 50;
     const slot = (WORLD_W - margin * 2) / order.length;
     order.forEach((id, i) => {
@@ -476,7 +479,6 @@ export class Game extends Lobby<GameState, ServerMsg> {
     }
     this.touch();
   }
-
 }
 
 function spend(p: PlayerState, weapon: WeaponId): void {

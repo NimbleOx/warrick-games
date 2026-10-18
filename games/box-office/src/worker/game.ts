@@ -97,7 +97,10 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const rng = mulberry32(randomSeed());
     const { w, h } = boardSize(s.settings.size, this.participants.length);
     Object.assign(s, newBoard(w, h));
-    s.seats = shuffle(rng, this.participants.map((p) => p.id));
+    s.seats = shuffle(
+      rng,
+      this.participants.map((p) => p.id),
+    );
     this.uniqueSeatColors();
     s.order = [];
     s.phase = "playing";
@@ -107,7 +110,18 @@ export class Game extends Lobby<GameState, ServerMsg> {
   }
 
   protected resetForLobby(): void {
-    Object.assign(this.s, { w: 0, h: 0, lines: [], boxes: [], seats: [], turn: -1, order: [], turnDeadline: null, clockEnd: null, timer: null });
+    Object.assign(this.s, {
+      w: 0,
+      h: 0,
+      lines: [],
+      boxes: [],
+      seats: [],
+      turn: -1,
+      order: [],
+      turnDeadline: null,
+      clockEnd: null,
+      timer: null,
+    });
   }
 
   /** `fresh` is a new turn; otherwise the same seat goes again after a capture. */

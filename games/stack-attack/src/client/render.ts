@@ -160,7 +160,14 @@ export class OwnView {
     // Hold and next.
     this.box(HOLD_X * c, BOARD_Y * c, "HOLD", 3.4);
     if (s.hold) {
-      drawPiece(ctx, s.hold as Piece, (HOLD_X + BOX_W / 2) * c, (BOARD_Y + 2.25) * c, c * 0.85, s.holdUsed ? "#3a4166" : undefined);
+      drawPiece(
+        ctx,
+        s.hold as Piece,
+        (HOLD_X + BOX_W / 2) * c,
+        (BOARD_Y + 2.25) * c,
+        c * 0.85,
+        s.holdUsed ? "#3a4166" : undefined,
+      );
     }
     this.box(NEXT_X * c, BOARD_Y * c, "NEXT", 1.15 + s.next.length * 2.6);
     s.next.forEach((p, i) => {

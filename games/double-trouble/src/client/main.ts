@@ -227,7 +227,15 @@ function setRound(snap: RoundSnap | null): void {
     return;
   }
   const fresh = !app.round || app.round.n !== snap.round || app.round.seed !== snap.seed;
-  app.round = { n: snap.round, seed: snap.seed, goAt: snap.goAt, size: snap.size, goal: snap.goal, who: snap.who, over: snap.over };
+  app.round = {
+    n: snap.round,
+    seed: snap.seed,
+    goAt: snap.goAt,
+    size: snap.size,
+    goal: snap.goal,
+    who: snap.who,
+    over: snap.over,
+  };
   app.mySlot = snap.who.indexOf(shell.me);
   if (fresh) {
     app.feed = [];

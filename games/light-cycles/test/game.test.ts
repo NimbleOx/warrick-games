@@ -19,9 +19,15 @@ function setup() {
     return g;
   };
   return {
-    s, act, connected,
-    get arena() { return arena; },
-    advance(ms: number) { now += ms; },
+    s,
+    act,
+    connected,
+    get arena() {
+      return arena;
+    },
+    advance(ms: number) {
+      now += ms;
+    },
     /** Run timers and ticks until the game is over (or `until` says stop). */
     run(until: () => boolean = () => s.phase === "gameover", max = 100_000) {
       for (let i = 0; i < max && !until(); i++) {

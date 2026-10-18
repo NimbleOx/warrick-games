@@ -31,8 +31,14 @@ describe("maps", () => {
     for (const m of MAP_LIST) {
       for (let seat = 0; seat < m.players; seat++) {
         const owned = m.buildings.filter((b) => b.owner === seat);
-        expect(owned.filter((b) => b.kind === "hq"), `${m.id} seat ${seat + 1}`).toHaveLength(1);
-        expect(owned.some((b) => b.kind === "factory"), `${m.id} seat ${seat + 1}`).toBe(true);
+        expect(
+          owned.filter((b) => b.kind === "hq"),
+          `${m.id} seat ${seat + 1}`,
+        ).toHaveLength(1);
+        expect(
+          owned.some((b) => b.kind === "factory"),
+          `${m.id} seat ${seat + 1}`,
+        ).toBe(true);
         expect(m.buildings[m.hq[seat]].kind).toBe("hq");
       }
     }

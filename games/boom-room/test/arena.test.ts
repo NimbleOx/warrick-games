@@ -307,7 +307,11 @@ describe("frames", () => {
       const rng = mulberry32(seed);
       const ids = ["a", "b", "c", "d", "h"];
       const a = new Arena(rng, ids, { ...OPEN, cols: 17, crates: 0.72, items: 0.4, skulls: true, hurryMs: 20_000 });
-      const m = new Match(a, ids.slice(0, 4).map((id) => ({ id, level: "hard" as const })), rng);
+      const m = new Match(
+        a,
+        ids.slice(0, 4).map((id) => ({ id, level: "hard" as const })),
+        rng,
+      );
       // What a browser does with a frame: it comes as JSON.
       const wire = <T>(v: T): T => JSON.parse(JSON.stringify(v));
       let early: ArenaSnap = wire(a.frame(false).full);
@@ -400,7 +404,11 @@ describe("rounds", () => {
       const ids = ["a", "b", "c", "d"];
       const a = new Arena(rng, ids, { ...OPEN, crates: 0.72, items: 0.4, skulls: true, hurryMs: 90_000 });
       const levels = ["hard", "normal", "hard", "normal"] as const;
-      const m = new Match(a, ids.map((id, i) => ({ id, level: levels[i] })), rng);
+      const m = new Match(
+        a,
+        ids.map((id, i) => ({ id, level: levels[i] })),
+        rng,
+      );
       for (let t = 0; t < 200_000 && !a.result; t += TICK_MS) m.step(TICK_MS);
       if (a.result) finished++;
       for (const p of a.players) {

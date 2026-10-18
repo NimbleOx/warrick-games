@@ -5,7 +5,14 @@ import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { applyDelta, snapTileSolid, type ArenaDelta, type ArenaEvent, type ArenaSnap, type SnapPlayer } from "../shared/arena";
 import { FUSE_MS, SHORT_FUSE_MS } from "../shared/constants";
 import { OPPOSITE, moveActor, overlaps, type BlockedFn, type Dir } from "../shared/movement";
-import { SETTING_CHOICES, rankPlayers, type ClientMsg, type GameState, type PlayerState, type ServerMsg } from "../shared/protocol";
+import {
+  SETTING_CHOICES,
+  rankPlayers,
+  type ClientMsg,
+  type GameState,
+  type PlayerState,
+  type ServerMsg,
+} from "../shared/protocol";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
 import { Input } from "./input";

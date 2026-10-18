@@ -8,7 +8,10 @@ import { mulberry32 } from "@warrick/kit/shared/rng";
 const CFG: ArenaConfig = { w: 20, h: 12, walls: "solid", boosts: 2, boostTicks: 3, suddenDeathAt: 0, shrinkEvery: 1 };
 
 function arena(starts: { x: number; y: number; dir: Dir }[], cfg: Partial<ArenaConfig> = {}) {
-  return Arena.create({ ...CFG, ...cfg }, starts.map((s, i) => ({ id: `c${i}`, ...s })));
+  return Arena.create(
+    { ...CFG, ...cfg },
+    starts.map((s, i) => ({ id: `c${i}`, ...s })),
+  );
 }
 
 function crashes(a: Arena, ticks: number) {
@@ -26,7 +29,14 @@ describe("arena", () => {
     a.step();
     a.step();
     expect(a.cycles[0].trail).toEqual([[2, 2, 4, 2, 4, 4]]);
-    for (const [x, y] of [[2, 2], [3, 2], [4, 2], [4, 3], [4, 4]]) expect(a.grid[y * CFG.w + x]).toBe(1);
+    for (const [x, y] of [
+      [2, 2],
+      [3, 2],
+      [4, 2],
+      [4, 3],
+      [4, 4],
+    ])
+      expect(a.grid[y * CFG.w + x]).toBe(1);
   });
 
   it("ignores U-turns and repeated turns", () => {
@@ -42,7 +52,10 @@ describe("arena", () => {
   });
 
   it("crashes into the arena wall", () => {
-    const a = arena([{ x: 18, y: 5, dir: 1 }, { x: 1, y: 5, dir: 3 }]);
+    const a = arena([
+      { x: 18, y: 5, dir: 1 },
+      { x: 1, y: 5, dir: 3 },
+    ]);
     a.step(); // both reach the edge
     const [c0, c1] = crashes(a, 1);
     expect(c0).toMatchObject({ i: 0, by: -1 });
@@ -51,7 +64,10 @@ describe("arena", () => {
 
   it("credits the cycle whose wall you hit, and its wall derezzes when it crashes", () => {
     // c1 drives up into the row c0 has already filled.
-    const a = arena([{ x: 2, y: 5, dir: 1 }, { x: 4, y: 11, dir: 0 }]);
+    const a = arena([
+      { x: 2, y: 5, dir: 1 },
+      { x: 4, y: 11, dir: 0 },
+    ]);
     const [hit] = crashes(a, 10);
     expect(hit).toMatchObject({ i: 1, by: 0 });
     expect(a.cycles[1].alive).toBe(false);
@@ -60,7 +76,10 @@ describe("arena", () => {
   });
 
   it("kills both cycles in a head-on", () => {
-    const a = arena([{ x: 4, y: 5, dir: 1 }, { x: 8, y: 5, dir: 3 }]);
+    const a = arena([
+      { x: 4, y: 5, dir: 1 },
+      { x: 8, y: 5, dir: 3 },
+    ]);
     a.step();
     const hits = crashes(a, 1);
     expect(hits).toHaveLength(2);
@@ -68,7 +87,10 @@ describe("arena", () => {
   });
 
   it("calls it a head-on when two cycles side by side drive into each other", () => {
-    const a = arena([{ x: 4, y: 5, dir: 1 }, { x: 7, y: 5, dir: 3 }]);
+    const a = arena([
+      { x: 4, y: 5, dir: 1 },
+      { x: 7, y: 5, dir: 3 },
+    ]);
     a.step(); // nose to nose at 5 and 6
     const hits = crashes(a, 1);
     expect(hits).toHaveLength(2);
@@ -81,7 +103,10 @@ describe("arena", () => {
   });
 
   it("but driving into the cell another cycle just left hits its wall", () => {
-    const a = arena([{ x: 5, y: 5, dir: 1 }, { x: 6, y: 5, dir: 2 }]);
+    const a = arena([
+      { x: 5, y: 5, dir: 1 },
+      { x: 6, y: 5, dir: 2 },
+    ]);
     const hits = crashes(a, 1);
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({ i: 0, by: 1 });
@@ -108,11 +133,20 @@ describe("arena", () => {
     a.step();
     a.step();
     expect(a.cycles[0].alive).toBe(true);
-    expect(a.cycles[0].trail).toEqual([[18, 5, 19, 5], [0, 5, 1, 5]]);
+    expect(a.cycles[0].trail).toEqual([
+      [18, 5, 19, 5],
+      [0, 5, 1, 5],
+    ]);
   });
 
   it("closes the walls in during sudden death", () => {
-    const a = arena([{ x: 0, y: 5, dir: 0 }, { x: 10, y: 6, dir: 0 }], { w: 40, h: 30, suddenDeathAt: 2, shrinkEvery: 2 });
+    const a = arena(
+      [
+        { x: 0, y: 5, dir: 0 },
+        { x: 10, y: 6, dir: 0 },
+      ],
+      { w: 40, h: 30, suddenDeathAt: 2, shrinkEvery: 2 },
+    );
     a.step();
     const f = a.step();
     expect(f.e).toContainEqual({ k: "shrink", s: 1 });
@@ -125,7 +159,10 @@ describe("arena", () => {
     const rng = mulberry32(99);
     const cfg = { ...arenaConfig({ ...DEFAULT_SETTINGS, arena: "small", walls: "wrap" }), suddenDeathAt: 150 };
     const spots = spawnPoints(4, cfg.w, cfg.h, rng);
-    const server = Arena.create(cfg, spots.map((s, i) => ({ id: `c${i}`, ...s })));
+    const server = Arena.create(
+      cfg,
+      spots.map((s, i) => ({ id: `c${i}`, ...s })),
+    );
     const client = new Arena(server.snapshot());
     let guard = 0;
     while (server.aliveCount > 1 && guard++ < 5000) {
@@ -166,7 +203,10 @@ describe("cpu riders", () => {
     let checked = 0;
     for (const walls of ["solid", "wrap"] as const) {
       const cfg = arenaConfig({ ...DEFAULT_SETTINGS, arena: "small", walls, suddenDeath: 0 });
-      const a = Arena.create(cfg, spawnPoints(6, cfg.w, cfg.h, rng).map((s, i) => ({ id: `c${i}`, ...s })));
+      const a = Arena.create(
+        cfg,
+        spawnPoints(6, cfg.w, cfg.h, rng).map((s, i) => ({ id: `c${i}`, ...s })),
+      );
       for (let t = 0; t < 600 && a.aliveCount > 1; t++) {
         if (t % 25 === 0) {
           a.cycles.forEach((c, i) => {
@@ -195,7 +235,10 @@ describe("cpu riders", () => {
       const rng = mulberry32(size.length);
       const cfg = arenaConfig({ ...DEFAULT_SETTINGS, arena: size });
       const spots = spawnPoints(6, cfg.w, cfg.h, rng);
-      const a = Arena.create(cfg, spots.map((s, i) => ({ id: `c${i}`, ...s })));
+      const a = Arena.create(
+        cfg,
+        spots.map((s, i) => ({ id: `c${i}`, ...s })),
+      );
       const levels = ["hard", "hard", "normal", "normal", "easy", "easy"] as const;
       let ticks = 0;
       while (a.aliveCount > 1 && ticks++ < 10000) {
@@ -239,6 +282,9 @@ function distances(a: Arena, from: number[]): number[] {
 function bruteTerritory(a: Arena, i: number, x: number, y: number): number {
   const { w } = a.cfg;
   const mine = distances(a, [y * w + x]);
-  const theirs = distances(a, a.cycles.flatMap((c, j) => (j !== i && c.alive ? [c.y * w + c.x] : [])));
+  const theirs = distances(
+    a,
+    a.cycles.flatMap((c, j) => (j !== i && c.alive ? [c.y * w + c.x] : [])),
+  );
   return mine.filter((d, c) => d < theirs[c]).length;
 }

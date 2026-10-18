@@ -16,7 +16,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Pill Panic | `/pill-panic/` | `games/pill-panic` | live | 5179 |
 | Stack Attack | `/stack-attack/` | `games/stack-attack` | live | 5180 |
 | Dice Dominion | `/dice-dominion/` | `games/dice-dominion` | not deployed | 5181 |
-| Double Trouble | `/double-trouble/` | `games/double-trouble` | not deployed | 5182 |
+| Double Trouble | `/double-trouble/` | `games/double-trouble` | live | 5182 |
 | Corner Shop | `/corner-shop/` | `games/corner-shop` | not deployed | 5183 |
 | Liar's Dice | `/liars-dice/` | `games/liars-dice` | not deployed | 5185 |
 

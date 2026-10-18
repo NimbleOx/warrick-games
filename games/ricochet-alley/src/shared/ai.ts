@@ -1,6 +1,6 @@
-import { BULLET_LIFE, BULLET_SPEED, CELL, MAX_BULLETS, MUZZLE, TANK_R } from "./constants";
+import { BULLET_LIFE, BULLET_SPEED, CELL, MAX_BULLETS, MUZZLE, TANK_R, TURN_RAMP } from "./constants";
 import { castPath, segmentHitsCircle } from "./geom";
-import { COS, SIN, headingDiff, headingTo, wrapHeading } from "./headings";
+import { COS, HEADINGS, SIN, headingDiff, headingTo, wrapHeading } from "./headings";
 import { bfs, cellAt, cellCenter } from "./maze";
 import type { Rng } from "@warrick/kit/shared/rng";
 import { IN_DOWN, IN_LEFT, IN_RIGHT, IN_UP, type World } from "./sim";
@@ -45,6 +45,54 @@ export function traceShot(w: World, i: number, h: number, bounces: number): numb
   const muzzle = castPath(walls, me.x, me.y, vx, vy, MUZZLE / BULLET_SPEED);
   const path = castPath(walls, muzzle.x, muzzle.y, muzzle.vx, muzzle.vy, BULLET_LIFE, bounces);
   return w.firstTankOnPath(path.pts)?.t ?? -1;
+}
+
+/** Held-turn counts the turn planner tells apart: −RAMP … RAMP, since the ramp tops out after RAMP ticks. */
+const RAMP = TURN_RAMP.length;
+const HELD = 2 * RAMP + 1;
+let turnKeys: Int8Array | null = null;
+
+/**
+ * The turn key to press this tick (−1 left, 0 neither, +1 right) to face exactly `diff` heading steps clockwise
+ * of where a tank faces now, in the fewest ticks, given its held-turn count `tt`. Holding a key speeds up
+ * (TURN_RAMP) and even a tap turns 4 steps, so "turn until within a step or two" can't settle on a heading: it
+ * overshoots a narrow bank shot, re-aims from where it ended up, and can swing back and forth forever.
+ */
+export function turnKey(diff: number, tt: number): number {
+  turnKeys ??= planTurns();
+  return turnKeys[wrapHeading(diff) * HELD + Math.max(-RAMP, Math.min(RAMP, tt)) + RAMP];
+}
+
+/**
+ * The best key for every (steps still to turn, ticks held) pair. Starts from "facing it" and relaxes
+ * "1 + ticks from where this key leads" until nothing improves. Turns the way moveTank does.
+ */
+function planTurns(): Int8Array {
+  const n = HEADINGS * HELD;
+  const after = (s: number, key: number): number => {
+    const left = Math.floor(s / HELD);
+    if (key === 0) return left * HELD + RAMP;
+    const tt = (s % HELD) - RAMP;
+    const held = Math.sign(tt) === key ? Math.max(-RAMP, Math.min(RAMP, tt + key)) : key;
+    return wrapHeading(left - key * TURN_RAMP[Math.abs(held) - 1]) * HELD + held + RAMP;
+  };
+  const ticks = new Uint16Array(n).fill(0xffff);
+  ticks.fill(0, 0, HELD);
+  const keys = new Int8Array(n);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (let s = HELD; s < n; s++) {
+      for (let key = -1; key <= 1; key++) {
+        const t = ticks[after(s, key)] + 1;
+        if (t < ticks[s]) {
+          ticks[s] = t;
+          keys[s] = key;
+          changed = true;
+        }
+      }
+    }
+  }
+  return keys;
 }
 
 /**
@@ -103,19 +151,19 @@ export class CpuBrain {
     this.lastX = me.x;
     this.lastY = me.y;
 
-    let desired: number | null = this.aim;
-    let drive = false;
-    if (desired === null && this.goal) {
-      desired = headingTo(this.goal.x - me.x, this.goal.y - me.y);
-      drive = true;
+    if (this.aim !== null) {
+      // Lining up a shot: stand still and turn onto it exactly.
+      this.stuckTicks = 0;
+      const key = turnKey(headingDiff(me.h, this.aim), me.tt);
+      return { bits: key > 0 ? IN_RIGHT : key < 0 ? IN_LEFT : 0, fire };
     }
-    if (desired === null) return { bits: 0, fire };
+    if (!this.goal) return { bits: 0, fire };
 
-    const diff = headingDiff(me.h, desired);
+    const diff = headingDiff(me.h, headingTo(this.goal.x - me.x, this.goal.y - me.y));
     let bits = 0;
     if (diff > 2) bits |= IN_RIGHT;
     else if (diff < -2) bits |= IN_LEFT;
-    if (drive && Math.abs(diff) < 80) bits |= IN_UP;
+    if (Math.abs(diff) < 80) bits |= IN_UP;
 
     if (bits & IN_UP && moved < 0.5) {
       if (++this.stuckTicks > 12) {
@@ -133,6 +181,13 @@ export class CpuBrain {
   private plan(w: World, i: number, canFire: boolean): void {
     const me = w.tanks[i];
     const m = w.maze;
+
+    // Stay with the shot it's turning onto while that still hits someone. Picking afresh each time from
+    // wherever the turn has got to can flip between two shots, or a shot and the route, for good.
+    if (canFire && this.aim !== null) {
+      const t = traceShot(w, i, this.aim, this.spec.bounces);
+      if (t >= 0 && t !== i) return;
+    }
     this.aim = null;
 
     // A shot worth lining up: scan headings near the current one, closest first.

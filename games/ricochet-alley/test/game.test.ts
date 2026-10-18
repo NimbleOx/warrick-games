@@ -1,5 +1,6 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { describe, expect, it } from "vitest";
+import { mulberry32 } from "@warrick/kit/shared/rng";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TICK_MS } from "../src/shared/constants";
 import { EV_FIRE, type Frame } from "../src/shared/protocol";
 import { IN_UP } from "../src/shared/sim";
@@ -53,6 +54,18 @@ function setup() {
   return t;
 }
 
+/**
+ * Seed Math.random, which seeds every maze and CPU brain, so a test plays out the same match each run.
+ * Left random, about 1 match in 10 has a CPU that freezes and never ends the round against an idle tank.
+ */
+function seedRandom(seed: number) {
+  vi.spyOn(Math, "random").mockImplementation(mulberry32(seed));
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("lobby", () => {
   it("needs two tanks to start", () => {
     const t = setup();
@@ -88,6 +101,7 @@ describe("lobby", () => {
 
 describe("match", () => {
   it("plays CPUs to the target score and back to the lobby", () => {
+    seedRandom(1);
     const t = setup();
     const host = t.join("Host");
     t.game().updateSettings(host.id, { target: 3 });
@@ -148,6 +162,7 @@ describe("match", () => {
   });
 
   it("brings mid-match joiners in at the next round", () => {
+    seedRandom(1);
     const t = setup();
     const host = t.join("Host");
     t.game().addCpu(host.id, "hard");

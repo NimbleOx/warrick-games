@@ -42,6 +42,15 @@ const SPAWN_MS = 130;
 const LAND_DELAY = SLIDE_MS + 30;
 const LAND_MS = 220;
 const SHARD_MS = 450;
+/** How long a move's animation runs, all of it. */
+const ANIM_MS = Math.max(SLIDE_MS + SPAWN_MS, SLIDE_MS + POP_MS, LAND_DELAY + LAND_MS, SLIDE_MS + SHARD_MS);
+const POPUP_MS = 1400;
+
+/** Bumped when a web font finishes loading, so text drawn in a fallback font is drawn again. */
+let fontsLoaded = 0;
+document.fonts?.addEventListener("loadingdone", () => fontsLoaded++);
+
+const popupsShowing = (popups: Popup[], now: number) => popups.some((p) => now >= p.at && now - p.at <= POPUP_MS);
 
 export interface Popup {
   text: string;
@@ -194,7 +203,7 @@ function drawPopups(ctx: CanvasRenderingContext2D, popups: Popup[], cx: number, 
   ctx.textBaseline = "middle";
   let y = cy;
   for (const p of popups) {
-    const age = (now - p.at) / 1400;
+    const age = (now - p.at) / POPUP_MS;
     if (age < 0 || age > 1) continue;
     const fs = Math.round(size * (p.big ? 1.25 : 0.85));
     ctx.globalAlpha = age < 0.7 ? 1 : 1 - (age - 0.7) / 0.3;
@@ -220,6 +229,9 @@ export class OwnView {
   private ctx: CanvasRenderingContext2D;
   private u = 80;
   private size = 4;
+  /** The scene last drawn, and whether it was moving: a board that's sitting still isn't drawn again. */
+  private drawn = "";
+  private moving = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -229,11 +241,27 @@ export class OwnView {
     this.u = u;
     this.size = size;
     this.ctx = setup(this.canvas, Math.round(ownWidth(size) * u), Math.round(ownHeight(size) * u));
+    this.drawn = "";
   }
 
   draw(s: OwnScene, now: number): void {
     const { ctx, u, size } = this;
     if (s.board.size !== size) return;
+    // Danger (pulsing border) and armed rocks (pulsing meter) never sit still.
+    const danger = !s.out && s.board.empties().length - s.armed <= 2;
+    const moving =
+      danger ||
+      s.armed > 0 ||
+      (!!s.anim && now - s.anim.at < ANIM_MS) ||
+      now - s.bumpAt < 220 ||
+      (!!s.nudge && now - s.nudge.at < 140) ||
+      now - s.firedAt < 400 ||
+      popupsShowing(s.popups, now);
+    const key = `${s.board.encode()}|${s.pending}|${s.armed}|${s.charge}|${s.out}|${s.place}|${s.waiting}|${fontsLoaded}`;
+    // One more frame after moving stops, so whatever was fading out is gone.
+    if (!moving && !this.moving && key === this.drawn) return;
+    this.drawn = key;
+    this.moving = moving;
     const W = ownWidth(size) * u;
     const H = ownHeight(size) * u;
     ctx.clearRect(0, 0, W, H);
@@ -271,8 +299,6 @@ export class OwnView {
     ctx.restore();
 
     // Danger: nearly full, or rocks about to fill it.
-    const free = s.board.empties().length;
-    const danger = !s.out && free - s.armed <= 2;
     ctx.strokeStyle = danger ? `rgb(255 77 94 / ${0.55 + 0.45 * Math.sin(now / 110)})` : LINE;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -403,6 +429,9 @@ export class MiniView {
   private ctx: CanvasRenderingContext2D;
   private u = 20;
   private size = 4;
+  /** The scene last drawn, and whether it was moving: a board that's sitting still isn't drawn again. */
+  private drawn = "";
+  private moving = false;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -412,11 +441,18 @@ export class MiniView {
     this.u = u;
     this.size = size;
     this.ctx = setup(this.canvas, Math.round(miniWidth(size) * u), Math.round(miniHeight(size) * u));
+    this.drawn = "";
   }
 
   draw(s: MiniScene, now: number): void {
     const { ctx, u, size } = this;
     if (s.board.size !== size) return;
+    const moving = now - s.hitAt < 500 || now - s.landAt < 400 || popupsShowing(s.popups, now);
+    const key = `${s.board.encode()}|${s.pending}|${s.out}|${s.place}|${s.winner}|${fontsLoaded}`;
+    // One more frame after moving stops, so whatever was fading out is gone.
+    if (!moving && !this.moving && key === this.drawn) return;
+    this.drawn = key;
+    this.moving = moving;
     const W = miniWidth(size) * u;
     const H = miniHeight(size) * u;
     ctx.clearRect(0, 0, W, H);

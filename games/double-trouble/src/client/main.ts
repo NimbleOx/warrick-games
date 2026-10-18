@@ -92,6 +92,11 @@ const app = {
   known: 0,
   /** The server's epoch for our board: it bumps it whenever it overrules us. */
   epoch: 0,
+  /**
+   * Our moves reach the server. False once one couldn't be sent, until the welcome after
+   * reconnecting brings our board back; meanwhile the shell shows "Reconnecting…".
+   */
+  connected: true,
   anim: null as Anim | null,
   popups: [] as Popup[],
   bumpAt: -1e9,
@@ -129,7 +134,11 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   },
   choices: SETTING_CHOICES,
   playerTags: (p) => (p.wins ? `<span class="tag">${p.wins} win${p.wins > 1 ? "s" : ""}</span>` : ""),
-  onWelcome: (msg) => msg.t === "welcome" && setRound(msg.snap),
+  onWelcome: (msg) => {
+    if (msg.t !== "welcome") return;
+    app.connected = true;
+    setRound(msg.snap);
+  },
   onMessage,
   onState,
   onScreen,
@@ -147,9 +156,15 @@ const laneOf = (s: SeatView) => (s.slot === app.mySlot && app.lane ? app.lane : 
 const pendingOf = (s: SeatView) => (s.slot === app.mySlot && app.lane ? app.lane.pending() : s.pending);
 const alive = () => app.seats.filter((s) => s && !s.out).length;
 const playing = (): boolean => shell.state?.phase === "playing" && !!app.round && !app.round.over;
-/** Whether our moves count right now: in the round, past the countdown, not out. */
+/** Whether our moves count right now: in the round, past the countdown, not out, and connected. */
 const canPlay = (): boolean =>
-  shell.screen === "game" && playing() && !!app.lane && !app.lane.out && serverNow() >= app.round!.goAt && !mySeat()?.place;
+  shell.screen === "game" &&
+  playing() &&
+  app.connected &&
+  !!app.lane &&
+  !app.lane.out &&
+  serverNow() >= app.round!.goAt &&
+  !mySeat()?.place;
 
 new Input({ active: canPlay, move: tryMove }, $("own"));
 
@@ -256,20 +271,27 @@ function onFix(slot: number, seat: SeatSnap): void {
   renderHud();
 }
 
-/** A key or a swipe: play it here straight away, then tell the server. */
+/**
+ * A key or a swipe: play it here straight away and tell the server. It's played on a copy of
+ * our board, which becomes the board only if the move reaches the server: one made while the
+ * connection is down would be undone by the welcome when it's back.
+ */
 function tryMove(dir: Dir): void {
   const lane = app.lane;
   if (!lane || !canPlay()) return;
   const now = performance.now();
   const k = lane.n;
   const best = lane.best;
-  const res = lane.move(dir, app.known);
-  if (!res) {
+  const next = Lane.fromSnap(lane.snap());
+  const res = next.move(dir, app.known);
+  const sent = !!res && shell.send({ t: "mv", e: app.epoch, k, d: dir, g: app.known, ck: next.checksum() });
+  if (!sent) {
+    if (res) app.connected = false;
     app.nudge = { dir, at: now };
     sfx.bump();
     return;
   }
-  shell.send({ t: "mv", e: app.epoch, k, d: dir, g: app.known, ck: lane.checksum() });
+  app.lane = next;
   app.anim = { ...res, at: now };
   moved(res, best, now);
 }

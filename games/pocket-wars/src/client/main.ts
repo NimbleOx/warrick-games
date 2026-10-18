@@ -1,5 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc, toast } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { ATTACK_MS, BUILD_MS, MOVE_MS_PER_TILE } from "../shared/constants";
 import { MAPS, type MapDef } from "../shared/maps";
@@ -460,11 +461,6 @@ function tickClocks(now: number): void {
     app.endConfirmUntil = 0;
     renderHud();
   }
-}
-
-function formatClock(ms: number): string {
-  const secs = Math.ceil(ms / 1000);
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------------ the map: taps

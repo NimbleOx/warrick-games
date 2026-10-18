@@ -1,5 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, $$, esc, toast } from "@warrick/kit/client/dom";
+import { $, $$, esc, setHtml, setText, toast } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { applyDelta, snapTileSolid, type ArenaDelta, type ArenaEvent, type ArenaSnap, type SnapPlayer } from "../shared/arena";
 import { FUSE_MS, SHORT_FUSE_MS } from "../shared/constants";
@@ -11,16 +12,6 @@ import { Input } from "./input";
 import { CURSE_LABEL, Renderer, type ArenaView, type BombView, type BomberView } from "./render";
 
 // ------------------------------------------------------------------ helpers
-
-function setHtml(el: HTMLElement, html: string): void {
-  if (el.dataset.html === html) return;
-  el.innerHTML = html;
-  el.dataset.html = html;
-}
-
-function setText(el: HTMLElement, text: string): void {
-  if (el.textContent !== text) el.textContent = text;
-}
 
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
@@ -435,11 +426,6 @@ function tickClocks(now: number): void {
     }
   }
   renderBanner(now);
-}
-
-function formatClock(ms: number): string {
-  const secs = Math.ceil(ms / 1000);
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------------ game

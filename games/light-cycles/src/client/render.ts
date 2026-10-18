@@ -1,6 +1,7 @@
 import type { Arena, Cycle, Frame } from "../shared/arena";
 import { DX, DY } from "../shared/arena";
-import { THEMES, lighten, rgba, type Theme } from "./themes";
+import { rgba } from "@warrick/kit/client/color";
+import { THEMES, lighten, type Theme } from "./themes";
 
 export interface RiderInfo {
   name: string;

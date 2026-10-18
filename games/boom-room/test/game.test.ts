@@ -228,7 +228,9 @@ describe("game flow", () => {
     const [next] = tick.outbox;
     expect(next.t).toBe("delta");
     const caughtUp = applyDelta((msg as { f: ArenaSnap }).f, (next as { f: ArenaSnap }).f);
-    expect(caughtUp).toEqual(t.room.live!.arena.snapshot(false));
+    // The delta also brings that tick's events (a CPU's bomb, say), which a snapshot that doesn't
+    // drain them leaves out. Everything else is the arena as it now stands.
+    expect({ ...caughtUp, ev: [] }).toEqual(t.room.live!.arena.snapshot(false));
   });
 
   it("keeps a player who leaves mid-game in the standings, and drops them from the next round", () => {

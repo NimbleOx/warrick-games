@@ -1,5 +1,6 @@
 import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
-import type { ShotInput, WallMode } from "./sim";
+import { DRAW_TURNS_EACH, MAX_POWER, SUDDEN_DEATH_TURNS_EACH } from "./constants";
+import { maxPowerFor, type ShotInput, type WallMode } from "./sim";
 import type { Inventory, ShopId, WeaponId } from "./weapons";
 
 export type Phase = "lobby" | "playing" | "roundover" | "shop" | "gameover";
@@ -81,6 +82,10 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   phaseDeadline: number | null;
   timer: Timer | null;
   shotCount: number;
+  /** Turns in a row that ended with nobody hurt (shields count). Missing from games saved before it. */
+  quietTurns?: number;
+  /** Sudden death: nobody was hurt for too long, so no tank's power is capped until the round ends. */
+  suddenDeath?: boolean;
 }
 
 export interface ShotMessage extends ShotInput {
@@ -100,6 +105,22 @@ export type ServerMsg =
   | { t: "aim"; id: string; aim: Aim }
   /** A shot and the state after it: it stands in for a state message. */
   | { t: "shot"; shot: ShotMessage; state: GameState; now: number };
+
+/** The most power a tank can fire with: less when it's damaged, except in sudden death. */
+export function powerCap(s: GameState, tank: TankState): number {
+  return s.suddenDeath ? MAX_POWER : maxPowerFor(tank.health);
+}
+
+/** How many turns each with nobody hurt bring on sudden death or, in sudden death, end the round. */
+export function quietTurnsEach(s: GameState): number {
+  return s.suddenDeath ? DRAW_TURNS_EACH : SUDDEN_DEATH_TURNS_EACH;
+}
+
+/** The same, in turns: that many for every tank still in the round. */
+export function quietLimit(s: GameState): number {
+  const tanks = s.players.filter((p) => !p.spectator && p.tank?.alive).length;
+  return quietTurnsEach(s) * Math.max(1, tanks);
+}
 
 /** Final standings order. */
 export function rankPlayers(a: PlayerState, b: PlayerState): number {

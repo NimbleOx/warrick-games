@@ -200,6 +200,20 @@
   color: var(--danger);
 }
 
+/* Room for its count on one line; where there isn't, it wraps rather than lose the number. */
+.hud-sudden {
+  flex: 1.6;
+}
+
+.hud-sudden b {
+  color: var(--accent-2);
+  white-space: normal;
+}
+
+.hud-sudden.on b {
+  color: var(--danger);
+}
+
 .stage {
   position: relative;
   width: 100%;

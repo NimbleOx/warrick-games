@@ -1,7 +1,7 @@
 import { MAX_POWER, TANK_H, TURRET_Y } from "../shared/constants";
-import type { Aim, CpuLevel, GameState, PlayerState, TankState } from "../shared/protocol";
+import { powerCap, type Aim, type CpuLevel, type GameState, type PlayerState, type TankState } from "../shared/protocol";
 import type { Rng } from "@warrick/kit/shared/rng";
-import { launchFor, maxPowerFor, type World } from "../shared/sim";
+import { launchFor, type World } from "../shared/sim";
 import { WEAPONS, shopDef, weaponCount, type ShopId, type WeaponId } from "../shared/weapons";
 import { worldFromState } from "../shared/world-state";
 
@@ -38,7 +38,7 @@ export function chooseCpuShot(s: GameState, me: PlayerState, level: CpuLevel, rn
   const world = worldFromState(s);
   const tank = me.tank!;
   const enemies = s.players.filter((p) => p.id !== me.id && p.tank?.alive);
-  const maxPower = maxPowerFor(tank.health);
+  const maxPower = powerCap(s, tank);
 
   // Easy CPUs pick a random victim; the others go for the closest or weakest.
   let target = enemies[Math.floor(rng() * enemies.length)];

@@ -11,7 +11,7 @@ import {
   type Speed,
 } from "./constants";
 import { COS, SIN, wrapHeading } from "./headings";
-import { mulberry32, randInt, rngStep, type Rng } from "./rng";
+import { mulberry32, randInt, rngStep, type Rng } from "@warrick/kit/shared/rng";
 
 /** −1 turns left (counter-clockwise on screen), 1 turns right, 0 goes straight. */
 export type Steer = -1 | 0 | 1;

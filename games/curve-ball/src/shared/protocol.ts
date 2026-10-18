@@ -1,8 +1,11 @@
+import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
 import { SPEEDS, type Speed } from "./constants";
 import type { Input, RoundConfig, Steer } from "./sim";
 
+export type { CpuLevel } from "@warrick/kit/shared/protocol";
+export type { LogEntry };
+
 export type Phase = "lobby" | "countdown" | "playing" | "roundover" | "gameover";
-export type CpuLevel = "easy" | "normal" | "hard";
 
 export interface Settings {
   /** Points to win; 0 = auto, 10 × (players − 1). */
@@ -24,13 +27,7 @@ export function autoTarget(players: number): number {
   return 10 * Math.max(1, players - 1);
 }
 
-export interface PlayerState {
-  id: string;
-  name: string;
-  color: string;
-  cpu: CpuLevel | null;
-  connected: boolean;
-  spectator: boolean;
+export interface PlayerState extends BasePlayer {
   /** Match points, updated at the end of each round. */
   score: number;
   /** Rounds survived to the end. */
@@ -42,14 +39,8 @@ export interface Timer {
   kind: "countdown" | "roundover";
 }
 
-export interface GameState {
-  code: string;
-  createdAt: number;
-  lastActive: number;
+export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
-  hostId: string;
-  settings: Settings;
-  players: PlayerState[];
   round: number;
   /** The match's target score, fixed when it starts. */
   target: number;
@@ -58,15 +49,6 @@ export interface GameState {
   /** When the countdown or the round-over pause ends. */
   phaseDeadline: number | null;
   timer: Timer | null;
-  nextPlayerNum: number;
-}
-
-export interface LogEntry {
-  at: number;
-  kind: "chat" | "event";
-  from?: string;
-  color?: string;
-  text: string;
 }
 
 /** Everything a client needs to rebuild the round in progress. */
@@ -96,34 +78,16 @@ export interface FrameMsg {
 
 export const CHECKSUM_EVERY = 30;
 
-export type ClientMsg =
-  | { t: "hello"; token: string; name: string }
-  | { t: "color"; color: string }
-  | { t: "settings"; settings: Partial<Settings> }
-  | { t: "addCpu"; level: CpuLevel }
-  | { t: "kick"; id: string }
-  | { t: "start" }
-  | { t: "steer"; s: Steer }
-  | { t: "resync" }
-  | { t: "chat"; text: string }
-  | { t: "lobby" }
-  | { t: "leave" }
-  | { t: "ping" };
+export type ClientMsg = LobbyMsg | { t: "steer"; s: Steer } | { t: "resync" };
 
 export type ServerMsg =
+  | Exclude<RoomMsg<GameState>, { t: "welcome" }>
+  /** The welcome also carries the round in progress, if there is one. */
   | { t: "welcome"; you: string; state: GameState; round: RoundSnapshot | null; log: LogEntry[]; now: number }
-  | { t: "state"; state: GameState; now: number }
   | { t: "round"; round: RoundSnapshot }
-  | FrameMsg
-  | { t: "log"; entries: LogEntry[] }
-  | { t: "error"; message: string }
-  | { t: "kicked" }
-  | { t: "pong"; now: number };
+  | FrameMsg;
 
 /** Final standings order. */
 export function rankPlayers(a: PlayerState, b: PlayerState): number {
   return b.score - a.score || b.wins - a.wins;
 }
-
-export const CLOSE_NOT_FOUND = 4404;
-export const CLOSE_KICKED = 4403;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { COUNTDOWN_MS, MAX_PLAYERS, ROUNDOVER_MS } from "../src/shared/constants";
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
+import { COUNTDOWN_MS, ROUNDOVER_MS } from "../src/shared/constants";
 import type { FrameMsg, RoundSnapshot } from "../src/shared/protocol";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Round } from "../src/shared/sim";
 import { Game, GameError, newGameState, snapshot, type Live } from "../src/worker/game";
 
@@ -283,6 +284,35 @@ describe("dropping out and coming back", () => {
     expect(t.act((g) => g.onlyCpusLeft)).toBe(true);
     t.act((g) => g.recover());
     expect(t.s.phase).toBe("playing");
+  });
+
+  it("plays a round only CPUs are left in at double speed", () => {
+    const t = setup();
+    const host = t.human("Host");
+    t.act((g) => g.addCpu(host.id, "hard"));
+    t.act((g) => g.addCpu(host.id, "hard"));
+    t.act((g) => g.start(host.id));
+    t.timer();
+    t.act((g) => g.tick());
+    expect(t.live!.round.tick).toBe(1);
+    t.live!.round.heads[t.live!.round.index(host.id)].alive = false;
+    t.act((g) => g.tick());
+    expect(t.live!.round.tick).toBe(3);
+  });
+
+  it("restarts a lost round when its countdown timer fires", () => {
+    const t = setup();
+    const host = t.human("Host");
+    t.act((g) => g.addCpu(host.id, "normal"));
+    t.act((g) => g.start(host.id));
+    // The room restarted during the countdown, and the alarm fires.
+    const at = t.s.timer!.at;
+    const g = new Game(t.s, { now: () => at, isConnected: () => true }, null, mulberry32(1));
+    g.onTimer();
+    expect(t.s.phase).toBe("countdown");
+    expect(t.s.round).toBe(1);
+    expect(g.live?.round.tick).toBe(0);
+    expect(g.logs.map((l) => l.text)).toContain("Round 1 was interrupted. Restarting it.");
   });
 
   it("restarts a round that was lost when the room restarted, without changing scores", () => {

@@ -2,6 +2,9 @@
 // sequence in every JS engine: seeded tests, CPU games and client-side replays depend on that.
 export type Rng = () => number;
 
+// Browsers, Workers and Node all have it; this is for checking the kit without the DOM's types.
+declare const crypto: { getRandomValues<T extends Uint32Array>(array: T): T };
+
 export function mulberry32(seed: number): Rng {
   let a = seed >>> 0;
   return () => {
@@ -17,8 +20,12 @@ export function randInt(rng: Rng, lo: number, hi: number): number {
   return lo + Math.floor(rng() * (hi - lo + 1));
 }
 
+/**
+ * A seed nobody can guess. Anyone who knows a seed knows everything mulberry32 makes from it,
+ * so it comes from the platform's secure random numbers, not Math.random.
+ */
 export function randomSeed(): number {
-  return Math.floor(Math.random() * 0xffffffff) >>> 0;
+  return crypto.getRandomValues(new Uint32Array(1))[0];
 }
 
 export function shuffle<T>(rng: Rng, arr: T[]): T[] {

@@ -43,7 +43,8 @@ export interface RoomInfo {
 
 /** Messages every game's client sends: joining, the lobby, chat. Games add their own. */
 export type LobbyMsg =
-  | { t: "hello"; token: string; name: string }
+  /** `build`: the page's build id (see `buildId`), missing from pages older than it. */
+  | { t: "hello"; token: string; name: string; build?: string }
   | { t: "color"; color: string }
   | { t: "settings"; settings: Record<string, unknown> }
   | { t: "addCpu"; level: CpuLevel }
@@ -52,7 +53,8 @@ export type LobbyMsg =
   | { t: "lobby" }
   | { t: "chat"; text: string }
   | { t: "leave" }
-  | { t: "ping" };
+  /** `c`: the sender's clock, which the pong sends back, to time the round trip. */
+  | { t: "ping"; c?: number };
 
 /** Messages every room sends. `welcome` can carry more fields (a game's snapshot, say). */
 export type RoomMsg<S> =
@@ -61,4 +63,4 @@ export type RoomMsg<S> =
   | { t: "log"; entries: LogEntry[] }
   | { t: "error"; message: string }
   | { t: "kicked" }
-  | { t: "pong"; now: number };
+  | { t: "pong"; now: number; c?: number };

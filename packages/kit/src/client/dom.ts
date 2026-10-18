@@ -35,6 +35,22 @@ export function playerToken(): string {
   return t;
 }
 
+/**
+ * Reload the page, unless this tab already did in the last `guardMs`: a deploy still rolling out
+ * can serve the old page again, and reloading again would loop. False if it didn't reload (no
+ * session storage counts too, since nothing would stop a loop).
+ */
+export function reloadOnce(key: string, guardMs = 60_000): boolean {
+  try {
+    if (Date.now() - (Number(sessionStorage.getItem(key)) || 0) <= guardMs) return false;
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    return false;
+  }
+  location.reload();
+  return true;
+}
+
 let toastTimer = 0;
 export function toast(text: string, kind: "error" | "info" = "error"): void {
   const el = $("toast");

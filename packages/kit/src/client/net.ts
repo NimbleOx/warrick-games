@@ -1,4 +1,4 @@
-import { CLOSE_FULL, CLOSE_KICKED, CLOSE_NOT_FOUND } from "../shared/constants";
+import { CLOSE_FULL, CLOSE_KICKED, CLOSE_NOT_FOUND, CLOSE_STALE } from "../shared/constants";
 
 export type NetStatus = "connecting" | "open" | "closed";
 
@@ -11,14 +11,49 @@ const PING_MS = 25000;
 const ANSWER_MS = 8000;
 /** A socket that takes this long to open has hung (a phone changing networks, say). */
 const CONNECT_MS = 15000;
+/** How many round trips `ClockSync` keeps. */
+const PINGS_KEPT = 10;
 
 type AnyMsg = { t: string };
+
+/**
+ * The server's clock, as an offset from ours. A ping that carries our clock comes back with the
+ * server's: the server read its clock about half a round trip ago. The quickest of the last few
+ * round trips wins, since a slow one waited somewhere on the way. Until a ping is back, the
+ * offset comes from the newest message's clock, which is off by however long it took to arrive.
+ */
+export class ClockSync {
+  /** Server clock minus ours. */
+  skew = 0;
+  private pings: { rtt: number; skew: number }[] = [];
+
+  /** Start over (a new connection, perhaps after the computer slept). */
+  reset(): void {
+    this.pings = [];
+  }
+
+  /** A message carrying the server's clock. */
+  message(now: number): void {
+    if (!this.pings.length) this.skew = now - Date.now();
+  }
+
+  /** A pong: the server's clock, and ours from when the ping went. */
+  pong(now: number, sent: number): void {
+    const rtt = Date.now() - sent;
+    if (rtt < 0) return;
+    this.pings.push({ rtt, skew: now + rtt / 2 - Date.now() });
+    if (this.pings.length > PINGS_KEPT) this.pings.shift();
+    this.skew = this.pings.reduce((a, b) => (b.rtt < a.rtt ? b : a)).skew;
+  }
+}
 
 export interface NetHandlers<C extends AnyMsg, S extends AnyMsg> {
   hello(): C;
   message(msg: S): void;
   status(s: NetStatus): void;
   fatal(reason: string): void;
+  /** The room runs newer code than this page. Without this, it's fatal. */
+  stale?(): void;
 }
 
 /** A WebSocket to one game room that reconnects on its own until told to stop. */
@@ -81,10 +116,15 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
     clearInterval(this.heartbeatTimer);
     if (!on) return;
     this.heartbeatTimer = window.setInterval(() => {
-      this.send({ t: "ping" } as C);
+      this.ping();
       // A live game notices a dead socket in seconds, not at the next quiet-socket check.
       this.probe();
     }, 5000);
+  }
+
+  /** A ping the room answers itself, with our clock (`c`) and its own: see `Shell.skew`. */
+  ping(): void {
+    this.send({ t: "ping", c: Date.now() } as unknown as C);
   }
 
   private open(): void {
@@ -133,6 +173,13 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
     if (code === CLOSE_NOT_FOUND) return this.fail("That game doesn't exist anymore.");
     if (code === CLOSE_KICKED) return this.fail("The host removed you from the game.");
     if (code === CLOSE_FULL) return this.fail("That game is full.");
+    if (code === CLOSE_STALE) {
+      if (!this.h.stale) return this.fail("This game has been updated. Reload the page to keep playing.");
+      this.stopped = true;
+      clearInterval(this.heartbeatTimer);
+      this.h.status("closed");
+      return this.h.stale();
+    }
     this.h.status("closed");
     const delay = Math.min(10000, 500 * 2 ** this.attempt++);
     this.retryTimer = window.setTimeout(() => this.open(), delay);

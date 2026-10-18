@@ -62,3 +62,4 @@ npm run deploy -w hub
 3. Give its `wrangler.jsonc` the route `{ "pattern": "warrick.games/<name>*", "zone_name": "warrick.games" }`, `workers_dev: false` and `run_worker_first: ["/<name>/api/*"]`.
 4. Pick its `localStorage` prefix (`cc`, `lc`, …) and pass it to the `Shell`: every game shares the warrick.games origin.
 5. Deploy the game, then turn its card in `hub/public/index.html` from "Coming soon" into a link and deploy the hub.
+6. Give it a sharing card, the picture a pasted link shows: `npm run share-cards` draws every game's from its hub card into `games/<name>/public/og.png` (and the hub's), and its `index.html` needs the same `og:` and `twitter:card` tags as the other games'.

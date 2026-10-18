@@ -15,6 +15,7 @@ import {
 import { Attract } from "./attract";
 import { sfx } from "./audio";
 import { Renderer, type DrawOpts, type RiderInfo } from "./render";
+import { TurnCue } from "./turns";
 
 // ------------------------------------------------------------------ helpers
 
@@ -31,6 +32,8 @@ const app = {
   frames: [] as Frame[],
   /** Where playback is, in ticks. It trails the newest frame a little to smooth out network jitter. */
   clock: 0,
+  /** Turns you've sent that no frame has shown yet. */
+  turns: new TurnCue(),
   lastNow: 0,
   /** The state being applied came with a welcome (joining or reconnecting), not a change of phase. */
   welcomed: false,
@@ -39,7 +42,10 @@ const app = {
   swipe: null as { x: number; y: number; dir: Dir | null } | null,
 };
 
-/** How far behind the newest frame playback aims to be, in ticks. */
+/**
+ * Playback runs in real time and never passes the newest frame, so it shows each frame about a
+ * tick after it arrives. Further behind than this, in ticks (frames came in a bunch), it speeds up.
+ */
 const BUFFER_TICKS = 1.5;
 /** Further behind than this (say, the tab was in the background) and playback skips ahead. */
 const MAX_BEHIND_TICKS = 30;
@@ -130,6 +136,7 @@ function setArena(snap: ArenaSnapshot | null): void {
   app.arena = snap ? new Arena(snap) : null;
   app.frames = [];
   app.clock = app.arena?.tick ?? 0;
+  app.turns.clear();
   if (app.arena) renderer.reset(app.arena);
 }
 
@@ -188,8 +195,11 @@ function drain(): void {
 
 function applyFrame(f: Frame, now: number): void {
   const a = app.arena!;
+  const mine = a.cycles[a.index(shell.me)];
+  const before = mine?.dir;
   renderer.beforeFrame(a, now);
   a.apply(f);
+  if (mine && before !== undefined) app.turns.shown(before, mine.dir, f.n);
   renderer.afterFrame(a, f, now, (id) => playerById(id)?.color ?? "#ffffff", shell.me);
   if (!f.e.length) return;
   for (const ev of f.e) {
@@ -224,7 +234,13 @@ function frame(now: number): void {
 function drawOpts(s: GameState): DrawOpts {
   const riders = new Map<string, RiderInfo>();
   for (const p of s.players) riders.set(p.id, { name: p.name, color: p.color, you: p.id === shell.me });
-  return { theme: s.theme, riders, labels: s.phase === "countdown", tickMs: tickMsFor(s.settings.speed) };
+  return {
+    theme: s.theme,
+    riders,
+    labels: s.phase === "countdown",
+    tickMs: tickMsFor(s.settings.speed),
+    turn: isLive(s) ? app.turns.next : null,
+  };
 }
 
 function tickClocks(): void {
@@ -461,7 +477,8 @@ function steer(dir: Dir): void {
   const cyc = myCycle();
   if (!isLive() || !cyc?.alive) return;
   unlockAudio();
-  if (shell.send({ t: "turn", dir }) && dir !== cyc.dir && dir !== (cyc.dir + 2) % 4) sfx.turn();
+  const newest = app.frames.at(-1)?.n ?? app.arena!.tick;
+  if (shell.send({ t: "turn", dir }) && app.turns.send(dir, cyc.dir, newest)) sfx.turn();
 }
 
 function boost(): void {

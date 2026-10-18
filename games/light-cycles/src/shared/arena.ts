@@ -70,7 +70,7 @@ export interface Frame {
   e: ArenaEvent[];
 }
 
-const MAX_QUEUED_TURNS = 3;
+export const MAX_QUEUED_TURNS = 3;
 
 /**
  * The light cycle grid. The server calls `step()` once per tick and sends the

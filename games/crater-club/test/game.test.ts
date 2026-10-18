@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CASH_SURVIVE, DRAW_TURNS_EACH, SUDDEN_DEATH_TURNS_EACH, WORLD_W } from "../src/shared/constants";
 import type { PlayerState, ShotMessage } from "../src/shared/protocol";
 import { maxPowerFor } from "../src/shared/sim";
@@ -263,5 +263,68 @@ describe("stalemates", () => {
     expect(t.events().some((e) => e.startsWith("💀 Sudden death!"))).toBe(true);
     // In sudden death it fires harder than it could before.
     expect(shots.some((sh) => sh.power > cap)).toBe(true);
+  });
+});
+
+describe("turn order", () => {
+  /** Humans at the start of round 1, with no cash and no turn timer. */
+  function table(names: string[], rounds: number) {
+    const t = setup();
+    const ids = names.map((name) => t.game().addHuman(name).id);
+    for (const id of ids) t.connected.add(id);
+    t.game().updateSettings(ids[0], { startCash: 0, turnSeconds: 0, rounds });
+    t.game().start(ids[0]);
+    return { ...t, ids };
+  }
+
+  /** The player whose turn it is is left standing, so they win the round. Then on to the next. */
+  function nextRound(t: ReturnType<typeof table>) {
+    const shooter = t.s.players.find((p) => p.id === t.s.turnPlayerId)!;
+    for (const p of t.s.players) if (p !== shooter) p.tank!.alive = false;
+    t.game().fire(shooter.id, { angle: shooter.tank!.x < WORLD_W / 2 ? 175 : 5, power: 1000, weapon: "baby_missile" });
+    t.runTimer();
+    t.runTimer();
+    expect(t.s.phase).toBe("shop");
+    for (const id of t.ids) t.game().setReady(id, true);
+    expect(t.s.phase).toBe("playing");
+  }
+
+  it("passes the first shot round the players, one round to the next", () => {
+    const t = table(["A", "B", "C"], 7);
+    const starters = [t.s.turnOrder[0]];
+    for (let round = 2; round <= 7; round++) {
+      nextRound(t);
+      expect(t.s.round).toBe(round);
+      expect([...t.s.turnOrder].sort()).toEqual([...t.ids].sort());
+      starters.push(t.s.turnOrder[0]);
+    }
+    starters.slice(1).forEach((id, i) => expect(id).toBe(t.ids[(t.ids.indexOf(starters[i]) + 1) % t.ids.length]));
+    // Seven rounds for three players: everyone starts two or three of them.
+    for (const id of t.ids) expect(starters.filter((s) => s === id).length).toBeGreaterThanOrEqual(2);
+    const last = t.s.players.find((p) => p.id === starters[6])!;
+    expect(t.events()).toContain(`Round 7 of 7: ${last.name} fires first`);
+  });
+
+  it("doesn't stand the tanks in the order they fire", () => {
+    // Pin the seeds (the kit's randomSeed draws them from crypto), so the rounds are the same every run.
+    const { crypto } = globalThis as unknown as { crypto: { getRandomValues(a: Uint32Array): Uint32Array } };
+    let seed = 1;
+    const spy = vi.spyOn(crypto, "getRandomValues").mockImplementation((a: Uint32Array) => {
+      a[0] = Math.imul(seed++, 0x9e3779b1) >>> 0;
+      return a;
+    });
+    try {
+      const t = table(["A", "B", "C", "D"], 10);
+      let leftToRight = 0;
+      for (let round = 1; round <= 10; round++) {
+        if (round > 1) nextRound(t);
+        const xs = t.s.turnOrder.map((id) => t.s.players.find((p) => p.id === id)!.tank!.x);
+        if (xs.every((x, i) => i === 0 || x > xs[i - 1])) leftToRight++;
+      }
+      // They used to, every round, so whoever fired first always stood at the left end.
+      expect(leftToRight).toBeLessThan(10);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

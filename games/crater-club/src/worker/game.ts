@@ -181,6 +181,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
   private startRound(): void {
     const s = this.s;
     const rng = mulberry32(randomSeed());
+    const order = this.turnOrderFor(rng);
     s.round++;
     s.phase = "playing";
     s.roundWinnerId = null;
@@ -193,13 +194,13 @@ export class Game extends Lobby<GameState, ServerMsg> {
     s.theme = randInt(rng, 0, THEME_COUNT - 1);
     s.wind = s.settings.maxWind ? randInt(rng, -s.settings.maxWind, s.settings.maxWind) : 0;
 
-    const order = shuffle(
-      rng,
-      this.participants.map((p) => p.id),
-    );
+    // Where the tanks stand has nothing to do with when they fire. (Lined up in turn order, the
+    // first to fire always stood at an end of the map, where fewer tanks are near enough to aim
+    // at it, and won far more than its share.)
+    const lineup = shuffle(rng, [...order]);
     const margin = 50;
-    const slot = (WORLD_W - margin * 2) / order.length;
-    order.forEach((id, i) => {
+    const slot = (WORLD_W - margin * 2) / lineup.length;
+    lineup.forEach((id, i) => {
       const p = this.player(id)!;
       const x = Math.round(margin + slot * (i + 0.5) + (rng() - 0.5) * slot * 0.4);
       const y = flattenPad(heights, x);
@@ -215,8 +216,21 @@ export class Game extends Lobby<GameState, ServerMsg> {
     });
     s.terrain = heights;
     s.turnOrder = order;
-    this.event(`Round ${s.round} of ${s.settings.rounds}`);
+    this.event(`Round ${s.round} of ${s.settings.rounds}: ${this.player(order[0])!.name} fires first`);
     this.beginTurn(order[0]);
+  }
+
+  /**
+   * Firing first is worth a lot to a good shot, who often hits before anyone can reply. So it
+   * passes round the players, one round to the next, and nobody starts more often than anybody
+   * else. The first round's starter is drawn at random, and so is the order of the rest.
+   */
+  private turnOrderFor(rng: () => number): string[] {
+    const ids = this.participants.map((p) => p.id);
+    const last = this.s.round > 0 ? ids.indexOf(this.s.turnOrder[0] ?? "") : -1;
+    const first = last >= 0 ? ids[(last + 1) % ids.length] : ids[randInt(rng, 0, ids.length - 1)];
+    const rest = ids.filter((id) => id !== first);
+    return [first, ...shuffle(rng, rest)];
   }
 
   private beginTurn(id: string): void {

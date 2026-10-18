@@ -14,6 +14,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 | Boom Room | `/boom-room/` | `games/boom-room` | live | 5177 |
 | Turf War | `/turf-war/` | `games/turf-war` | live | 5178 |
 | Pill Panic | `/pill-panic/` | `games/pill-panic` | in progress | 5179 |
+| Stack Attack | `/stack-attack/` | `games/stack-attack` | in progress | 5180 |
 
 The dev ports are the ones in `.claude/launch.json`, so every game can run at the same time.
 

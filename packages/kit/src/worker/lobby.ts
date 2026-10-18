@@ -228,14 +228,20 @@ export abstract class Lobby<S extends BaseState, M extends { t: string } = { t: 
    * The usual checks before a start: host only, between rounds, drop humans who closed their
    * tab, give watchers a seat, and make sure there's someone to play against.
    */
-  protected beginStart(byId: string, min = 2): void {
+  protected beginStart(byId: string, min = 2, players = "players"): void {
     this.requireHost(byId);
     this.requireBetweenRounds();
+    // Checked before anything changes, so a start that fails leaves the lobby as it was.
+    if (this.seatsAtStart() < min) throw new GameError(`Need at least ${min === 2 ? "two" : min} ${players} — add a CPU?`);
     for (const p of [...this.s.players]) {
       if (!p.cpu && !p.connected) this.removePlayer(p.id);
     }
     this.promoteSpectators();
-    if (this.participants.length < min) throw new GameError("Need at least two players — add a CPU?");
+  }
+
+  /** How many would play if the game started now: everyone still here, watchers included, up to the seats there are. */
+  protected seatsAtStart(): number {
+    return Math.min(this.maxPlayers, this.s.players.filter((p) => p.cpu || p.connected).length);
   }
 
   protected promoteSpectators(): void {

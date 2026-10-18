@@ -1,6 +1,6 @@
 import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randInt, randomSeed, shuffle, type Rng } from "@warrick/kit/shared/rng";
-import { GameError, Lobby, baseState, cleanName, type GameIO } from "@warrick/kit/worker/lobby";
+import { Lobby, baseState, cleanName, type GameIO } from "@warrick/kit/worker/lobby";
 import { steer } from "../shared/ai";
 import { Arena, isDir, spawnPoints, type Dir } from "../shared/arena";
 import { PLAYER_COLORS, SCORE_PER_KILL, SCORE_PER_OUTLAST, SCORE_PER_WIN, THEME_COUNT } from "../shared/constants";
@@ -159,15 +159,8 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
   // ---------------------------------------------------------------- match flow
 
   start(byId: string): void {
-    this.requireHost(byId);
-    this.requirePhase("lobby");
-    // Players who closed their tab in the lobby don't hold up the game.
-    for (const p of [...this.s.players]) {
-      if (!p.cpu && !p.connected) this.removePlayer(p.id);
-    }
-    // Anyone who was watching a full lobby gets a seat that has since come free.
-    this.promoteSpectators();
-    if (this.participants.length < 2) throw new GameError("Need at least two riders — add a CPU?");
+    // Drops players who closed their tab in the lobby, and seats watchers in any free seats.
+    this.beginStart(byId, 2, "riders");
     for (const p of this.s.players) p.kills = p.wins = p.score = 0;
     this.s.round = 0;
     this.event(`Game on! ${this.s.settings.rounds} round${this.s.settings.rounds > 1 ? "s" : ""}.`);

@@ -634,6 +634,10 @@ function layoutStage(): void {
 function wire(): void {
   window.addEventListener("resize", () => (shell.screen === "home" ? attract.resize() : layoutStage()));
   new ResizeObserver(() => shell.screen === "game" && renderer.resize($("stage").clientWidth)).observe($("stage"));
+  // The map is only drawn when it changes, so draw it again for what the page did to it: names
+  // drawn before their font arrived, a canvas the browser wiped.
+  document.fonts.addEventListener("loadingdone", () => renderer.invalidate());
+  renderer.canvas.addEventListener("contextrestored", () => renderer.invalidate());
 
   // Game controls
   $("ctl-angle").addEventListener("input", (e) => setAim({ angle: 180 - Number((e.target as HTMLInputElement).value) }));

@@ -18,7 +18,7 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 ```bash
 npm install
 npm run dev        # http://localhost:5173/crater-club/ — Vite + the Worker and Durable Object running in workerd
-npm test           # simulation and game-rule tests (Node)
+npm test           # simulation, game-rule, room and renderer tests (Node)
 npm run typecheck
 ```
 
@@ -59,6 +59,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **No logins.** Each browser generates a random token and keeps it in `localStorage`. The room maps tokens to player slots, which is how a reload or reconnect gets you your tank back. Other players never see tokens.
 - **The server is authoritative, but clients animate.** When someone fires, the room runs the whole shot to completion with the shared simulation (`src/shared/sim.ts`). It then broadcasts the shot's inputs and the resulting state. Each client replays the same deterministic simulation frame by frame for the animation, then snaps to the server's result. The server works out the launch velocity with trig once; the per-tick physics uses only `+ − × ÷ √` and a seeded integer PRNG, which give identical results in every JS engine.
 - **One alarm drives all the timers.** Turn timeouts, CPU "thinking" time, the pause after each shot, the round-over banner and the shop countdown all run off the Durable Object alarm. Timers pause when nobody is connected. A game with no connections for 12 hours is deleted.
+- **The turn clock is the kit's** (`@warrick/kit/worker/turns`). Reloading on your turn gives you back the clock you had, never more; with under 5 seconds left, you get 5, once a turn. Drop on your turn and it ends 8 seconds later unless you're back; a turn that comes round to someone already gone is skipped after 4. Dropping out of the shop never closes it at once, since it may only be a reload.
 - **CPU players** search angle/power space with the same simulation, then add error that depends on their difficulty.
 
 ### Layout
@@ -68,7 +69,8 @@ src/shared/    code used by both sides: constants, weapons, terrain, the shot si
 src/worker/    index.ts (routes), room.ts (Durable Object: messages and the turn timer), game.ts (rules), ai.ts (CPU players)
 src/client/    main.ts (the game screen and its hooks into the shell), render.ts (canvas), audio.ts (sounds),
                attract.ts (home-screen demo)
-test/          Vitest tests for the simulation and the game flow
+test/          Vitest tests: the simulation, the game flow, the real room (with the kit's test harness)
+               and, in test/client, when the map gets redrawn
 ```
 
 The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).

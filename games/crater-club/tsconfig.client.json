@@ -4,5 +4,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"]
   },
-  "include": ["src/client", "src/shared"]
+  "include": ["src/client", "src/shared", "test/client"]
 }

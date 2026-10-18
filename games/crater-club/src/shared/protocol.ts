@@ -70,7 +70,12 @@ export interface GameState extends BaseState<PlayerState, Settings> {
   wind: number;
   turnOrder: string[];
   turnPlayerId: string | null;
+  /** The turn's clock (null: no limit). A game saved before it had one gets it from `turnDeadline`. */
+  clockEnd?: number | null;
+  /** When the turn ends by itself: the clock, or sooner while the player whose turn it is is away. */
   turnDeadline: number | null;
+  /** This turn's top-up (time to come back to a clock that has nearly run out, once a turn) is used. */
+  clockTopUp?: boolean;
   resolving: boolean;
   roundWinnerId: string | null;
   phaseDeadline: number | null;

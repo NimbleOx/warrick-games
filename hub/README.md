@@ -25,7 +25,7 @@ Each game has a 32×32 SVG in `public/icons/<name>.svg`. They're one set, so a n
 | red | `#29100d` | `#4f2420` | `#9d352f` | `#ed6257` | `#f5b5ad` | Boom Room, Box Office |
 | orange | `#271204` | `#4c290e` | `#b05a03` | `#ff8c2b` | `#ffd9c1` | Crater Club, Pocket Wars |
 | amber | `#221601` | `#432f01` | `#ad7e01` | `#f7b503` | `#ffeccc` | Double Trouble |
-| lime | `#131c06` | `#293911` | `#608718` | `#91c639` | `#d7f0ba` | Corner Shop |
+| lime | `#131c06` | `#293911` | `#608718` | `#91c639` | `#d7f0ba` | Corner Shop, Base Jump |
 | green | `#081e0e` | `#163c20` | `#1d8843` | `#43c96d` | `#bcedc5` | Turf War |
 | teal | `#011e1a` | `#033c36` | `#04877c` | `#0cc8b9` | `#a8f2e8` | Dice Dominion |
 | cyan | `#001d21` | `#013a42` | `#038797` | `#04c7df` | `#adf2ff` | Light Cycles |

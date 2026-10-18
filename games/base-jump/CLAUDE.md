@@ -44,6 +44,6 @@ Built on `@warrick/kit` (`../../packages/kit`), like every game here. Turf War (
 
 ## Deploying
 
-Served at `https://warrick.games/base-jump/` like the other games: a zone route `warrick.games/base-jump*`, `workers_dev: false`, `run_worker_first: ["/base-jump/api/*"]`, and `vite.config.ts` is `gameConfig("base-jump")`. Check a build with `npm run build && npx vite preview` before deploying. After the first deploy, add a card for it to `../../hub/public/index.html` (and an icon in `../../hub/public/icons/`) and deploy the hub.
+Served at `https://warrick.games/base-jump/` like the other games: a zone route `warrick.games/base-jump*`, `workers_dev: false`, `run_worker_first: ["/base-jump/api/*"]`, and `vite.config.ts` is `gameConfig("base-jump")`. Check a build with `npm run build && npx vite preview` before deploying. It's live, with a card and icon on the hub (`../../hub/public/`).
 
 Ask before deploying, committing or pushing.

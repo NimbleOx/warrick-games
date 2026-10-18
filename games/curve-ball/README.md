@@ -16,32 +16,20 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Development
 
-```bash
-npm install
-npm run dev        # http://localhost:5175/curve-ball/ — Vite + the Worker and Durable Object running in workerd
-npm test           # simulation, CPU and game-rule tests (Node)
-npm run typecheck
-npm run test:live  # end-to-end protocol check against the running dev server
-```
-
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. `npm run test:live` expects the game at `http://localhost:5175/curve-ball`; set `CURVE_BALL_URL` if it's elsewhere.
-
-Add `?predict=0` to a game URL to turn off client-side prediction of your own line, to compare.
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/curve-ball -- --port 5175  # http://localhost:5175/curve-ball/, with the Worker and Durable Object in workerd
+npm test -w games/curve-ball                    # simulation, CPU, game-rule and room tests (Node)
+npm run typecheck -w games/curve-ball
+npm run test:live -w games/curve-ball           # the protocol end to end, against the dev server
 ```
 
-That creates a Worker called `curve-ball` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
+`test:live` expects the game at `http://localhost:5175/curve-ball`; set `CURVE_BALL_URL` if it's elsewhere. Add `?predict=0` to a game URL to turn off the prediction of your own line, to compare.
 
-It's served at **https://warrick.games/curve-ball/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/curve-ball*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
+## Deploying
 
-Everything lives under the base path `/curve-ball/`. `vite.config.ts` is the kit's `gameConfig("curve-ball")`: it sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/curve-ball/api/...`, and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so `gameConfig` also moves the client build into `dist/client/curve-ball/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
-
-If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+`npm run deploy -w games/curve-ball` builds it and deploys it to **https://warrick.games/curve-ball/**. The root README explains how the games share warrick.games. `localStorage` keys start with `cb.`.
 
 ## How it works
 

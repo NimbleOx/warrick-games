@@ -17,14 +17,13 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Development
 
-```bash
-npm install
-npm run dev        # http://localhost:5176/ricochet-alley/ — Vite + the Worker and Durable Object running in workerd
-npm test           # simulation, AI, prediction and game-rule tests (Node)
-npm run typecheck
-```
+From the repo root, after `npm install` there:
 
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime.
+```bash
+npm run dev -w games/ricochet-alley -- --port 5176  # http://localhost:5176/ricochet-alley/, with the Worker and Durable Object in workerd
+npm test -w games/ricochet-alley                    # simulation, AI, prediction, game-rule and room tests (Node)
+npm run typecheck -w games/ricochet-alley
+```
 
 Dev-only URL options (ignored in production builds):
 
@@ -32,20 +31,9 @@ Dev-only URL options (ignored in production builds):
 - `?lag=150` adds 150 ms of round-trip delay to the socket, to try prediction locally.
 - `?as=bob` makes this tab a separate player (its own token and name), so one browser can be several players.
 
-## Deploying to Cloudflare
+## Deploying
 
-```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
-```
-
-That creates a Worker called `ricochet-alley` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets.
-
-It's served at **https://warrick.games/ricochet-alley/**, one path on a site shared with the other games. The hub page at the root is a separate Worker in `../../hub`, with `warrick.games` as a Custom Domain. This Worker has the zone route `warrick.games/ricochet-alley*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is turned off (`workers_dev: false`), so invite links always point at warrick.games.
-
-Everything lives under the base path `/ricochet-alley/`. `vite.config.ts` is the kit's `gameConfig("ricochet-alley")`: it sets Vite's `base`, and the client builds its URLs from `import.meta.env.BASE_URL`. The Worker's API is at `/ricochet-alley/api/...` (the kit's `gameWorker("ricochet-alley")`), and `run_worker_first` matches that. Workers static assets are looked up by request path and ignore Vite's `base`, so `gameConfig` moves the client build into `dist/client/ricochet-alley/`. `index.html` stays at the root of `dist/client`, because the single-page-application fallback always serves `/index.html`.
-
-If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+`npm run deploy -w games/ricochet-alley` builds it and deploys it to **https://warrick.games/ricochet-alley/**. The root README explains how the games share warrick.games. `localStorage` keys start with `ra.`.
 
 ## How it works
 

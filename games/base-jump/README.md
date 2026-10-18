@@ -17,25 +17,19 @@ It runs entirely on Cloudflare: a Worker serves the client and the API, and each
 
 ## Development
 
-```bash
-npm install
-npm run dev        # http://localhost:5187/base-jump/: Vite + the Worker and Durable Object running in workerd
-npm test           # map, battle, CPU, sync and game-flow tests (Node)
-npm run typecheck
-```
-
-`npm run dev` uses the Cloudflare Vite plugin, so the Worker, the Durable Object and the WebSockets run locally in the real Workers runtime. Editing code restarts the Durable Object, which also tests what a deploy does to a round in progress: the round starts over on a new map.
-
-## Deploying to Cloudflare
+From the repo root, after `npm install` there:
 
 ```bash
-npx wrangler login
-npm run deploy     # vite build && wrangler deploy
+npm run dev -w games/base-jump -- --port 5187  # http://localhost:5187/base-jump/, with the Worker and Durable Object in workerd
+npm test -w games/base-jump                    # map, battle, CPU, sync and game-flow tests (Node)
+npm run typecheck -w games/base-jump
 ```
 
-That creates a Worker called `base-jump` with the `GameRoom` Durable Object (SQLite-backed) and uploads the client as static assets. It's served at **https://warrick.games/base-jump/** through the zone route `warrick.games/base-jump*` in `wrangler.jsonc`, like the other games. Check a build first: `npm run build && npx vite preview`, then confirm `/base-jump/assets/*.js` and `/base-jump/g/ABCDE` both return 200. `localStorage` keys start with `bj.`.
+Editing worker code restarts the Durable Object, which also shows what a deploy does to a round in progress: it starts over on a new map.
 
-If you change bindings in `wrangler.jsonc`, run `npm run cf-typegen` to regenerate `worker-configuration.d.ts`.
+## Deploying
+
+`npm run deploy -w games/base-jump` builds it and deploys it to **https://warrick.games/base-jump/**. The root README explains how the games share warrick.games. `localStorage` keys start with `bj.`.
 
 ## How it works
 

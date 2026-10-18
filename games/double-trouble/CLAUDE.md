@@ -15,12 +15,3 @@ A 2048 battle game: everyone plays their own board at once, and merges send rock
 ## Not in v1
 
 Undo, a solo mode, per-player targeting, bigger boards than 5 × 5, rocks that take more than one hit (`ROCK_HP` and the cracked look are there, unused), and animations on the opponents' boards. Design so they can be added.
-
-## Lessons from the other games
-
-- Deploying restarts every Durable Object and drops every socket. Clients must reconnect and resync from a full snapshot.
-- Blur buttons after clicks in the game screen, so the arrow keys go to the board.
-- Make every limit visible. If something stops a player from acting, the UI must say why.
-- Tests that depend on a random round seed must not assume who wins: pin the goal, or set up the board.
-
-Ask before deploying, committing or pushing.

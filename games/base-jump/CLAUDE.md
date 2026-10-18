@@ -2,6 +2,8 @@
 
 A real-time base-capture game like *Modern Conflict* (iPad), with ideas from *Galcon* and *Mushroom Wars*. The map is a set of bases joined by roads. Every base you hold builds units. Send them out to take more bases: tanks have to drive along the roads, helicopters fly straight to any base. Take every base, or hold the most when time runs out.
 
+Read `README.md` for how it plays, how it's built and how to run it; this file is the rules and design the code keeps to.
+
 ## Rules for v1
 
 - 2–8 players online, each on their own device. Drag from one of your bases to any other base to send units there; drag across several of your bases first to send from all of them. Or tap a base of yours, then tap the target. Tap empty ground or press Esc to clear the selection.
@@ -28,22 +30,3 @@ A real-time base-capture game like *Modern Conflict* (iPad), with ideas from *Ga
 - Every tick the server broadcasts one frame: the tick number and the commands applied that tick. Clients run the same code on their copy of the battle, so the frame stays tiny. Every 50 ticks a frame carries a checksum; a mismatch or a gap makes the client ask for a snapshot. Snapshots (the map plus every base and group) go out at round start, in the welcome, and on request.
 - The round lives in memory only. A deploy restarts the Durable Object; the first player back finds the round gone and it starts over on a new map.
 - Rendering: canvas, roads first, then units in transit, then bases. The map is laid out landscape; on a portrait screen the client swaps x and y, so it fills a phone held upright. Hit-testing uses the same transform.
-
-## How to build it
-
-Built on `@warrick/kit` (`../../packages/kit`), like every game here. Turf War (`../turf-war`) is the closest real-time sibling: its tick loop, frames, checksums and resyncs are the model. Dice Dominion (`../dice-dominion`) has the nearest map generator. Read them for ideas; don't modify them.
-
-- `src/worker/game.ts` is a `Lobby` subclass with the rules; `src/worker/room.ts` extends the kit's `Room` with the tick loop and the game's messages; `src/worker/index.ts` is `gameWorker("base-jump")`. On the client, `src/client/main.ts` creates the kit's `Shell` and adds the game screen.
-- Dev port 5187 in `../../.claude/launch.json`. `localStorage` prefix `bj`.
-
-## Lessons from the other games
-
-- Deploying restarts every Durable Object and drops every socket. Clients must reconnect and resync from a full snapshot.
-- When a button has keyboard focus, let it own Space/Enter; don't also fire game hotkeys.
-- Make every limit visible. If something stops a player from acting, the UI must say why: no road there, not enough units to upgrade, already level 3.
-
-## Deploying
-
-Served at `https://warrick.games/base-jump/` like the other games: a zone route `warrick.games/base-jump*`, `workers_dev: false`, `run_worker_first: ["/base-jump/api/*"]`, and `vite.config.ts` is `gameConfig("base-jump")`. Check a build with `npm run build && npx vite preview` before deploying. It's live, with a card and icon on the hub (`../../hub/public/`).
-
-Ask before deploying, committing or pushing.

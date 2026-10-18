@@ -43,37 +43,16 @@ A turn-based territory game like *Blokus*. Everyone has the same 21 pieces: ever
 - The CPU runs on the server. A mid-game 20×20 position has a few thousand legal moves; Hard's lookahead looks at its best 8 and stays well under 100 ms.
 - Watch the first-move advantage in playtests, especially in 2-player games. If going first wins too often, Duo's usual fix is to let the second player pick their colour first; here we could rotate who starts between games.
 
-## How to build it
+## Development
 
-Build it on `@warrick/kit` (`../../packages/kit`, see its README), starting from Crater Club in `../crater-club`, the turn-based game already on the kit. Read its README first: its turn timers, CPU pacing and alarm handling are the closest match. Read the other games for ideas, but don't modify them.
+From the repo root, after `npm install` there:
 
-- Cloudflare Worker + Vite, TypeScript, no client framework, canvas rendering. `vite.config.ts` is `gameConfig("corner-shop")`; `tsconfig.client.json` and `tsconfig.worker.json` extend `@warrick/kit/tsconfig.base.json`.
-- One Durable Object per 5-character room code. `src/worker/index.ts` exports the `GameRoom` and `gameWorker("corner-shop")`, which serves `POST /corner-shop/api/games`, `GET /corner-shop/api/games/CODE` and the WebSocket at `/corner-shop/api/games/CODE/ws`. `/corner-shop/g/CODE` is the invite link.
-- `GameRoom` extends the kit's `Room` with `newState`, `makeGame`, `timerAt` and `handle` (the `place` message). `Game` extends the kit's `Lobby` with the rules: `maxPlayers = 4`, its own colours, `finishedPhase = "gameover"`, and overrides for `leave` and `setConnected` (a player who leaves mid-game is out; one who drops is skipped).
-- No accounts: the kit's random token in `localStorage` maps to a seat, so a reload puts you back in your seat. The `localStorage` prefix is `cs`.
-- The client's `main.ts` creates the kit's `Shell` (home card, lobby, chat, connection, leave, mute) and adds the game screen: the board canvas, the tray, the HUD and the touch controls. `index.html` holds only the game screen.
-- Dev port 5183, reserved as `corner-shop` in `../../.claude/launch.json`. Locally the game is at `http://localhost:5183/corner-shop/`.
-
-### Turn-based, like Crater Club
-
-- No tick loop. The Durable Object checks each `place` as it arrives: your turn, your piece, a legal spot.
-- One alarm drives every timer: the turn clock, CPU thinking time and the away skip. The kit pauses timers when nobody is connected.
-- Hibernatable WebSockets, so the object sleeps between moves. A game with no connections for 12 hours is deleted.
-- The state is small (a 400-cell board and at most 84 moves), so it's saved and broadcast whole after every move. A deploy mid-game resumes exactly where it was.
-
-## Lessons from the other games
-
-- Deploying restarts every Durable Object and drops every socket. Clients must reconnect and resync from a full snapshot.
-- When a button has keyboard focus, let it own Space/Enter; don't also fire game hotkeys. Blur buttons after clicks in the game screen, since Enter places a piece.
-- Make every limit visible. If something stops a player from acting, the UI must say why: not your turn, that touches your own piece along an edge, that piece doesn't fit anywhere.
-- Before attaching a custom domain, check DNS against the zone's authoritative nameservers (`dig @mina.ns.cloudflare.com <name>`), not the local resolver, which caches the "doesn't exist" answer for 30 minutes.
+```bash
+npm run dev -w games/corner-shop -- --port 5183  # http://localhost:5183/corner-shop/, with the Worker and Durable Object in workerd
+npm test -w games/corner-shop                    # rules, CPU, game-flow and room tests (Node)
+npm run typecheck -w games/corner-shop
+```
 
 ## Deploying
 
-Cloudflare, same account as the other games. The game is served at `https://warrick.games/corner-shop/`: a path on the shared site, not a subdomain. The hub at the root is its own Worker in `../../hub`, with `warrick.games` as a Custom Domain; this game's Worker has a zone route on the same hostname, and routes take precedence over a Custom Domain.
-
-- `wrangler.jsonc`: `"routes": [{ "pattern": "warrick.games/corner-shop*", "zone_name": "warrick.games" }]` (a zone route, not a custom domain), `workers_dev: false`, `preview_urls: false`, `not_found_handling: "single-page-application"` and `run_worker_first: ["/corner-shop/api/*"]`.
-- The kit's `gameConfig` sets Vite's `base` to `/corner-shop/` and moves the client build into `dist/client/corner-shop/` (Workers static assets are looked up by request path and ignore `base`), leaving `index.html` at the root for the single-page-application fallback. The `Shell` builds every URL from `import.meta.env.BASE_URL`. Check with `npm run build && npx vite preview` before the first deploy.
-- `npm run deploy -w games/corner-shop` builds and deploys. Then turn the game's card in `../../hub/public/index.html` from "Coming soon" into a link, deploy the hub (`npm run deploy -w hub`), and mark it live in the root README.
-
-Ask before deploying, committing or pushing.
+`npm run deploy -w games/corner-shop` builds it and deploys it to **https://warrick.games/corner-shop/**. The root README explains how the games share warrick.games. `localStorage` keys start with `cs.`.

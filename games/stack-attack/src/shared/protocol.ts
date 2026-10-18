@@ -146,8 +146,7 @@ export interface Frame {
 export type ClientMsg =
   | LobbyMsg
   /** A piece locked: `k` is how many pieces came before it, `g` the newest garbage seen, `ck` the board's checksum after. */
-  | { t: "lock"; e: number; k: number; pl: Placement; g: number; ck: number }
-  | { t: "resync" };
+  | { t: "lock"; e: number; k: number; pl: Placement; g: number; ck: number };
 
 export type ServerMsg =
   | Exclude<RoomMsg<GameState>, { t: "welcome" }>

@@ -139,10 +139,6 @@ export class OwnView {
     this.ctx = canvas.getContext("2d")!;
   }
 
-  get cellSize(): number {
-    return this.c;
-  }
-
   resize(c: number): void {
     this.c = c;
     this.ctx = setup(this.canvas, Math.round(OWN_W * c), Math.round(OWN_H * c));

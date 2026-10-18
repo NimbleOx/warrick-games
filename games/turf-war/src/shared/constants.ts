@@ -12,8 +12,7 @@ export const RESPAWN_TICKS = 3 * TICKS_PER_SEC;
 /** Every this many ticks a frame carries a board checksum, so clients can spot drift. */
 export const CHECKSUM_EVERY = 50;
 
-export const MAX_PLAYERS = 8;
-
+/** Turf War's player colours: the usual ones, with violet in place of white. */
 export const PLAYER_COLORS = [
   "#ff4d4d", // red
   "#4da6ff", // blue
@@ -24,7 +23,3 @@ export const PLAYER_COLORS = [
   "#ff9a3c", // orange
   "#b48cff", // violet
 ] as const;
-
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const CODE_LENGTH = 5;
-export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;

@@ -1,8 +1,9 @@
+import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
 import type { CpuLevel } from "./ai";
 import type { Dir, Frame } from "./board";
 import type { Snapshot } from "./sim";
 
-export type { CpuLevel, Frame, Snapshot };
+export type { CpuLevel, Frame, LogEntry, Snapshot };
 
 export type Phase = "lobby" | "playing" | "results";
 export type BoardSize = "small" | "medium" | "large";
@@ -28,14 +29,7 @@ export const BOARD_SIZES: Record<BoardSize, { w: number; h: number }> = {
   large: { w: 130, h: 90 },
 };
 
-export interface PlayerState {
-  id: string;
-  name: string;
-  color: string;
-  cpu: CpuLevel | null;
-  connected: boolean;
-  /** Watching: all eight seats were taken when they arrived. */
-  spectator: boolean;
+export interface PlayerState extends BasePlayer {
   /** Board slot in the current round, or -1. */
   slot: number;
   /** Rounds won in this room. */
@@ -63,56 +57,27 @@ export interface RoundResult {
   standings: Standing[];
 }
 
-export interface GameState {
-  code: string;
-  createdAt: number;
-  lastActive: number;
+export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
-  hostId: string;
-  settings: Settings;
-  players: PlayerState[];
   round: number;
   results: RoundResult | null;
-  nextPlayerNum: number;
-}
-
-export interface LogEntry {
-  at: number;
-  kind: "chat" | "event";
-  from?: string;
-  color?: string;
-  text: string;
 }
 
 export type ClientMsg =
-  | { t: "hello"; token: string; name: string }
-  | { t: "color"; color: string }
-  | { t: "settings"; settings: Partial<Settings> }
-  | { t: "addCpu"; level: CpuLevel }
-  | { t: "kick"; id: string }
-  | { t: "start" }
-  | { t: "lobby" }
+  | LobbyMsg
+  /** Turn. Only real changes are sent: no repeats, no straight reversals. */
   | { t: "dir"; d: Dir }
-  | { t: "resync" }
-  | { t: "chat"; text: string }
-  | { t: "leave" }
-  | { t: "ping" };
+  /** The board drifted or a frame went missing: send a fresh snapshot. */
+  | { t: "resync" };
 
 export type ServerMsg =
+  | Exclude<RoomMsg<GameState>, { t: "welcome" }>
   | { t: "welcome"; you: string; state: GameState; log: LogEntry[]; snap: Snapshot | null; now: number }
-  | { t: "state"; state: GameState; now: number }
   | { t: "snap"; snap: Snapshot }
-  | Frame
-  | { t: "log"; entries: LogEntry[] }
-  | { t: "error"; message: string }
-  | { t: "kicked" }
-  | { t: "pong"; now: number };
+  | Frame;
 
 export function percent(cells: number, total: number): string {
   if (!total) return "0%";
   const p = (cells / total) * 100;
   return `${p >= 10 || p === 0 ? p.toFixed(0) : p.toFixed(1)}%`;
 }
-
-export const CLOSE_NOT_FOUND = 4404;
-export const CLOSE_KICKED = 4403;

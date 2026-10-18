@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Board } from "../src/shared/board";
 import { claimRuns } from "../src/shared/claim";
 import { forEachRunCell, rleDecode, rleEncode } from "../src/shared/codec";
-import { mulberry32, randInt } from "../src/shared/rng";
+import { mulberry32, randInt } from "@warrick/kit/shared/rng";
 import { board, parseBoard, printBoard } from "./ascii";
 
 function claim(text: string, slot = 0): Board {

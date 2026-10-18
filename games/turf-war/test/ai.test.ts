@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { autopilot, newBrain, think, type Brain, type CpuLevel } from "../src/shared/ai";
 import type { DeathCause, Dir } from "../src/shared/board";
 import { TICKS_PER_SEC } from "../src/shared/constants";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 import { Round } from "../src/shared/sim";
 import { checkInvariants, parseBoard } from "./ascii";
 

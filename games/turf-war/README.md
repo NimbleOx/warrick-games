@@ -38,7 +38,7 @@ That creates a Worker called `turf-war` with the `GameRoom` Durable Object (SQLi
 It's served at **https://warrick.games/turf-war/**, one path on a site shared with the other games. The hub page at the root is its own Worker (`../../hub`, with `warrick.games` as a Custom Domain). This Worker has the zone route `warrick.games/turf-war*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is off (`workers_dev: false`).
 
 - Vite's `base` is `/turf-war/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/turf-war/api/`.
-- Workers static assets are looked up by request path and know nothing about Vite's `base`. The `nestClientUnderBase` plugin in `vite.config.ts` moves the client build into `dist/client/turf-war/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/turf-war/assets/*.js` and `/turf-war/g/ABCDE` both return 200.
+- Workers static assets are looked up by request path and know nothing about Vite's `base`. `vite.config.ts` is the kit's `gameConfig("turf-war")`, which moves the client build into `dist/client/turf-war/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/turf-war/assets/*.js` and `/turf-war/g/ABCDE` both return 200.
 - All the games share one origin, so `localStorage` keys start with `tw.`.
 - After the first deploy, turn Turf War's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
 
@@ -74,8 +74,10 @@ src/shared/    code used by both sides
   ai.ts          CPU players and the disconnected-player autopilot
   codec.ts       run-length encoding, cell runs, checksums
   protocol.ts    settings, game state and message types
-src/worker/    index.ts (routes), room.ts (Durable Object + tick loop), game.ts (lobby and match rules)
-src/client/    main.ts (UI + networking glue), render.ts (canvas), input.ts (keys + swipes), net.ts,
-               audio.ts, attract.ts (home-screen CPU demo)
+src/worker/    index.ts (routes), room.ts (Durable Object: turns, resyncs, the tick loop), game.ts (match rules)
+src/client/    main.ts (the game screen and its hooks into the shell), render.ts (canvas), input.ts (keys + swipes),
+               audio.ts (sounds), attract.ts (home-screen CPU demo)
 test/          Vitest tests: claiming, tick rules, client replay, CPUs, game flow
 ```
+
+The room, lobby rules, router, socket (with the heartbeat that keeps a round's room within its CPU budget), home/lobby/chat shell, base styles and build config come from `@warrick/kit` (`../../packages/kit`).

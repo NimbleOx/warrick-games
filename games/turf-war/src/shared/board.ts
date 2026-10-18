@@ -1,4 +1,4 @@
-import { MAX_PLAYERS } from "./constants";
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { fnv1a, rleDecode, rleEncode } from "./codec";
 
 /** 0 up, 1 right, 2 down, 3 left. */

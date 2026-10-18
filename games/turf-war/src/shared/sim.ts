@@ -1,7 +1,8 @@
 import { Board, reverse, type BoardSnap, type DeathCause, type Dir, type Frame, type Op } from "./board";
 import { claimRuns } from "./claim";
-import { CHECKSUM_EVERY, COUNTDOWN_TICKS, MAX_PLAYERS, RESPAWN_TICKS } from "./constants";
-import { randInt, shuffle, type Rng } from "./rng";
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
+import { randInt, shuffle, type Rng } from "@warrick/kit/shared/rng";
+import { CHECKSUM_EVERY, COUNTDOWN_TICKS, RESPAWN_TICKS } from "./constants";
 
 export interface RoundOpts {
   w: number;

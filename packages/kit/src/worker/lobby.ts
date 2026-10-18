@@ -1,4 +1,4 @@
-import { CPU_LEVELS, DEFAULT_COLORS, MAX_PLAYERS } from "../shared/constants";
+import { CPU_LEVELS, DEFAULT_COLORS, MAX_PLAYERS, MAX_SPECTATORS } from "../shared/constants";
 import type { BasePlayer, BaseState, CpuLevel, LogEntry } from "../shared/protocol";
 
 /** A rule the player broke. The room sends the message back to them as an error. */
@@ -59,6 +59,8 @@ export abstract class Lobby<S extends BaseState, M extends { t: string } = { t: 
   /** CPU players are called "CPU <name>", with the first of these not yet taken. */
   protected readonly cpuNames: readonly string[] = CPU_NAMES;
   protected readonly maxPlayers: number = MAX_PLAYERS;
+  /** Most people watching at once. */
+  protected readonly maxSpectators: number = MAX_SPECTATORS;
   /** The phase a finished game sits in, which "back to lobby" leaves. */
   protected readonly finishedPhase: string = "results";
 
@@ -100,6 +102,20 @@ export abstract class Lobby<S extends BaseState, M extends { t: string } = { t: 
     this.event(p.spectator ? `${name} is watching` : `${name} joined`);
     this.touch();
     return p;
+  }
+
+  /**
+   * Make space for someone new, before `addHuman`. Anyone past the seats watches, so watchers are
+   * capped too: at the cap, watchers who have gone are forgotten, and if that frees nobody's
+   * place, it's false and nobody new can come in.
+   */
+  makeSpace(): boolean {
+    // They'll get a seat.
+    if (this.betweenRounds() && this.participants.length < this.maxPlayers) return true;
+    const watching = () => this.s.players.filter((p) => p.spectator);
+    if (watching().length < this.maxSpectators) return true;
+    for (const p of watching()) if (!p.cpu && !this.io.isConnected(p.id)) this.removePlayer(p.id);
+    return watching().length < this.maxSpectators;
   }
 
   addCpu(byId: string, level: CpuLevel): void {
@@ -152,7 +168,7 @@ export abstract class Lobby<S extends BaseState, M extends { t: string } = { t: 
   setColor(id: string, color: string): void {
     this.requireBetweenRounds();
     const p = this.player(id);
-    if (!p || !this.colors.includes(color)) return;
+    if (!p || !this.colors.includes(color) || p.color === color) return;
     const taken = this.s.players.find((o) => o.id !== id && o.color === color);
     if (taken) taken.color = p.color;
     p.color = color;
@@ -250,6 +266,8 @@ export abstract class Lobby<S extends BaseState, M extends { t: string } = { t: 
     if (me && !me.cpu && (!host || !this.io.isConnected(host.id))) {
       s.hostId = id;
       this.event(`${me.name} is now the host`);
+      // Everyone hears about it, even if the action that asked then fails.
+      this.touch();
       return;
     }
     throw new GameError("Only the host can do that");

@@ -4,6 +4,8 @@ export const CODE_LENGTH = 5;
 export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 
 export const MAX_PLAYERS = 8;
+/** Most people a game keeps watching. Anyone past the seats watches, so this keeps a room from growing without end. */
+export const MAX_SPECTATORS = 16;
 
 /** The usual player colours. A game can pass its own palette to its lobby and shell. */
 export const DEFAULT_COLORS = [
@@ -19,6 +21,7 @@ export const DEFAULT_COLORS = [
 
 export const CPU_LEVELS = ["easy", "normal", "hard"] as const;
 
-/** WebSocket close codes: the game is gone, or the host removed this player. */
+/** WebSocket close codes: the game is gone, the host removed this player, or there's no room for anyone new. */
 export const CLOSE_NOT_FOUND = 4404;
 export const CLOSE_KICKED = 4403;
+export const CLOSE_FULL = 4429;

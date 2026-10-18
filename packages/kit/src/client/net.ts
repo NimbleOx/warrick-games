@@ -1,9 +1,16 @@
-import { CLOSE_KICKED, CLOSE_NOT_FOUND } from "../shared/constants";
+import { CLOSE_FULL, CLOSE_KICKED, CLOSE_NOT_FOUND } from "../shared/constants";
 
 export type NetStatus = "connecting" | "open" | "closed";
 
 /** Dev aid: `?lag=150` adds that many ms of round-trip delay (half each way), to try latency locally. */
 const LAG = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get("lag")) || 0 : 0;
+
+/** How often a quiet socket checks it still works, with a "ping" the room answers without waking up. */
+const PING_MS = 25000;
+/** A socket that hears nothing this long after a ping is dead, even if it still says it's open. */
+const ANSWER_MS = 8000;
+/** A socket that takes this long to open has hung (a phone changing networks, say). */
+const CONNECT_MS = 15000;
 
 type AnyMsg = { t: string };
 
@@ -20,8 +27,12 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
   private stopped = false;
   private attempt = 0;
   private retryTimer = 0;
+  private connectTimer = 0;
   private pingTimer = 0;
+  private answerTimer = 0;
   private heartbeatTimer = 0;
+  /** How many messages the socket has heard, of any kind. */
+  private heard = 0;
 
   constructor(
     readonly code: string,
@@ -43,15 +54,20 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
   close(): void {
     this.stopped = true;
     clearTimeout(this.retryTimer);
-    clearInterval(this.pingTimer);
+    this.stopTimers();
     clearInterval(this.heartbeatTimer);
     this.ws?.close(1000, "bye");
     this.ws = null;
   }
 
-  /** Reconnect now (e.g. when the tab becomes visible again) instead of waiting for backoff. */
+  /**
+   * Check the connection now (when the tab becomes visible again, say): reconnect straight away
+   * if it's down, and make sure an open socket still works. A phone that slept or changed
+   * networks can be left with a socket that says it's open but is dead.
+   */
   nudge(): void {
-    if (this.stopped || this.ws) return;
+    if (this.stopped) return;
+    if (this.ws) return this.probe();
     clearTimeout(this.retryTimer);
     this.open();
   }
@@ -63,7 +79,12 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
    */
   heartbeat(on: boolean): void {
     clearInterval(this.heartbeatTimer);
-    if (on) this.heartbeatTimer = window.setInterval(() => this.send({ t: "ping" } as C), 5000);
+    if (!on) return;
+    this.heartbeatTimer = window.setInterval(() => {
+      this.send({ t: "ping" } as C);
+      // A live game notices a dead socket in seconds, not at the next quiet-socket check.
+      this.probe();
+    }, 5000);
   }
 
   private open(): void {
@@ -72,19 +93,23 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${location.host}${import.meta.env.BASE_URL}api/games/${this.code}/ws`);
     this.ws = ws;
+    this.connectTimer = window.setTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) this.abandon(ws);
+    }, CONNECT_MS);
 
     ws.onopen = () => {
+      if (this.ws !== ws) return;
+      clearTimeout(this.connectTimer);
       this.attempt = 0;
       ws.send(JSON.stringify(this.h.hello()));
       this.h.status("open");
       clearInterval(this.pingTimer);
-      // Answered by the room's auto-response without waking it up.
-      this.pingTimer = window.setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) ws.send("ping");
-      }, 25000);
+      this.pingTimer = window.setInterval(() => this.probe(), PING_MS);
     };
 
     ws.onmessage = (ev) => {
+      if (this.ws !== ws) return;
+      this.heard++;
       if (typeof ev.data !== "string" || ev.data === "pong") return;
       let msg: S;
       try {
@@ -96,17 +121,53 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
       else this.h.message(msg);
     };
 
-    ws.onclose = (ev) => {
-      clearInterval(this.pingTimer);
-      if (this.ws !== ws) return;
-      this.ws = null;
-      if (this.stopped) return;
-      if (ev.code === CLOSE_NOT_FOUND) return this.fail("That game doesn't exist anymore.");
-      if (ev.code === CLOSE_KICKED) return this.fail("The host removed you from the game.");
-      this.h.status("closed");
-      const delay = Math.min(10000, 500 * 2 ** this.attempt++);
-      this.retryTimer = window.setTimeout(() => this.open(), delay);
-    };
+    ws.onclose = (ev) => this.closed(ws, ev.code);
+  }
+
+  /** The socket closed: say why, or try again after a backoff. Sockets already given up on are ignored. */
+  private closed(ws: WebSocket, code: number): void {
+    if (this.ws !== ws) return;
+    this.ws = null;
+    this.stopTimers();
+    if (this.stopped) return;
+    if (code === CLOSE_NOT_FOUND) return this.fail("That game doesn't exist anymore.");
+    if (code === CLOSE_KICKED) return this.fail("The host removed you from the game.");
+    if (code === CLOSE_FULL) return this.fail("That game is full.");
+    this.h.status("closed");
+    const delay = Math.min(10000, 500 * 2 ** this.attempt++);
+    this.retryTimer = window.setTimeout(() => this.open(), delay);
+  }
+
+  /**
+   * Send a "ping", which the room's auto-response answers without waking it up. If nothing at
+   * all comes back in time, the socket is dead.
+   */
+  private probe(): void {
+    const ws = this.ws;
+    if (ws?.readyState !== WebSocket.OPEN || this.answerTimer) return;
+    const heard = this.heard;
+    ws.send("ping");
+    this.answerTimer = window.setTimeout(() => {
+      this.answerTimer = 0;
+      if (this.heard === heard) this.abandon(ws);
+    }, ANSWER_MS);
+  }
+
+  /** Give up on a socket and reconnect, without waiting for it to agree to close: a dead one never would. */
+  private abandon(ws: WebSocket): void {
+    try {
+      ws.close();
+    } catch {
+      // Already closing.
+    }
+    this.closed(ws, 0);
+  }
+
+  private stopTimers(): void {
+    clearTimeout(this.connectTimer);
+    clearTimeout(this.answerTimer);
+    clearInterval(this.pingTimer);
+    this.answerTimer = 0;
   }
 
   private fail(reason: string): void {

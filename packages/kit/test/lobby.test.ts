@@ -76,6 +76,17 @@ describe("lobby", () => {
     expect(t.s.players.at(-1)).toMatchObject({ name: "CPU Rex", cpu: "hard", connected: false });
   });
 
+  it("marks a new host as a change, even when the action that made them host fails", () => {
+    const t = setup();
+    const host = t.join("Ann");
+    const bo = t.join("Bo");
+    t.connected.delete(host.id);
+    const g = t.game();
+    expect(() => g.addCpu(bo.id, "impossible" as never)).toThrow("Unknown CPU level");
+    expect(t.s.hostId).toBe(bo.id);
+    expect(g.dirty).toBe(true);
+  });
+
   it("swaps colours with whoever had the one you pick", () => {
     const t = setup();
     const a = t.join("Ann");
@@ -83,6 +94,10 @@ describe("lobby", () => {
     const [ca, cb] = [a.color, b.color];
     t.game().setColor(a.id, cb);
     expect(t.s.players.map((p) => p.color)).toEqual([cb, ca]);
+    // Picking the colour you have changes nothing.
+    const g = t.game();
+    g.setColor(a.id, cb);
+    expect(g.dirty).toBe(false);
   });
 
   it("starts with two players, drops humans who left, and closes the lobby during play", () => {

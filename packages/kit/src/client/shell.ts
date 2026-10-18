@@ -498,6 +498,8 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") this.conn?.nudge();
     });
+    // A new network: the old socket is probably dead.
+    window.addEventListener("online", () => this.conn?.nudge());
     for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, unlockAudio, { passive: true });
 
     // Home

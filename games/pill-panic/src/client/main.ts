@@ -1,66 +1,26 @@
+import { $, esc } from "@warrick/kit/client/dom";
+import { Shell, type Screen } from "@warrick/kit/client/shell";
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import type { BottleEvent } from "../shared/bottle";
-import { CODE_RE, COLS, MAX_PLAYERS, PLAYER_COLORS, TICKS_PER_SEC, TICK_MS, virusCount } from "../shared/constants";
+import { COLS, PLAYER_COLORS, TICKS_PER_SEC, TICK_MS, virusCount } from "../shared/constants";
 import {
   SETTING_CHOICES,
   type Aim,
   type Attack,
+  type ClientMsg,
   type GameState,
-  type LogEntry,
   type PlayerState,
   type RoundSnap,
   type ServerMsg,
-  type Settings,
   type Speed,
 } from "../shared/protocol";
 import { Attract } from "./attract";
-import { isMuted, setMuted, sfx, unlockAudio } from "./audio";
+import { sfx } from "./audio";
 import { Controls } from "./input";
-import { Connection, type NetStatus } from "./net";
 import { BottleCanvas, bottleSize } from "./render";
 import { RoundView } from "./view";
 
 // ------------------------------------------------------------------ helpers
-
-// The app lives under Vite's `base` ("/pill-panic/"): BASE is the home screen, gamePath() a game.
-const BASE = import.meta.env.BASE_URL;
-const gamePath = (code: string) => `${BASE}g/${code}`;
-
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const $$ = <T extends HTMLElement = HTMLElement>(sel: string) => Array.from(document.querySelectorAll<T>(sel));
-
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
-
-function store(key: string, value?: string | null): string | null {
-  try {
-    if (value === undefined) return localStorage.getItem(key);
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Private mode etc. — identity just won't survive a reload.
-  }
-  return value ?? null;
-}
-
-function playerToken(): string {
-  let t = store("pp.token");
-  if (!t || !/^[\w-]{8,64}$/.test(t)) {
-    t = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-    store("pp.token", t);
-  }
-  return t;
-}
-
-let toastTimer = 0;
-function toast(text: string, kind: "error" | "info" = "error"): void {
-  const el = $("toast");
-  el.textContent = text;
-  el.className = `toast ${kind}`;
-  el.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (el.hidden = true), 3200);
-}
 
 function pips(wins: number, target: number): string {
   const n = Math.max(target, wins);
@@ -68,11 +28,14 @@ function pips(wins: number, target: number): string {
 }
 
 const SPEED_NAMES: Record<Speed, string> = { low: "Low", med: "Med", hi: "Hi" };
+const AIM_NAMES: Record<Aim, string> = {
+  leader: "Whoever's winning",
+  random: "A random rival",
+  all: "Everyone",
+};
 const PALETTE = ["#fff", "#ff4d6d", "#ffd23f", "#4da6ff"];
 
 // ------------------------------------------------------------------ app state
-
-type Screen = "home" | "lobby" | "game";
 
 interface RivalCard {
   slot: number;
@@ -81,16 +44,9 @@ interface RivalCard {
 }
 
 const app = {
-  screen: "home" as Screen,
-  conn: null as Connection | null,
-  code: "",
-  me: "",
-  state: null as GameState | null,
-  log: [] as LogEntry[],
   /** Server clock minus ours, from the quickest ping. */
   skew: 0,
   pings: [] as { rtt: number; skew: number }[],
-  pingTimer: 0,
   /** This browser's copy of the round. */
   view: null as RoundView | null,
   viewKey: "",
@@ -106,200 +62,100 @@ const app = {
   overSounded: "",
 };
 
-const token = playerToken();
+const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
+  slug: "pill-panic",
+  title: "Pill Panic",
+  prefix: "pp",
+  logo: `<span class="r">PILL</span><br /><span class="b">PAN</span><span class="y">IC</span>`,
+  tagline: "Clear your bottle of germs before your friends do.<br />No accounts — just share a code.",
+  placeholder: "Doc",
+  footer: "Line up four of a color to wipe out a germ. Chain clears to bury your rivals.",
+  rules: [
+    "Line up four of one color, across or down, to clear them. Germs included.",
+    "Clear every germ in your bottle to win the round. Fill the bottle to the top and you're out.",
+    "Clear two or more lines with one capsule, at once or in a chain, to drop junk on a rival.",
+    "Everyone gets the same germs and the same capsules.",
+  ],
+  colors: PLAYER_COLORS,
+  settings: {
+    level: { label: "Germ level", fmt: (v: number) => `${v} · ${virusCount(v)} germs` },
+    speed: { label: "Speed", fmt: (v: Speed) => ({ low: "Low", med: "Medium", hi: "High" })[v] },
+    wins: { label: "Match", fmt: (v: number) => `First to ${v} round${v === 1 ? "" : "s"}` },
+    aim: { label: "Junk hits", fmt: (v: Aim) => AIM_NAMES[v] },
+  },
+  choices: SETTING_CHOICES,
+  playerTags: (p) => (p.trophies ? `<span class="tag">${p.trophies} match${p.trophies > 1 ? "es" : ""} won</span>` : ""),
+  // The clock pings are Pill Panic's own; the shell would drop their pongs.
+  intercept: (msg) => {
+    if (msg.t !== "pong") return false;
+    onPong(msg);
+    return true;
+  },
+  onWelcome: (msg) => msg.t === "welcome" && onWelcome(msg.snap),
+  onMessage,
+  onState,
+  onScreen,
+  onReset,
+  confirmLeave: (s) =>
+    s.phase === "playing" && (me()?.slot ?? -1) >= 0 && !s.round?.over ? "Leave this game? Your bottle tops out." : null,
+  isLive: (s) => s.phase === "playing",
+});
 const ownCanvas = new BottleCanvas($<HTMLCanvasElement>("game-canvas"), true);
 const attract = new Attract($<HTMLCanvasElement>("attract"));
 
-const me = (s = app.state): PlayerState | undefined => s?.players.find((p) => p.id === app.me);
-const playerById = (id: string | null | undefined) => app.state?.players.find((p) => p.id === id);
-const canHost = (s = app.state) => {
-  if (!s) return false;
-  if (s.hostId === app.me) return true;
-  const host = s.players.find((p) => p.id === s.hostId);
-  return !host || !host.connected;
-};
-const serverNow = () => Date.now() + app.skew;
+const me = (): PlayerState | undefined => shell.mine;
+const playerById = (id: string | null | undefined) => shell.player(id);
+const canHost = (s = shell.state) => shell.canHost(s);
+/** Until the first ping is back, the clock comes from the latest message. */
+const serverNow = () => Date.now() + (app.pings.length ? app.skew : shell.skew);
 const wallTick = () => app.view?.wall(serverNow()) ?? -1;
 const colorOf = (slot: number) => app.people.get(app.view?.who[slot] ?? "")?.color ?? "#8d94b8";
 
 const controls = new Controls(() => {
   const v = app.view;
   const own = v?.own;
-  return app.screen === "game" && !!own && !v.over && !own.b.done && wallTick() >= 0;
+  return shell.screen === "game" && !!own && !v.over && !own.b.done && wallTick() >= 0;
 });
 controls.bindPad($("pad"));
 
-// ------------------------------------------------------------------ routing
+// ------------------------------------------------------------------ shell hooks
 
-function route(): void {
-  const m = location.pathname.slice(BASE.length).match(/^g\/([A-Za-z0-9]{5})\/?$/);
-  const code = m?.[1].toUpperCase();
-  if (code && CODE_RE.test(code)) {
-    // Coming back to a game you were in (reload, reconnect): straight back in.
-    if (store("pp.lastGame") === code && store("pp.name")) void joinGame(code);
-    else showHome(code);
-  } else {
-    showHome(null);
-  }
-}
-
-function showScreen(screen: Screen): void {
-  app.screen = screen;
-  $("screen-home").hidden = screen !== "home";
-  $("screen-lobby").hidden = screen !== "lobby";
-  $("screen-game").hidden = screen !== "game";
+function onScreen(screen: Screen): void {
   if (screen === "game") layout();
   if (screen === "home") attract.resize();
 }
 
-function showHome(inviteCode: string | null): void {
-  disconnect();
-  showScreen("home");
-  document.title = "Pill Panic";
-  $("home-error").textContent = "";
-  const nameInput = $<HTMLInputElement>("home-name");
-  nameInput.value = store("pp.name") ?? "";
-  $("home-join-invite").hidden = !inviteCode;
-  $("home-default").hidden = !!inviteCode;
-  if (inviteCode) {
-    $("home-invite-code").textContent = inviteCode;
-    $("home-join-invite-btn").dataset.code = inviteCode;
-  }
-  if (!nameInput.value) nameInput.focus();
-}
-
-function readName(): string | null {
-  const input = $<HTMLInputElement>("home-name");
-  const name = input.value.trim().slice(0, 16);
-  if (!name) {
-    $("home-error").textContent = "Pick a name first.";
-    input.focus();
-    return null;
-  }
-  store("pp.name", name);
-  return name;
-}
-
-async function createGame(): Promise<void> {
-  if (!readName()) return;
-  const btn = $<HTMLButtonElement>("home-create");
-  btn.disabled = true;
-  try {
-    const res = await fetch(`${BASE}api/games`, { method: "POST" });
-    const body = (await res.json()) as { code?: string; error?: string };
-    if (!res.ok || !body.code) throw new Error(body.error ?? "Couldn't create a game");
-    history.pushState(null, "", gamePath(body.code));
-    await joinGame(body.code);
-  } catch (err) {
-    $("home-error").textContent = err instanceof Error ? err.message : String(err);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function joinGame(code: string): Promise<void> {
-  code = code.toUpperCase();
-  if (!CODE_RE.test(code)) {
-    $("home-error").textContent = "Codes are 5 letters/numbers.";
-    return;
-  }
-  const name = store("pp.name") ?? readName();
-  if (!name) return;
-  try {
-    const res = await fetch(`${BASE}api/games/${code}`);
-    if (res.status === 404) {
-      store("pp.lastGame", null);
-      if (location.pathname !== BASE) history.replaceState(null, "", BASE);
-      showHome(null);
-      $("home-error").textContent = `No game with code ${code}. It may have expired.`;
-      return;
-    }
-    if (!res.ok) throw new Error("The server didn't answer. Try again?");
-  } catch (err) {
-    showHome(code);
-    $("home-error").textContent = err instanceof Error ? err.message : String(err);
-    return;
-  }
-
-  disconnect();
-  store("pp.lastGame", code);
-  if (location.pathname !== gamePath(code)) history.pushState(null, "", gamePath(code));
-  app.code = code;
-  app.state = null;
-  app.log = [];
-  app.me = "";
-  $("lobby-code").textContent = code;
-  $<HTMLInputElement>("lobby-link").value = location.origin + gamePath(code);
-  $("game-code-small").textContent = code;
-  $("lobby-players").innerHTML = `<li class="muted">Connecting…</li>`;
-  showScreen("lobby");
-
-  app.conn = new Connection(code, {
-    hello: () => ({ t: "hello", token, name: store("pp.name") ?? name }),
-    message: onMessage,
-    status: onStatus,
-    fatal: (reason) => {
-      store("pp.lastGame", null);
-      history.pushState(null, "", BASE);
-      showHome(null);
-      $("home-error").textContent = reason;
-    },
-  });
-  clearInterval(app.pingTimer);
-  app.pingTimer = window.setInterval(ping, 2000);
-}
-
-function disconnect(): void {
-  app.conn?.close();
-  app.conn = null;
-  app.state = null;
+/** Left the game, or lost it for good. */
+function onReset(): void {
   app.view = null;
   app.viewKey = "";
   app.pings = [];
-  clearInterval(app.pingTimer);
   controls.reset();
   $("results").hidden = true;
 }
 
-function leave(): void {
-  const s = app.state;
-  const inRound = s?.phase === "playing" && (me()?.slot ?? -1) >= 0 && !s.round?.over;
-  if (inRound && !confirm("Leave this game? Your bottle tops out.")) return;
-  app.conn?.send({ t: "leave" });
-  store("pp.lastGame", null);
-  history.pushState(null, "", BASE);
-  showHome(null);
-}
-
-function onStatus(status: NetStatus): void {
-  for (const el of [$("lobby-conn"), $("game-conn")]) {
-    el.dataset.status = status;
-    el.textContent = status === "open" ? "" : status === "connecting" ? "Connecting…" : "Reconnecting…";
-  }
-  if (status === "open") ping();
+function onWelcome(snap: RoundSnap | null): void {
+  ping();
+  setView(snap);
 }
 
 /** Measure the server's clock: every bottle runs on it. */
 function ping(): void {
-  app.conn?.send({ t: "ping", c: Date.now() });
+  shell.send({ t: "ping", c: Date.now() });
+}
+
+function onPong(msg: Extract<ServerMsg, { t: "pong" }>): void {
+  if (typeof msg.c !== "number") return;
+  const rtt = Date.now() - msg.c;
+  app.pings.push({ rtt, skew: msg.now + rtt / 2 - Date.now() });
+  if (app.pings.length > 10) app.pings.shift();
+  app.skew = app.pings.reduce((a, b) => (b.rtt < a.rtt ? b : a)).skew;
 }
 
 // ------------------------------------------------------------------ messages
 
 function onMessage(msg: ServerMsg): void {
   switch (msg.t) {
-    case "welcome":
-      if (!app.pings.length) app.skew = msg.now - Date.now();
-      app.me = msg.you;
-      app.log = msg.log;
-      applyState(msg.state);
-      setView(msg.snap);
-      renderLog();
-      break;
-    case "state":
-      if (!app.pings.length) app.skew = msg.now - Date.now();
-      applyState(msg.state);
-      break;
     case "snap":
       setView(msg.snap);
       break;
@@ -308,22 +164,6 @@ function onMessage(msg: ServerMsg): void {
       app.view.frame(msg);
       // Keep our bottle going (and reporting) even when the tab is in the background.
       app.view.stepOwn(wallTick(), () => controls.sample());
-      break;
-    case "pong": {
-      if (typeof msg.c !== "number") break;
-      const rtt = Date.now() - msg.c;
-      app.pings.push({ rtt, skew: msg.now + rtt / 2 - Date.now() });
-      if (app.pings.length > 10) app.pings.shift();
-      app.skew = app.pings.reduce((a, b) => (b.rtt < a.rtt ? b : a)).skew;
-      break;
-    }
-    case "log":
-      app.log.push(...msg.entries);
-      if (app.log.length > 120) app.log.splice(0, app.log.length - 120);
-      renderLog();
-      break;
-    case "error":
-      toast(msg.message);
       break;
   }
 }
@@ -334,8 +174,8 @@ function setView(snap: RoundSnap | null): void {
   if (app.view && app.viewKey === key) {
     app.view.applySnap(snap);
   } else {
-    app.view = new RoundView(snap, app.me, {
-      send: (m) => !!app.conn?.send(m),
+    app.view = new RoundView(snap, shell.me, {
+      send: (m) => shell.send(m),
       events: onBottleEvents,
       attack: onAttack,
     });
@@ -343,13 +183,11 @@ function setView(snap: RoundSnap | null): void {
     app.bannerKey = "";
     controls.reset();
   }
-  app.view.syncState(app.state?.round);
+  app.view.syncState(shell.state?.round);
   layout();
 }
 
-function applyState(s: GameState): void {
-  const prev = app.state;
-  app.state = s;
+function onState(s: GameState, prev: GameState | null): void {
   for (const p of s.players) app.people.set(p.id, { name: p.name, color: p.color });
   if (s.phase === "lobby") {
     app.view = null;
@@ -361,12 +199,11 @@ function applyState(s: GameState): void {
     const key = `${s.match}:${s.round.n}`;
     if (app.overSounded !== key && prev) {
       app.overSounded = key;
-      if (over.winners.includes(app.me)) sfx.win();
+      if (over.winners.includes(shell.me)) sfx.win();
       else if (app.view?.mine !== undefined && app.view.mine >= 0) sfx.lose();
     }
   }
-  document.title = s.phase === "playing" ? `Pill Panic · ${s.code}` : `Pill Panic · ${s.code} · ${s.phase}`;
-  render();
+  if (s.phase !== "lobby") renderGame(s);
 }
 
 // ------------------------------------------------------------------ effects
@@ -414,7 +251,7 @@ function onAttack(a: Attack): void {
   if (a.to === mine) sfx.warn();
   const from = a.from === mine ? $("stage") : rivalEl(a.from);
   const to = a.to === mine ? $("stage") : rivalEl(a.to);
-  if (!from || !to || app.screen !== "game") return;
+  if (!from || !to || shell.screen !== "game") return;
   const r1 = from.getBoundingClientRect();
   const r2 = to.getBoundingClientRect();
   a.p.forEach(([, c], i) => {
@@ -465,12 +302,12 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
   const dt = app.lastFrame ? now - app.lastFrame : 16;
   app.lastFrame = now;
-  if (app.screen === "home") {
+  if (shell.screen === "home") {
     attract.frame(now);
     return;
   }
   const v = app.view;
-  if (app.screen !== "game" || !v) return;
+  if (shell.screen !== "game" || !v) return;
   v.stepOwn(wallTick(), () => controls.sample());
   v.advanceMirrors(Math.min(30, dt / TICK_MS));
   if (v.own) {
@@ -499,107 +336,13 @@ function frame(now: number): void {
   renderLive();
 }
 
-// ------------------------------------------------------------------ rendering: top level
-
-function render(): void {
-  const s = app.state;
-  if (!s || app.screen === "home") return;
-  if (s.phase === "lobby") {
-    if (app.screen !== "lobby") showScreen("lobby");
-    renderLobby(s);
-  } else {
-    if (app.screen !== "game") showScreen("game");
-    renderGame(s);
-  }
-}
-
-// ------------------------------------------------------------------ lobby
-
-const AIM_NAMES: Record<Aim, string> = {
-  leader: "Whoever's winning",
-  random: "A random rival",
-  all: "Everyone",
-};
-
-const SETTING_LABELS: Record<keyof Settings, { label: string; fmt: (v: never) => string }> = {
-  level: { label: "Germ level", fmt: (v: number) => `${v} · ${virusCount(v)} germs` },
-  speed: { label: "Speed", fmt: (v: Speed) => ({ low: "Low", med: "Medium", hi: "High" })[v] },
-  wins: { label: "Match", fmt: (v: number) => `First to ${v} round${v === 1 ? "" : "s"}` },
-  aim: { label: "Junk hits", fmt: (v: Aim) => AIM_NAMES[v] },
-};
-
-function renderLobby(s: GameState): void {
-  const host = canHost(s);
-  const participants = s.players.filter((p) => !p.spectator);
-  $("lobby-count").textContent = `${participants.length}/${MAX_PLAYERS}`;
-
-  $("lobby-players").innerHTML = s.players
-    .map((p) => {
-      const tags = [
-        p.id === app.me ? `<span class="tag tag-you">you</span>` : "",
-        p.id === s.hostId ? `<span class="tag tag-host">host</span>` : "",
-        p.cpu ? `<span class="tag">CPU · ${p.cpu}</span>` : "",
-        p.spectator ? `<span class="tag">watching</span>` : "",
-        p.trophies ? `<span class="tag">${p.trophies} match${p.trophies > 1 ? "es" : ""} won</span>` : "",
-        !p.cpu && !p.connected ? `<span class="tag">offline</span>` : "",
-      ].join("");
-      const kick =
-        host && p.id !== app.me
-          ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button>`
-          : "";
-      return `<li class="${!p.cpu && !p.connected ? "offline" : ""}">
-        <span class="chip" style="background:${p.color}"></span>
-        <span class="pname">${esc(p.name)}</span>${tags}<span class="spacer"></span>${kick}</li>`;
-    })
-    .join("");
-
-  $("lobby-cpu").hidden = !host;
-  for (const b of $$<HTMLButtonElement>("#lobby-cpu button")) {
-    b.disabled = participants.length >= MAX_PLAYERS;
-    b.title = b.disabled ? `The game is full (${MAX_PLAYERS} players)` : "";
-  }
-
-  const mine = me(s);
-  const taken = new Map(s.players.filter((p) => p.id !== app.me).map((p) => [p.color, p.name]));
-  $("lobby-colors").innerHTML = PLAYER_COLORS.map(
-    (c) => `<button class="swatch" style="background:${c}" data-color="${c}"
-      aria-label="${taken.has(c) ? `Color taken by ${esc(taken.get(c)!)}` : `Color ${c}`}"
-      title="${taken.has(c) ? `Taken by ${esc(taken.get(c)!)}` : ""}"
-      aria-pressed="${mine?.color === c}" ${taken.has(c) ? "disabled" : ""}></button>`,
-  ).join("");
-
-  $("lobby-settings").innerHTML = (Object.keys(SETTING_LABELS) as (keyof Settings)[])
-    .map((key) => {
-      const { label, fmt } = SETTING_LABELS[key];
-      const value = s.settings[key];
-      const show = fmt as (v: unknown) => string;
-      const control = host
-        ? `<select data-setting="${key}">${(SETTING_CHOICES[key] as (string | number)[])
-            .map((v) => `<option value="${v}" ${v === value ? "selected" : ""}>${esc(show(v))}</option>`)
-            .join("")}</select>`
-        : `<span class="value">${esc(show(value))}</span>`;
-      return `<label class="setting"><span class="label">${label}</span>${control}</label>`;
-    })
-    .join("");
-
-  const start = $<HTMLButtonElement>("lobby-start");
-  start.hidden = !host;
-  start.disabled = participants.length < 2;
-  const hostName = playerById(s.hostId)?.name ?? "the host";
-  $("lobby-wait").textContent = host
-    ? participants.length < 2
-      ? "Invite a friend or add a CPU to start."
-      : ""
-    : `Waiting for ${hostName} to start the game…`;
-}
-
 // ------------------------------------------------------------------ game
 
 function renderGame(s: GameState): void {
   const r = s.round;
   $("round-label").textContent = r ? `Match ${s.match} · Round ${r.n} · first to ${s.settings.wins}` : "";
   $("match-label").textContent = `First to ${s.settings.wins}`;
-  const mine = me(s);
+  const mine = me();
   $("own-chip").style.background = mine?.color ?? "#888";
   $("own-name").textContent = mine?.name ?? "";
   $("own-pips").innerHTML = mine ? pips(mine.wins, s.settings.wins) : "";
@@ -631,7 +374,7 @@ function syncRivals(): void {
       app.rivals.set(slot, { slot, el, canvas: new BottleCanvas(el.querySelector("canvas")!, false) });
     }
   }
-  const s = app.state;
+  const s = shell.state;
   for (const card of app.rivals.values()) {
     const id = v?.who[card.slot];
     const p = s?.players.find((x) => x.id === id);
@@ -657,7 +400,7 @@ function syncRivals(): void {
 let liveKey = "";
 function renderLive(): void {
   const v = app.view;
-  const s = app.state;
+  const s = shell.state;
   if (!v || !s) return;
   const own = v.own?.b;
   const germs = own ? String(own.viruses) : "—";
@@ -693,7 +436,7 @@ function renderLive(): void {
 }
 
 function renderScoreboard(): void {
-  const s = app.state;
+  const s = shell.state;
   const v = app.view;
   if (!s) return;
   const rows = s.players
@@ -712,9 +455,9 @@ function renderScoreboard(): void {
           : b.phase === "dead"
             ? "topped out"
             : `${b.viruses} germ${b.viruses === 1 ? "" : "s"} left`;
-      return `<li class="${p.id === app.me ? "me" : ""} ${b?.phase === "dead" ? "out" : ""}">
+      return `<li class="${p.id === shell.me ? "me" : ""} ${b?.phase === "dead" ? "out" : ""}">
         <span class="chip" style="background:${p.color}"></span>
-        <span class="pname">${esc(p.name)}${p.id === app.me ? ` <span class="tag tag-you">you</span>` : ""}</span>
+        <span class="pname">${esc(p.name)}${p.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span>
         <span class="pips">${pips(p.wins, s.settings.wins)}</span>
         <span class="meta">${status}${p.sent ? ` · ${p.sent} junk sent` : ""}</span>
       </li>`;
@@ -727,7 +470,7 @@ function renderScoreboard(): void {
 /** The big message over your bottle: countdown, GO, cleared, topped out, who took the round. */
 function renderBanner(): void {
   const v = app.view;
-  const s = app.state;
+  const s = shell.state;
   let big = "";
   let sub = "";
   let sound = "";
@@ -738,11 +481,11 @@ function renderBanner(): void {
     if (r.over) {
       const winners = r.over.winners;
       if (!winners.length) big = "DRAW!";
-      else if (winners.includes(app.me)) big = "YOU WIN!";
+      else if (winners.includes(shell.me)) big = "YOU WIN!";
       else big = `${(app.people.get(winners[0])?.name ?? "?").toUpperCase()} WINS`;
       const how =
         r.over.how === "cleared" ? "cleared the bottle first" : r.over.how === "survived" ? "was the last one standing" : "";
-      const who = winners.includes(app.me) ? "You" : winners.map((id) => esc(app.people.get(id)?.name ?? "?")).join(" & ");
+      const who = winners.includes(shell.me) ? "You" : winners.map((id) => esc(app.people.get(id)?.name ?? "?")).join(" & ");
       const next = r.nextAt ? Math.max(0, Math.ceil((r.nextAt - serverNow()) / 1000)) : 0;
       sub = `${how ? `${who} ${how}. ` : ""}${r.nextAt ? `Next round in ${next}…` : ""}`;
     } else if (wall < 0) {
@@ -782,14 +525,14 @@ function renderResults(s: GameState): void {
   $("results-title").textContent = `Match ${r.match} results`;
   const winner = r.standings.find((x) => x.id === r.winnerId);
   $("results-winner").innerHTML = winner
-    ? `<b style="color:${winner.color}">${esc(winner.id === app.me ? "You" : winner.name)}</b> ${winner.id === app.me ? "win" : "wins"} the match, ${winner.wins} round${winner.wins === 1 ? "" : "s"} to ${Math.max(0, ...r.standings.filter((x) => x !== winner).map((x) => x.wins))}.`
+    ? `<b style="color:${winner.color}">${esc(winner.id === shell.me ? "You" : winner.name)}</b> ${winner.id === shell.me ? "win" : "wins"} the match, ${winner.wins} round${winner.wins === 1 ? "" : "s"} to ${Math.max(0, ...r.standings.filter((x) => x !== winner).map((x) => x.wins))}.`
     : esc(r.note || "No winner this time.");
   $("results-rows").innerHTML = r.standings
     .map((x, i) => {
       const p = playerById(x.id);
       return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
         <td>${i + 1}</td>
-        <td><span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === app.me ? ` <span class="tag tag-you">you</span>` : ""}</span></td>
+        <td><span class="pcell"><span class="chip" style="background:${x.color}"></span>${esc(x.name)}${x.id === shell.me ? ` <span class="tag tag-you">you</span>` : ""}</span></td>
         <td>${x.wins}</td><td>${x.cleared}</td><td>${x.sent}</td><td>${p?.trophies ?? "—"}</td></tr>`;
     })
     .join("");
@@ -806,28 +549,11 @@ function renderResults(s: GameState): void {
     : `Waiting for ${playerById(s.hostId)?.name ?? "the host"} to start the next match…`;
 }
 
-// ------------------------------------------------------------------ log & chat
-
-function renderLog(): void {
-  const html = app.log
-    .map((e) =>
-      e.kind === "chat"
-        ? `<li><span class="who" style="color:${e.color ?? "inherit"}">${esc(e.from ?? "?")}:</span> ${esc(e.text)}</li>`
-        : `<li class="ev">${esc(e.text)}</li>`,
-    )
-    .join("");
-  for (const ol of $$("[data-log]")) {
-    const atBottom = ol.scrollHeight - ol.scrollTop - ol.clientHeight < 40;
-    ol.innerHTML = html;
-    if (atBottom) ol.scrollTop = ol.scrollHeight;
-  }
-}
-
 // ------------------------------------------------------------------ layout
 
 /** Size everyone else's bottles to the space beside yours (above it on phones), then yours to what's left. */
 function layout(): void {
-  if (app.screen !== "game") return;
+  if (shell.screen !== "game") return;
   const narrow = window.innerWidth <= 760;
   const v = app.view;
   const rivals = app.rivals.size;
@@ -879,98 +605,13 @@ function rivalCell(n: number, narrow: boolean, watching = false): number {
 // ------------------------------------------------------------------ wiring
 
 function wire(): void {
-  window.addEventListener("popstate", route);
-  window.addEventListener("resize", () => (app.screen === "home" ? attract.resize() : layout()));
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") app.conn?.nudge();
-  });
-  for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, unlockAudio, { passive: true });
-
-  // Home
-  $("home-name").addEventListener("change", (e) => store("pp.name", (e.target as HTMLInputElement).value.trim()));
-  $("home-create").addEventListener("click", () => void createGame());
-  $("home-join-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (readName()) void joinGame($<HTMLInputElement>("home-code").value.trim());
-  });
-  $("home-code").addEventListener("input", (e) => {
-    const el = e.target as HTMLInputElement;
-    el.value = el.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  });
-  $("home-join-invite-btn").addEventListener("click", (e) => {
-    if (readName()) void joinGame((e.currentTarget as HTMLElement).dataset.code ?? "");
-  });
-  $("home-not-this").addEventListener("click", () => {
-    history.pushState(null, "", BASE);
-    showHome(null);
-  });
-
-  // Shared
-  for (const b of $$("[data-action=leave]")) b.addEventListener("click", leave);
-  for (const form of $$<HTMLFormElement>("[data-chat]")) {
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const input = form.querySelector("input")!;
-      const text = input.value.trim();
-      if (text) app.conn?.send({ t: "chat", text });
-      input.value = "";
-      // Hand the keyboard back to the bottle after chatting mid-round.
-      if (app.screen === "game") input.blur();
-    });
-  }
-
-  // Lobby
-  $("lobby-copy").addEventListener("click", async () => {
-    const link = $<HTMLInputElement>("lobby-link");
-    try {
-      await navigator.clipboard.writeText(link.value);
-      toast("Invite link copied", "info");
-    } catch {
-      link.select();
-      toast("Press Ctrl/⌘+C to copy", "info");
-    }
-  });
-  $("lobby-link").addEventListener("focus", (e) => (e.target as HTMLInputElement).select());
-  $("lobby-players").addEventListener("click", (e) => {
-    const id = (e.target as HTMLElement).closest<HTMLElement>("[data-kick]")?.dataset.kick;
-    if (id) app.conn?.send({ t: "kick", id });
-  });
-  $("lobby-cpu").addEventListener("click", (e) => {
-    const level = (e.target as HTMLElement).closest<HTMLElement>("[data-cpu]")?.dataset.cpu;
-    if (level) app.conn?.send({ t: "addCpu", level: level as "easy" | "normal" | "hard" });
-  });
-  $("lobby-colors").addEventListener("click", (e) => {
-    const color = (e.target as HTMLElement).closest<HTMLElement>("[data-color]")?.dataset.color;
-    if (color) app.conn?.send({ t: "color", color });
-  });
-  $("lobby-settings").addEventListener("change", (e) => {
-    const el = e.target as HTMLSelectElement;
-    const key = el.dataset.setting as keyof Settings | undefined;
-    if (!key) return;
-    const value = key === "level" || key === "wins" ? Number(el.value) : el.value;
-    app.conn?.send({ t: "settings", settings: { [key]: value } });
-  });
-  $("lobby-start").addEventListener("click", () => app.conn?.send({ t: "start" }));
-
-  // Results
-  $("results-again").addEventListener("click", () => app.conn?.send({ t: "start" }));
-  $("results-lobby").addEventListener("click", () => app.conn?.send({ t: "lobby" }));
-
-  const mute = $("mute");
-  const paintMute = () => {
-    mute.textContent = isMuted() ? "🔇" : "🔊";
-    mute.setAttribute("aria-pressed", String(isMuted()));
-  };
-  paintMute();
-  mute.addEventListener("click", () => {
-    setMuted(!isMuted());
-    paintMute();
-    mute.blur();
-  });
+  window.addEventListener("resize", () => (shell.screen === "home" ? attract.resize() : layout()));
 }
 
 wire();
-route();
+shell.start();
+// Measure the server's clock every couple of seconds while connected.
+setInterval(ping, 2000);
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) Object.assign(window, { __pp: { app, controls } });
+if (import.meta.env.DEV) Object.assign(window, { __pp: { app, controls, shell } });

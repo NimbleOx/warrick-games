@@ -1,3 +1,4 @@
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { newBrain, think, type Brain, type CpuLevel } from "./ai";
 import { B_QUIT, Bottle, PLAYER_BUTTONS, virusLayout, type BottleEvent, type Garbage } from "./bottle";
 import {
@@ -6,11 +7,10 @@ import {
   MAX_LAG_OFFLINE,
   MAX_LAG_TICKS,
   MAX_LEAD_TICKS,
-  MAX_PLAYERS,
   START_SPEED,
 } from "./constants";
 import type { Aim, Attack, DropEntry, Frame, KeyEntry, LaneSnap, RoundSnap, Segment, Speed } from "./protocol";
-import { randInt, shuffle, type Rng } from "./rng";
+import { randInt, shuffle, type Rng } from "@warrick/kit/shared/rng";
 
 export interface LaneHooks {
   key?(tick: number, mask: number): void;

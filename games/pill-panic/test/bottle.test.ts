@@ -23,7 +23,7 @@ import {
   type Piece,
 } from "../src/shared/bottle";
 import { COLS, GRAVITY, ROWS, START_SPEED, virusCount, virusTop } from "../src/shared/constants";
-import { mulberry32 } from "../src/shared/rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 
 /** Build a bottle from rows of text, bottom row last. r/y/b are viruses, R/Y/B loose halves, . empty. */
 function bottleFrom(rows: string[]): Bottle {

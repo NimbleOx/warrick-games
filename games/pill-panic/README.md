@@ -39,7 +39,7 @@ That creates a Worker called `pill-panic` with the `GameRoom` Durable Object (SQ
 It's served at **https://warrick.games/pill-panic/**, one path on a site shared with the other games. The hub page at the root is its own Worker (`../../hub`, with `warrick.games` as a Custom Domain). This Worker has the zone route `warrick.games/pill-panic*` in `wrangler.jsonc`, and routes take precedence over a Custom Domain. The `workers.dev` address is off (`workers_dev: false`).
 
 - Vite's `base` is `/pill-panic/`, and the client builds every URL from `import.meta.env.BASE_URL`. The API lives under `/pill-panic/api/`.
-- Workers static assets are looked up by request path and know nothing about Vite's `base`. The `nestClientUnderBase` plugin in `vite.config.ts` moves the client build into `dist/client/pill-panic/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/pill-panic/assets/*.js` and `/pill-panic/g/ABCDE` both return 200.
+- Workers static assets are looked up by request path and know nothing about Vite's `base`. `vite.config.ts` is the kit's `gameConfig("pill-panic")`, which moves the client build into `dist/client/pill-panic/` and leaves `index.html` at the root, where the single-page-application fallback looks for it. `npm run dev` doesn't show the problem, so check a build before deploying: `npm run build && npx vite preview`, then confirm `/pill-panic/assets/*.js` and `/pill-panic/g/ABCDE` both return 200.
 - All the games share one origin, so `localStorage` keys start with `pp.`.
 - After the first deploy, turn Pill Panic's "Coming soon" card in `../../hub/public/index.html` into a link and deploy the hub.
 
@@ -73,8 +73,11 @@ src/shared/    code used by both sides
   round.ts       Lane (a bottle plus queued inputs), Mirror (a replayed bottle), Round (the server's round)
   ai.ts          CPU players
   protocol.ts    settings, game state and message types
-src/worker/    index.ts (routes), room.ts (Durable Object + loop), game.ts (lobby and match rules)
-src/client/    main.ts (UI + networking glue), view.ts (this browser's copy of the round), render.ts (canvas),
-               input.ts (keys + touch pad), net.ts, audio.ts, attract.ts (home-screen CPU demo)
+src/worker/    index.ts (routes), room.ts (Durable Object: inputs, clock pings, the loop), game.ts (match rules)
+src/client/    main.ts (the game screen, the clock, and its hooks into the shell), view.ts (this browser's copy
+               of the round), render.ts (canvas), input.ts (keys + touch pad), audio.ts (sounds),
+               attract.ts (home-screen CPU demo)
 test/          Vitest tests: bottle rules, the networked round, game flow; test/live checks a running server
 ```
+
+The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`). Pill Panic keeps its own clock pings (every 2 seconds, timed by round trip, since every bottle runs on the server's clock) and takes input messages up to 8 KB, twice what the kit allows.

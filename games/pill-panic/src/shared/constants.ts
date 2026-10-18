@@ -60,8 +60,7 @@ export const GARBAGE_GRACE_TICKS = 2 * TICKS_PER_SEC;
 /** Pause between rounds of a match. */
 export const INTERMISSION_MS = 4500;
 
-export const MAX_PLAYERS = 8;
-
+/** Pill Panic's player colours: pink and violet where the kit's usual palette has red and pink. */
 export const PLAYER_COLORS = [
   "#ff6b8b", // pink
   "#4da6ff", // blue
@@ -72,7 +71,3 @@ export const PLAYER_COLORS = [
   "#ff9a3c", // orange
   "#e9ecf8", // white
 ] as const;
-
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const CODE_LENGTH = 5;
-export const CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;

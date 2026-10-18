@@ -15,7 +15,7 @@ import {
   virusCount,
   virusTop,
 } from "./constants";
-import { mulberry32 } from "./rng";
+import { mulberry32 } from "@warrick/kit/shared/rng";
 
 // Colors. A cell's low two bits; 0 is empty.
 export const RED = 1;

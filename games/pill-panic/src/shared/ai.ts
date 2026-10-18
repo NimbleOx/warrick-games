@@ -18,7 +18,7 @@ import {
   type Piece,
 } from "./bottle";
 import { COLS, ROWS, SPAWN_X } from "./constants";
-import { mulberry32, type Rng } from "./rng";
+import { mulberry32, type Rng } from "@warrick/kit/shared/rng";
 
 export type CpuLevel = "easy" | "normal" | "hard";
 

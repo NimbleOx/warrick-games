@@ -1,7 +1,7 @@
 import { newBrain, think, type Brain } from "../shared/ai";
 import { Bottle } from "../shared/bottle";
 import { COLS, START_SPEED, TICK_MS } from "../shared/constants";
-import { randomSeed } from "../shared/rng";
+import { randomSeed } from "@warrick/kit/shared/rng";
 import { bottleSize, paintBottle } from "./render";
 
 /** The home screen's backdrop: two CPUs racing to clear their bottles. */

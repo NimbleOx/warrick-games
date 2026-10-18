@@ -1,5 +1,6 @@
+import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { Bottle, type BottleEvent, type Garbage } from "../shared/bottle";
-import { MAX_PLAYERS, TICK_MS } from "../shared/constants";
+import { TICK_MS } from "../shared/constants";
 import type { Attack, ClientMsg, DropEntry, Frame, KeyEntry, LaneSnap, RoundInfo, RoundSnap } from "../shared/protocol";
 import { Mirror } from "../shared/round";
 

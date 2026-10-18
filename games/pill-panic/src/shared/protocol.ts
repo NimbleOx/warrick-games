@@ -1,7 +1,8 @@
+import type { BasePlayer, BaseState, LobbyMsg, LogEntry, RoomMsg } from "@warrick/kit/shared/protocol";
 import type { CpuLevel } from "./ai";
 import type { BottleSnap, Garbage } from "./bottle";
 
-export type { CpuLevel };
+export type { CpuLevel, LogEntry };
 
 export type Phase = "lobby" | "playing" | "results";
 export type Speed = "low" | "med" | "hi";
@@ -31,14 +32,7 @@ export const SETTING_CHOICES = {
   aim: ["leader", "random", "all"] as Aim[],
 };
 
-export interface PlayerState {
-  id: string;
-  name: string;
-  color: string;
-  cpu: CpuLevel | null;
-  connected: boolean;
-  /** Watching: all eight seats were taken when they arrived. */
-  spectator: boolean;
+export interface PlayerState extends BasePlayer {
   /** Bottle slot in the current round, or -1 (between matches, or sitting a round out). */
   slot: number;
   /** Rounds won in the current match. */
@@ -100,26 +94,11 @@ export interface MatchResult {
   standings: Standing[];
 }
 
-export interface GameState {
-  code: string;
-  createdAt: number;
-  lastActive: number;
+export interface GameState extends BaseState<PlayerState, Settings> {
   phase: Phase;
-  hostId: string;
-  settings: Settings;
-  players: PlayerState[];
   match: number;
   round: RoundInfo | null;
   results: MatchResult | null;
-  nextPlayerNum: number;
-}
-
-export interface LogEntry {
-  at: number;
-  kind: "chat" | "event";
-  from?: string;
-  color?: string;
-  text: string;
 }
 
 /** [tick, buttons]: from this tick on, these buttons are held. */
@@ -172,28 +151,15 @@ export interface Frame {
 }
 
 export type ClientMsg =
-  | { t: "hello"; token: string; name: string }
-  | { t: "color"; color: string }
-  | { t: "settings"; settings: Partial<Settings> }
-  | { t: "addCpu"; level: CpuLevel }
-  | { t: "kick"; id: string }
-  | { t: "start" }
-  | { t: "lobby" }
+  | Exclude<LobbyMsg, { t: "ping" }>
   | { t: "in"; e: number; n: number; k?: KeyEntry[]; g?: DropEntry[] }
   | { t: "resync"; own?: boolean }
-  | { t: "chat"; text: string }
-  | { t: "leave" }
+  /** `c` is the browser's clock when it sent this, so it can time the round trip from the pong. */
   | { t: "ping"; c?: number };
 
 export type ServerMsg =
+  | Exclude<RoomMsg<GameState>, { t: "welcome" | "pong" }>
   | { t: "welcome"; you: string; state: GameState; log: LogEntry[]; snap: RoundSnap | null; now: number }
-  | { t: "state"; state: GameState; now: number }
   | { t: "snap"; snap: RoundSnap }
   | Frame
-  | { t: "log"; entries: LogEntry[] }
-  | { t: "error"; message: string }
-  | { t: "kicked" }
   | { t: "pong"; now: number; c?: number };
-
-export const CLOSE_NOT_FOUND = 4404;
-export const CLOSE_KICKED = 4403;

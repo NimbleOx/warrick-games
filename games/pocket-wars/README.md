@@ -1,79 +1,22 @@
 # Pocket Wars
 
-A small turn-based tactics game like *Advance Wars*, for 2–4 players. Each player starts with an HQ and a factory on a hand-made grid map. On your turn you collect funds from your buildings, build units at your factories, then move each unit once and attack, capture or wait. Capture an enemy HQ, or wipe out an army, to knock that player out. The last player standing wins.
+A multiplayer, browser-based tactics game like *Advance Wars*. Each player starts with an HQ and a factory on a hand-made grid map. On your turn you collect funds from your buildings, build units at your factories, then move each unit once and attack, capture or wait. Capture an enemy HQ, or wipe out an army, to knock that player out. The last player standing wins. 2–4 players, no accounts: one person creates a game and shares the 5-character code or the link.
 
-## Rules for v1
+It runs on Cloudflare: a Worker serves the client and the API, and each game is one Durable Object.
 
-- 2–4 players online, each on their own device, plus CPUs (easy, normal, hard). The lobby holds 4. Seats are dealt out at random when the game starts. Seat 1 moves first, and the order stays the same all game. A *day* is one turn for every player.
-- **Maps.** Hand-made maps, shipped as ASCII data in `src/shared/maps.ts`, at most 20 × 15 so they fit a phone. Each map is for an exact number of players. The host picks one in the lobby, or *Auto* picks one at random for however many players there are. v1 ships three 2-player maps (Pocket Duel, a quick 11 × 8; Twin Rivers; Mirror Lake), one 3-player map (Three Crowns) and one 4-player map (Four Corners). The 2-player maps have 180° rotational symmetry, the 4-player map is mirrored on both axes, and the 3-player map is mirrored left to right with the third seat on the axis. A test checks the symmetry.
-- **Terrain.** Plains, road, bridge (a road over a river), forest, mountain, river and sea, plus three kinds of building: HQ, city and factory. Each terrain has a movement cost for each movement type and gives a unit standing on it 0–4 defence stars:
+## Playing
 
-  | Terrain | Foot | Boots | Wheels | Treads | Defence |
-  | --- | --- | --- | --- | --- | --- |
-  | Plains | 1 | 1 | 2 | 1 | 1 |
-  | Road, bridge | 1 | 1 | 1 | 1 | 0 |
-  | Forest | 1 | 1 | 3 | 2 | 2 |
-  | Mountain | 2 | 1 | – | – | 4 |
-  | River | 2 | 1 | – | – | 0 |
-  | Sea | – | – | – | – | 0 |
-  | City, factory | 1 | 1 | 1 | 1 | 3 |
-  | HQ | 1 | 1 | 1 | 1 | 4 |
-
-- **Buildings.** Each player starts with an HQ and a factory, and some maps give them a city too. The other cities and factories start neutral. Every building you own pays 1,000 funds at the start of your turn. A factory you own builds one unit per turn if nothing is standing on it. The new unit can't act until your next turn.
-- **Units.** All the stats live in one table in `src/shared/units.ts`:
-
-  | Unit | Cost | Move | Movement | Range | Captures |
-  | --- | --- | --- | --- | --- | --- |
-  | Infantry | 1,000 | 3 | foot | 1 | yes |
-  | Bazooka | 3,000 | 2 | boots | 1 | yes |
-  | Recon | 4,000 | 8 | wheels | 1 | |
-  | Tank | 7,000 | 6 | treads | 1 | |
-  | Heavy Tank | 16,000 | 5 | treads | 1 | |
-  | Artillery | 6,000 | 5 | treads | 2–3 | |
-
-  No air or naval units, ammo or fuel in v1.
-- **Your turn.** First you collect funds from every building you own, and each of your units standing on one of your buildings is repaired by 2 HP. A repair costs 10% of the unit's price per HP, and it's skipped if you can't pay. Then you build, and move each unit once in any order. Pick a unit and a destination within its movement range, then give it one action: **Attack**, **Capture** or **Wait**. Until you choose the action you can cancel the move and the unit goes back. Press **End turn** when you're done. Units you didn't move just stay where they are.
-- **Moving.** A unit can move through your own units but not through enemies, and can't stop on a tile that's taken. Staying put counts as a move.
-- **Combat.** Units have 10 HP. Damage is deterministic, with no luck: `round(base × attackerHP/10 × (100 − stars × defenderHP)/100)` in HP, where `base` comes from the damage table below (the percentage a 10-HP attacker does to a defender on a 0-star tile). A defender that survives hits back at once with its new HP, if it's direct-fire and next to the attacker. Before you confirm an attack, the game shows the damage both ways.
-
-  | Attacker ↓ / Defender → | Inf | Baz | Recon | Tank | Heavy | Art |
-  | --- | --- | --- | --- | --- | --- | --- |
-  | Infantry | 55 | 45 | 12 | 5 | 1 | 15 |
-  | Bazooka | 65 | 55 | 85 | 55 | 15 | 70 |
-  | Recon | 70 | 65 | 35 | 6 | 1 | 45 |
-  | Tank | 75 | 70 | 85 | 55 | 15 | 70 |
-  | Heavy Tank | 105 | 95 | 105 | 85 | 55 | 105 |
-  | Artillery | 90 | 85 | 80 | 70 | 45 | 75 |
-
-- **Artillery** fires at range 2–3 (Manhattan distance), only if it hasn't moved this turn, and never hits back. Units it hits never hit back either, because it's out of their reach.
-- **Capturing.** Every building has 20 capture points. Infantry or a Bazooka standing on a building you don't own can **Capture**: the points drop by its current HP. At 0 the building is yours and the points go back to 20. If the capturing unit moves off or is destroyed, the points reset to 20.
-- **Knocked out.** You're out when your HQ is captured, when you resign, or when you have no units and can't build any: no factory of yours is free, or you can't afford Infantry after collecting funds. That's checked at the start of your turn, and at once if you have no units and no factories. Your units are removed and your buildings turn neutral, except a captured HQ, which the captor keeps and which pays them like a city. You can resign from the game screen at any time, since games run long. The last player standing wins. Then come the standings: the winner, then everyone else by how long they lasted.
-- **Turn timer.** The host picks off, 60, 120 or 180 seconds (default 120). When it runs out, your turn ends and the units that haven't acted just wait. If the player whose turn it is isn't connected, their turn ends after 60 seconds (sooner if their clock runs out first). Someone who comes back mid-turn gets the clock they had, never more, so reloading can't buy time; if it had nearly run out, they get 5 seconds, once a turn. (The kit's turn clock, `@warrick/kit/worker/turns`, keeps these rules.) The host can hand any missing player's seat to a normal CPU. The player takes it back when they return.
-- **CPU players**:
-  - *Easy* attacks the best target it can reach (the most damage by value). Otherwise it moves toward the nearest enemy, or the nearest city it doesn't own, and captures what it lands on. It builds random units it can afford.
-  - *Normal* scores attacks by the value of the damage it deals minus the value of the counter-damage it takes (HP × unit cost), and only makes attacks that come out ahead. It sends infantry to capture, a different building for each one. It keeps artillery out of reach of enemy direct-fire units, prefers good defensive terrain and pulls badly damaged units back to its cities to repair. It builds infantry for the first three days, then counters to what the enemy fields (the most value won per factory slot), plus enough infantry to keep capturing.
-  - *Hard* adds a threat map, so it avoids ending a move where enemies can hit it hard (the strongest attacker counts in full, each extra one less). It adds a bonus for kills, so it focuses fire to finish units. It guards its HQ (enemy capturers near it come first, and it blocks the HQ tile when they're close), and it plans captures several turns ahead by matching capturers to buildings by travel time.
-  - From day 25 the CPUs grow bolder, reaching full boldness by day 50: they push harder, mind threats less and accept slightly losing trades, so long games between careful armies don't stall.
-  - CPU moves play out one unit at a time, about a second apart, so people can follow. The host can turn on **Fast CPUs** in the lobby or during the game.
-- **Not in v1:** fog of war, air and naval units, ammo and fuel, transports, joining damaged units, commanders and their powers, weather, random maps, a map editor, teams, and spectator chat. Design so they can be added: movement types, terrain and units are data tables, and the rules look up range, captures and counterattacks from the unit table, not by unit name.
-- **First-move advantage.** Seat 1 builds and moves first, which is a big edge here: damage is deterministic, so whoever strikes first wins the exchange. Later seats get extra starting funds (`SEAT_FUNDS` in `src/shared/constants.ts`): seat 2 of 2 starts with 4,000, and seats 2–4 of 3 or 4 start with 2,000. In simulated games between two hard CPUs, seat 1 won 90–95% of 2-player games with no bonus and 35–45% with it. Playtests with people should check this.
-
-## Design notes
-
-- **Pure rules in `src/shared/`.** The terrain and unit tables, the maps, pathfinding, damage, the action checks and their effects, turn start (income, repairs), elimination and the CPU are all pure functions over a `Board`: units, building owners, capture points, funds and who's out. The server and the CPU use the same functions, and so does the home screen's demo, where CPUs play each other. Vitest tests them directly.
-- **The map is static data.** `MAPS[id]` has the size, terrain per tile and the building list (position, kind, starting owner). The state carries only the map id, the building owners and capture points (indexed like the map's building list) and the units. Clients have the maps too, so they never come over the wire.
-- **Movement** is Dijkstra over the terrain cost for the unit's movement type, with the move points as budget. Enemy units block, your own units can be passed through, and a unit can stop only on an empty tile or where it started. The result has the cost and previous tile of each reachable tile, so the path can be drawn and animated.
-- **One message per unit action.** The client keeps the move to itself until you choose the action, which is how cancelling works. Then it sends `{ t: "act", unit, to, action, target? }`. The server checks everything: that it's your turn, the unit is yours and hasn't acted, the destination is reachable and free, the attack is in range (artillery hasn't moved), the capture is allowed. Builds are `{ t: "build", at, unit }` (your factory, free, enough funds). Anything wrong comes back as an error the player can read.
-- **Broadcast each action, then animate.** Each action goes out as an event (the path, the damage both ways, what was destroyed, capture progress), together with the state after it: a copy made when the event is queued, since the room sends the outbox only once the whole action is done (ending your turn when the next player has nothing left sends their turn, which knocks them out, and the one after it, each with its own state). The last event of an action carries the state at the end of it, because the room sends no state message of its own after an event that carries one. Turn starts go out the same way (income, repairs). Clients queue these and play them in order: the unit slides along its path, then the attack and the numbers, then they snap to the state that came with the event. A burst of queued events plays faster, so Fast CPUs and reconnects don't fall behind. The game is saved after every action and turn end, so a deploy mid-game resumes exactly where it was.
-- **Drawing.** The canvas is drawn when what it shows changes (the state, the selection, the mouse, the camera, a resize) and while something on it moves (an animation, effects, the pulsing selection), not on every frame. Work a selection needs, like the tiles its unit could attack, is done once when it's picked.
-- **The UI.** Tap one of your ready units to see where it can move, with the tiles it could then attack outlined. Tap a destination and the unit moves there, and a small menu offers Attack, Capture, Wait and Cancel. For Attack, the targets are highlighted. Tap one to see the forecast (damage both ways), and tap it again or press Attack to fire. Tap a free factory of yours to open its build menu. Tap an enemy to see how far it can move and attack. The HUD shows the day, whose turn it is, the clock, your funds and income, and an End turn button that asks again if units are still ready. Units show their HP when it's under 10, and done units are greyed out. On phones the map pans with a drag and zooms with a pinch, and a mouse wheel zooms on desktop.
-- **CPU turns are a sequence of steps.** Each one picks the best-scoring action for one unit given the board as it is now (or a build, once the units are done, or End turn). Scores are in funds, so attacks, captures and moves compare. A unit whose best option is to stay put is skipped. Every step goes through the same check a human action does. A test plays whole CPU games on every map at every level and checks that every step is legal.
-- **Balance checks.** `test/sim.ts` plays CPU-only games with the pure rules. `BALANCE=1 npx vitest run test/balance.test.ts` prints how often each seat wins on every map, for tuning `SEAT_FUNDS` and the maps.
-- **Dev aid.** In `npm run dev`, the console can play your seat with a CPU: `__pw.autoplay("hard")` (and `null` to stop). That's how full games against every level were played in the preview.
-
-## Lessons from this game
-
-- Symmetric isn't fair if both sides race for the same objective: seat 1 wins the ties. Twin Rivers first had each side's spare factory in the middle, 9 and 10 tiles from the two HQs, and seat 1 won almost every CPU game even with 10,000 extra for seat 2. With each spare factory behind its own side's river, it's even. Give each seat its own expansion and keep the contested buildings few.
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/pocket-wars/g/K7Q2M`. Send either one to your friends.
+- The host picks the map, the turn timer (off, 60, 120 or 180 seconds) and whether CPUs move one unit at a time or fast (the host can switch that mid-game too), and can add CPU players (easy, normal or hard). There are three maps for two players (Pocket Duel, Twin Rivers and Mirror Lake), Three Crowns for three and Four Corners for four; *Auto* picks one for however many are playing.
+- At the start of your turn every building you own pays 1,000 funds, and your units standing on your buildings are repaired by up to 2 HP, at 10% of the unit's price per HP.
+- Tap a free factory of yours to build: Infantry 1,000, Bazooka 3,000, Recon 4,000, Artillery 6,000, Tank 7,000 or Heavy Tank 16,000. A new unit can act from your next turn.
+- Tap one of your ready units to see where it can move, with the tiles it could then attack outlined. Tap a destination, then pick **Attack**, **Capture**, **Wait** or **Cancel**; until you pick, the unit can go back (Esc steps back too). To attack, tap a target to see the damage both ways, then tap it again or press **Attack**. Tap an enemy to see how far it can move and attack. **End turn** asks again if units are still ready.
+- There's no luck in a fight: the damage depends on the two units, their HP and the cover the defender's tile gives (forests, cities and mountains help). A defender that survives hits back if it's next to the attacker. Artillery fires 2 or 3 tiles away, only if it hasn't moved, and nothing can hit back.
+- Infantry and Bazookas capture buildings. Every building has 20 points, and each **Capture** takes off the unit's HP. If it moves off or is destroyed, the points go back to 20.
+- You're out when your HQ is captured, when you have no units and can't build any, or when you resign, which you can do at any time, since games run long. The last army standing wins.
+- Moving first is a big edge, so later seats start with extra funds: 4,000 for the second of two, 2,000 for the others in a game of three or four.
+- On a phone, drag to pan the map and pinch to zoom. On a desktop, the mouse wheel zooms.
+- When your clock runs out, your turn ends and your other units wait. Reloading the page puts you back in your seat, with the clock you had (reloading can't buy time). If the player whose turn it is isn't connected, their turn ends after 60 seconds, and the host can hand their seat to a normal CPU until they come back. Leaving mid-game leaves your army on the map. Anyone who joins mid-game watches until the next game.
 
 ## Development
 
@@ -88,3 +31,48 @@ npm run typecheck -w games/pocket-wars
 ## Deploying
 
 `npm run deploy -w games/pocket-wars` builds it and deploys it to **https://warrick.games/pocket-wars/**. The root README explains how the games share warrick.games. `localStorage` keys start with `pw.`.
+
+## How it works
+
+```
+browser ──HTTP──▶ Worker ──▶ static assets (client)
+   │                │
+   │   POST /pocket-wars/api/games            → allocate a code, initialize that room
+   │   GET  /pocket-wars/api/games/:code      → does the game exist?
+   └─WS─ /pocket-wars/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+```
+
+- **One Durable Object per game code**, built on the kit's `Room`: the game state, each player's secret token and the chat/event log live in its storage, and it talks to browsers over hibernatable WebSockets, so a game costs nothing between actions. The board is in the state, saved after every action and every turn's end, so a deploy mid-game resumes exactly where it was.
+- **The rules are pure functions** over a `Board` (units, building owners, capture points, funds and who's out) in `src/shared/`: the terrain and unit tables, pathfinding, damage, the action checks and their effects, the start of a turn, knockouts and the CPUs. The server, the CPUs and the home screen's demo, where CPUs play each other, all use them.
+- **The maps are static data** (`src/shared/maps.ts`, drawn in ASCII), and the clients have them too, so the state carries only the map id, the building owners and capture points, and the units.
+- **One message per unit action.** The client keeps a move to itself until you pick the action, which is how Cancel works, then sends the unit, its destination, the action and the target. The server checks all of it the same way for people and CPUs, and anything wrong comes back as an error you can read.
+- **Each action is broadcast as an event** (the path, the damage both ways, what was destroyed, capture progress) carrying the state right after it. Clients queue the events and play them in order, the unit sliding along its path and then the attack, before they snap to the state that came with each. A burst of events plays faster, so Fast CPUs and reconnects don't fall behind.
+- **One alarm drives every timer:** the turn clock, the minute an absent player has, each CPU step and the winner's banner. The turn clock is the kit's (`@warrick/kit/worker/turns`). Timers pause when nobody is connected, and a game with no connections for 12 hours is deleted.
+- **CPU turns are a sequence of steps**, about a second apart unless the host turns on Fast CPUs. Each step picks the best-scoring action for one unit (or a build, or End turn), with every score in funds, and goes through the same checks as a person's action. Easy goes for the best target in reach and captures what it lands on. Normal only makes trades that come out ahead, keeps artillery out of reach and pulls hurt units back to repair. Hard also steers clear of tiles enemies can hit hard, focuses fire, guards its HQ and plans captures several turns ahead. From day 25 they grow bolder, so long games don't stall.
+- **The canvas is drawn only when something on it changes or moves**, not on every frame.
+
+### Balance
+
+Seat 1 builds and moves first, and with no luck in a fight, whoever strikes first wins the exchange. In simulated games between two hard CPUs, seat 1 won 90–95% of 2-player games with no bonus and 35–45% with seat 2's 4,000 (`SEAT_FUNDS` in `src/shared/constants.ts`). `BALANCE=1 npx vitest run test/balance.test.ts` prints how often each seat wins on every map. Maps matter too: Twin Rivers first had each side's spare factory in the middle, and seat 1 won almost every CPU game even with 10,000 extra for seat 2; with each spare factory behind its own side's river, it's even. Playtests with people should check all of this.
+
+### Layout
+
+```
+src/shared/    code used by both sides
+  terrain.ts     terrain types, movement costs, defence, income and capture points
+  units.ts       the unit table and the damage table
+  maps.ts        the hand-made maps
+  rules.ts       the Board, movement, damage, action checks and effects, turn start, knockouts
+  ai.ts          CPU players
+  constants.ts   seat funds, CPU pacing, animation timings, the away minute
+  protocol.ts    settings, game state, events and message types
+src/worker/    index.ts (routes), room.ts (Durable Object: messages and the alarm), game.ts (seats, turns, actions, timers)
+src/client/    main.ts (the game screen, selection, menus and the event queue, and its hooks into the shell),
+               render.ts (the map and units on a canvas, panning and zooming), audio.ts (sounds),
+               attract.ts (the home screen's CPU demo)
+test/          Vitest tests for the rules, movement, maps and their symmetry, the CPUs and the game flow, and room.test.ts,
+               which runs the real room (reloads, restarts, stand-ins, events) through the kit's test harness;
+               sim.ts plays CPU-only games, and balance.test.ts uses it
+```
+
+The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).

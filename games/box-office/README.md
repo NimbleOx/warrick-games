@@ -1,47 +1,19 @@
 # Box Office
 
-Dots and Boxes for up to 8 players. The board is a grid of dots. On your turn you draw one line between two neighbouring dots, and if that line closes a box, the box is yours and you go again. When every box is claimed, whoever holds the most wins. With more than two players, every chain you open goes to the next player in turn order, so it matters who sits after you.
+A multiplayer, browser-based take on *Dots and Boxes*. The board is a grid of dots. On your turn you draw one line between two neighbouring dots, and if that line closes a box, the box is yours and you go again. When every box is claimed, whoever holds the most wins. Up to 8 players, no accounts: one person creates a game and shares the 5-character code or the link.
 
-## Rules for v1
+It runs on Cloudflare: a Worker serves the client and the API, and each game is one Durable Object.
 
-- 2–8 players online, each on their own device, plus CPUs. Turn order is random and stays the same all game.
-- The host picks the board: small, medium or large (default medium). The size grows with the number of players at the start, CPUs included, so everyone has boxes to fight over. Sizes are in boxes, columns × rows:
+## Playing
 
-  | Players | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-  | --- | --- | --- | --- | --- | --- | --- | --- |
-  | Small | 4×4 | 5×4 | 5×5 | 6×5 | 6×6 | 7×6 | 8×6 |
-  | Medium | 5×5 | 6×5 | 6×6 | 7×6 | 8×6 | 8×7 | 9×7 |
-  | Large | 7×6 | 8×6 | 8×7 | 9×7 | 9×8 | 10×8 | 11×8 |
-
-  The lobby shows the size the current player count will get.
-- On your turn you draw one undrawn line between two neighbouring dots. If it completes a box (its fourth side), the box is yours. A line between two boxes can complete both at once. If your line completed at least one box you must move again; otherwise the turn passes to the next player.
-- The game ends when every box is claimed. Most boxes wins, and ties share the win. The results rank everyone by boxes, with tied players sharing a place.
-- Turn timer: the host picks off, 10, 20 or 30 seconds (default 20). The clock restarts after every line, so a long chain of captures gets the full time for each line. When it runs out, the game finishes your turn for you: it takes every box you can complete, then draws a random line that doesn't give anyone a box. If every line gives boxes away, it draws the one that gives away the fewest.
-- If the player whose turn it is isn't connected, the game plays their turn the same way after 5 seconds, whatever the timer setting. A player who leaves mid-game keeps their seat and their boxes, and their turns are played for them.
-- Hints: the host picks off or on (default off), and it holds for every player in the game, so it's fair. With hints on, the boxes you can complete pulse on your turn, the hint line says you can close one, and Take all is there. With them off, nothing on screen says a box is ready to close: you spot the third sides yourself. The HUD shows which it is all game (💡 Hints off, or lit: Hints on). A room saved before hints were a setting plays with them off.
-- **Take all** (or T), with hints on: when you can complete boxes, a button takes every one you can in one go. It never declines boxes; to double-cross, take them one at a time. Since its appearing would give the boxes away, it's part of the hints: with them off there's no button, T only says hints are off, whether or not there's anything to take, and the server refuses it before it looks at the board.
-- Anyone who joins mid-game watches until the next game.
-- CPU players (easy, normal, hard):
-  - Easy completes a box when it can and otherwise draws a random line.
-  - Normal takes every box it can. Then it draws a random safe line, one that doesn't give anyone a box. When no safe line is left, it opens whatever gives away the fewest boxes.
-  - Hard counts the chains and loops and plays the endgame properly. When there are no safe lines left after its captures, it decides at the last two boxes of a chain (the last four of a loop) whether to take them or decline them with a double-dealing move, which hands those boxes to the next player and makes that player open the next chain. In the last stretch of safe lines it plays for the long-chain rule: it looks ahead to see who will be forced to open the first long chain and steers that onto someone else, using short chains as tempo moves. It opens 2-chains in the middle so they can't be declined. With more than two players it weighs who receives each chain: it chooses by its margin over the best other player, not just its own box count.
-  - A CPU thinks for about 0.8 seconds before the first line of its turn, and plays the rest of a capture run at 0.25 seconds a line.
-- Controls: hovering or touching highlights the nearest undrawn line, with a generous hit area (anywhere within about half a box of it). Click or tap to draw it. When the boxes are smaller than a fingertip (under 48 CSS pixels) on a touch screen, the first tap previews the line and a second tap on it draws it; tapping elsewhere moves or clears the preview. With hints on, boxes you can complete pulse on your turn.
-- Lines are drawn in their drawer's colour. Claimed boxes are filled with the owner's colour and initial (two letters when two players share an initial). The last move is highlighted. New lines animate in quickly, and a run of captures plays faster the longer it is, so long chains don't drag.
-- Not in v1: odd board shapes with holes, bonus boxes worth more, teams, boards with the outer edge already drawn, handing a missing player's seat to a CPU, and keyboard play. Design so they can be added.
-
-## Design notes
-
-- The rules, the chain analysis and the CPU are pure functions in `src/shared/`, with no I/O and no clock, so Vitest can drive them directly.
-  - `board.ts`: geometry and rules. A board is `{ w, h, lines, boxes }`: `lines[e]` is the seat that drew edge `e` (or -1), `boxes[b]` the seat that claimed box `b` (or -1). Horizontal edges come first, `r * w + c` for `r` in `0..h`, then vertical edges, `H + r * (w + 1) + c`. Geometry (each box's four edges, each edge's one or two boxes, edge endpoints for drawing) is computed once per size and cached. `playLine(board, edge, seat)` draws a line and returns the boxes it completed; the caller decides whose turn is next.
-  - `chains.ts`: the analysis. A line is *safe* if it doesn't make any box's third side. A box with exactly two undrawn sides is a chain box. Chain boxes that share an undrawn side link up into chains (paths) and loops (cycles). Boxes with three or four undrawn sides are junctions: when the endgame starts, each junction joins its two longest arms into one chain (the opener uses up the short arms first), and its other arms count as chains of their own. `giveaway(board, edge)` plays a line out with greedy captures and counts what the next player gets, which is how Normal and the timeout pick the cheapest line.
-  - `endgame.ts`: the endgame model over a list of components. The opener picks a component; the next player in turn order receives it. Short chains (1–2 boxes) are taken whole. For a long chain (3+) the receiver can take it all and open the next component, or take all but 2, give the 2 to the player after them, and that player opens next. For a loop it's all but 4. Every player maximizes their own boxes (max-n). The answer is relative to the opener, so it's memoized on just the remaining components and the number of players. The memo lives for one CPU decision (`EndgameMemo`, at most 100,000 positions, about 10 MB), so rooms never share it; the slowest decision, Hard with 8 players on the large board, takes about 120 ms.
-  - `ai.ts`: `cpuMove(board, seats, me, level, rng)` returns one edge. The room calls it once per line.
-- Hard's safe-phase search: with 10 or fewer safe lines left, it searches the orders the safe lines can be drawn in (memoized on which of them are drawn; whose move it is follows from the count, since safe lines never capture) and scores each position with no safe lines left by the endgame model. With more than 10, it draws a random safe line.
-- Room for the v1 exclusions: a hole is a box that starts as -2 with the edges that touch no playable box pre-drawn (-2 in `lines`, "nobody's"). The analysis already treats any non-negative or -2 line as drawn and skips boxes that aren't -1. Bonus boxes become a `values` array that scoring and component sizes add up instead of counting. Teams become a seat → team map; the turn order stays per seat, scoring and the CPU's objective sum by team. A pre-drawn outer edge is the same -2 lines.
-- The server sends the whole board in every state. The biggest board is 195 edges and 88 boxes, a few hundred bytes. `order` lists the edges in the order they were drawn, so a client can animate every line it hasn't seen yet, in order, and highlight the last move.
-- Rendering: one canvas. Dots, faint undrawn lines, drawn lines in the drawer's colour, translucent box fills with initials. On a portrait screen a board that's wider than tall is drawn transposed, so its long side runs down the phone; input maps back through the same transform.
-- Hints are the game setting `hints`, so everyone in a game gets the same. The client reads it through `hintsOn()` in `main.ts`, and every closable-box cue (the pulse, the hint line, Take all and T) goes through it, so a new cue should too. The server enforces the one cue that acts, Take all. A room saved before the setting has no `hints`; the `Game` constructor fills it in as off.
+- **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/box-office/g/K7Q2M`. Send either one to your friends.
+- The host picks the board (small, medium or large), the turn timer (off, 10, 20 or 30 seconds) and whether hints are on, and can add CPU players (easy, normal or hard). The board grows with the number of players, CPUs included, and the lobby shows the size you'll get: from 4 × 4 boxes for two players on small to 11 × 8 for eight on large.
+- On your turn, hover over or touch a line between two dots to highlight it, and click or tap to draw it. When the boxes are small on a touch screen, the first tap shows the line and a second tap on it draws it; tapping elsewhere moves or clears it.
+- Draw the fourth side of a box and it's yours, and you go again. A line between two boxes can close both. Most boxes when the board is full wins; ties share the win.
+- With more than two players, the chain you open goes to whoever sits after you, so it matters who that is.
+- With hints on, the boxes you can close pulse on your turn, and **Take all** (or T) takes every one of them at once. To decline the last boxes of a chain (a double-cross), take them one at a time. With hints off you spot them yourself. The HUD shows which it is all game.
+- The clock restarts after every line. When it runs out, the game finishes your turn for you: it takes every box you can close, then draws a line that gives nobody a box, or the one that gives away the fewest.
+- Reloading the page puts you back in your seat, with the clock you had (reloading can't buy time). If the player whose turn it is isn't connected, the game plays their turn after 5 seconds. Leaving mid-game keeps your seat and your boxes, and the game plays your turns. Anyone who joins mid-game watches until the next game.
 
 ## Development
 
@@ -56,3 +28,39 @@ npm run typecheck -w games/box-office
 ## Deploying
 
 `npm run deploy -w games/box-office` builds it and deploys it to **https://warrick.games/box-office/**. The root README explains how the games share warrick.games. `localStorage` keys start with `bo.`.
+
+## How it works
+
+```
+browser ──HTTP──▶ Worker ──▶ static assets (client)
+   │                │
+   │   POST /box-office/api/games            → allocate a code, initialize that room
+   │   GET  /box-office/api/games/:code      → does the game exist?
+   └─WS─ /box-office/api/games/:code/ws ──▶ GameRoom Durable Object (one per code)
+```
+
+- **One Durable Object per game code**, built on the kit's `Room`: the game state, each player's secret token and the chat/event log live in its storage, and it talks to browsers over hibernatable WebSockets, so a game costs nothing between moves. The board is part of the state, saved after every line, so a deploy mid-game picks up where it was.
+- **The whole board goes out in every state**: who drew each line, who claimed each box, and `order`, every line in the order it was drawn. The biggest board, 11 × 8, is a few hundred bytes. The client draws the lines it hasn't seen yet one at a time, faster the longer the run, and snaps straight to the board after a reconnect or in a background tab.
+- **One alarm drives every timer:** the turn clock, the 5-second wait for a missing player, and a CPU's thinking time (0.8 seconds before its first line, 0.25 seconds a line through a capture run). The turn clock is the kit's (`@warrick/kit/worker/turns`). Timers pause when nobody is connected, and a game with no connections for 12 hours is deleted.
+- **The rules are pure functions** in `src/shared/`: the board's geometry and drawing a line (`board.ts`), the chain analysis (`chains.ts`: safe lines, chains and loops, what a line gives away) and the endgame model (`endgame.ts`). The server, the CPUs, the move made for a player out of time and the client's hints all use them.
+- **CPU players** (`src/shared/ai.ts`): easy takes boxes and otherwise draws at random, and normal never gives a box away while a safe line is left. Hard plays the chain endgame: in the last 10 safe lines it searches every order they can be drawn in, and it solves the endgame (every player taking the most boxes for themselves) to decide when to decline a chain. Its slowest decision, 8 players on the large board, takes about 120 ms.
+- **Hints are a game setting**, the same for everyone in the game. Every cue that a box can be closed goes through one check in the client, and the server refuses Take all when hints are off.
+- **The board is one canvas.** On a phone in portrait, a board wider than tall is drawn on its side, so its long side runs down the screen.
+
+### Layout
+
+```
+src/shared/    code used by both sides
+  board.ts       board sizes, edge and box geometry, drawing a line, box counts
+  chains.ts      safe lines, capturable boxes, chains and loops, giveaways
+  endgame.ts     the endgame model over chains and loops, for the hard CPU
+  ai.ts          CPU players and the move made for a player who ran out of time
+  protocol.ts    settings, game state and message types, standings
+src/worker/    index.ts (routes), room.ts (Durable Object: messages and the alarm), game.ts (seats, lines, turns, timers)
+src/client/    main.ts (the game screen and its hooks into the shell), render.ts (the board on a canvas),
+               audio.ts (sounds), attract.ts (the home screen's self-playing demo)
+test/          Vitest tests for the board, the chain analysis and endgame, the CPUs and the game flow, and room.test.ts,
+               which runs the real room (reloads, second tabs, deploys) through the kit's test harness
+```
+
+The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).

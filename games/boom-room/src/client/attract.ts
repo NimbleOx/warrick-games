@@ -23,9 +23,10 @@ export class Attract {
   }
 
   resize(): void {
-    // The canvas is CSS-scaled with object-fit: cover, so size it for the larger fit.
+    // The window's size, with the arena cropped to fill it: a canvas sized for the larger fit
+    // and cropped by CSS would draw three times the pixels on a phone held upright.
     const a = this.match.arena;
-    this.renderer.resize(Math.max(window.innerWidth, (window.innerHeight * a.cols) / a.rows), a.cols, a.rows);
+    this.renderer.resizeCover(window.innerWidth, window.innerHeight, a.cols, a.rows);
   }
 
   frame(now: number): void {

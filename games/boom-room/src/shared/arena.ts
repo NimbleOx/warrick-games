@@ -988,13 +988,13 @@ export class Arena {
   }
 
   /**
-   * A whole snapshot for one client (joining, or lost track). Things can change between ticks,
-   * so it may differ from what everyone else has: the next delta carries everything, which fits
-   * both.
+   * A whole frame for one client (joining, or lost track): the one everyone was last sent, so the
+   * next delta fits it as it fits everyone else's, without its events, which have happened.
+   * (Making a fresh one would mean sending everyone the next frame whole, about eight times the
+   * size of a delta.) Before the first frame, the arena as it is: the first frame goes out whole.
    */
   catchUp(): ArenaSnap {
-    this.sent = null;
-    return this.snapshot(false);
+    return this.sent ? { ...this.sent, ev: [] } : this.snapshot(false);
   }
 }
 

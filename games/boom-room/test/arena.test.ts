@@ -352,6 +352,23 @@ describe("frames", () => {
     expect(early).toEqual(full);
     expect(applyDelta(late, delta)).toEqual(full);
   });
+
+  it("a catch-up is the frame everyone has, so the next one still goes out as a delta", () => {
+    const a = arena();
+    place(a, "a", 1, 1);
+    a.step(TICK_MS);
+    const sent = a.frame(true).full;
+    // Someone lost track: they get what everyone else has, without its events (already played).
+    const late = a.catchUp();
+    expect(late).toEqual({ ...sent, ev: [] });
+    a.clientMove("a", 1.2, 1, 2);
+    a.step(TICK_MS);
+    const { full, delta } = a.frame(true);
+    // Not the whole arena again: the grid hasn't changed, so it isn't in the delta.
+    expect("grid" in delta).toBe(false);
+    expect(JSON.stringify(delta).length).toBeLessThan(JSON.stringify(full).length / 4);
+    expect(applyDelta(late, delta)).toEqual(full);
+  });
 });
 
 describe("power-ups", () => {

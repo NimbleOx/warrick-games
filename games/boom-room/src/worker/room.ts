@@ -4,6 +4,9 @@ import { TICK_MS } from "../shared/constants";
 import type { ClientMsg, GameState } from "../shared/protocol";
 import { Game, newGameState, type Live } from "./game";
 
+/** A whole frame is about eight times a delta, so each socket gets one a second at most. */
+const SYNC_MS = 1000;
+
 /**
  * One Durable Object per game code (the kit's Room does sockets, storage and cleanup). While a
  * round is on and someone is connected, the tick loop runs the arena and broadcasts a frame every
@@ -16,6 +19,8 @@ export class GameRoom extends Room<GameState, Game, Live> {
    * while one is open (or a socket hasn't said yet), ticks go out whole.
    */
   private deltaSockets = new WeakSet<WebSocket>();
+  /** When each socket was last sent the whole arena for a `sync`. */
+  private lastSync = new WeakMap<WebSocket, number>();
 
   protected newState(code: string, now: number): GameState {
     return newGameState(code, now);
@@ -53,6 +58,12 @@ export class GameRoom extends Room<GameState, Game, Live> {
     const msg = raw as ClientMsg;
     if (msg.t === "move" || msg.t === "bomb") game.move(pid, msg.x, msg.y, msg.d, msg.t === "bomb");
     else if (msg.t === "deltas") this.deltaSockets.add(ws);
-    else if (msg.t === "sync") game.sync(pid);
+    else if (msg.t === "sync") {
+      // The page asks again if it hears nothing back (see the client's `onDelta`).
+      const now = Date.now();
+      if (now - (this.lastSync.get(ws) ?? -Infinity) < SYNC_MS) return;
+      this.lastSync.set(ws, now);
+      game.sync(pid);
+    }
   }
 }

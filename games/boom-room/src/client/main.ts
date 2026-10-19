@@ -67,7 +67,12 @@ const app = {
   winKey: "",
   /** Asked for the whole arena after a delta that didn't fit, and waiting for it. */
   syncing: false,
+  /** When it last asked (performance.now()). */
+  syncAt: 0,
 };
+
+/** Ask for the whole arena again if it hasn't come this long after asking: the room answers once a second. */
+const SYNC_RETRY_MS = 1500;
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "boom-room",
@@ -153,12 +158,16 @@ function onMessage(msg: ServerMsg): void {
 
 function onDelta(d: ArenaDelta): void {
   const prev = app.snap;
-  if (!prev || d.time < prev.time) {
-    // Nothing to lay it over: ask for the whole arena, and skip deltas until it comes.
-    if (!app.syncing) app.syncing = shell.send({ t: "sync" });
+  if (!prev || d.time < prev.time || app.syncing) {
+    // Nothing to lay it over: ask for the whole arena, and skip deltas until it comes. Ask again
+    // if it's slow to come, since the room answers each page once a second at most.
+    if (!app.syncing || performance.now() - app.syncAt > SYNC_RETRY_MS) {
+      app.syncing = shell.send({ t: "sync" });
+      app.syncAt = performance.now();
+    }
     return;
   }
-  if (!app.syncing) onFrame(applyDelta(prev, d));
+  onFrame(applyDelta(prev, d));
 }
 
 function onState(s: GameState, prev: GameState | null): void {

@@ -128,6 +128,11 @@ export class Renderer {
   /** World units per CSS pixel, so labels stay readable at any size. */
   private ui = 1;
   private cssWidth = 0;
+  /**
+   * Set by `resizeCover`: the box of CSS pixels the arena fills, and how (its scale and where it
+   * sits on the canvas), cropped like CSS `object-fit: cover`.
+   */
+  private cover: { w: number; h: number; k: number; x: number; y: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -145,11 +150,32 @@ export class Renderer {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(200, Math.round(cssWidth * dpr));
     const h = Math.round((w * rows) / cols);
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
+    this.setSize(w, h);
+    this.cover = null;
     this.ui = Math.min(2.4, Math.max(0.55, (cols * TILE) / Math.max(1, cssWidth)));
+  }
+
+  /**
+   * Size the canvas to a box of CSS pixels (the window, for the home screen's demo), with the
+   * arena filling it and centred: what CSS `object-fit: cover` would show of a bigger canvas,
+   * without drawing the parts it would crop.
+   */
+  resizeCover(cssWidth: number, cssHeight: number, cols = this.cols, rows = this.rows): void {
+    this.cols = cols;
+    this.rows = rows;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(1, Math.round(cssWidth * dpr));
+    const h = Math.max(1, Math.round(cssHeight * dpr));
+    this.setSize(w, h);
+    const k = Math.max(w / (cols * TILE), h / (rows * TILE));
+    this.cover = { w: cssWidth, h: cssHeight, k, x: (w - cols * TILE * k) / 2, y: (h - rows * TILE * k) / 2 };
+    this.ui = Math.min(2.4, Math.max(0.55, dpr / k));
+  }
+
+  private setSize(w: number, h: number): void {
+    if (this.canvas.width === w && this.canvas.height === h) return;
+    this.canvas.width = w;
+    this.canvas.height = h;
   }
 
   /** A new round: forget everything from the last one. */
@@ -279,13 +305,15 @@ export class Renderer {
 
   draw(view: ArenaView, now: number): void {
     const { snap } = view;
-    if (snap.cols !== this.cols || snap.rows !== this.rows)
-      this.resize(this.cssWidth || this.canvas.clientWidth, snap.cols, snap.rows);
+    if (snap.cols !== this.cols || snap.rows !== this.rows) {
+      if (this.cover) this.resizeCover(this.cover.w, this.cover.h, snap.cols, snap.rows);
+      else this.resize(this.cssWidth || this.canvas.clientWidth, snap.cols, snap.rows);
+    }
     const ctx = this.ctx;
     const theme = THEMES[snap.theme % THEMES.length];
     const W = snap.cols * TILE;
     const H = snap.rows * TILE;
-    const k = this.canvas.width / W;
+    const k = this.cover?.k ?? this.canvas.width / W;
 
     this.syncFloor(snap, theme);
 
@@ -302,7 +330,7 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.setTransform(k, 0, 0, k, ox * k, oy * k);
+    ctx.setTransform(k, 0, 0, k, (this.cover?.x ?? 0) + ox * k, (this.cover?.y ?? 0) + oy * k);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(this.floor, 0, 0, W, H);
 

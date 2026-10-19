@@ -70,4 +70,4 @@ src/client/    main.ts (the game screen, the clock, and its hooks into the shell
 test/          Vitest tests: bottle rules, the networked round, game flow; test/live checks a running server
 ```
 
-The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`). Pill Panic keeps its own clock pings (every 2 seconds, timed by round trip, since every bottle runs on the server's clock) and takes input messages up to 8 KB, twice what the kit allows.
+The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`). Pill Panic keeps its own clock pings (timed by round trip, since every bottle runs on the server's clock): every 2 seconds while a match is on, and a few in quick succession during each round's countdown. None go in the lobby or on the results, so the room can hibernate there. It takes input messages up to 8 KB, twice what the kit allows.

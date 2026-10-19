@@ -168,9 +168,15 @@ function setView(snap: RoundSnap | null): void {
     app.viewKey = key;
     app.bannerKey = "";
     controls.reset();
+    settleClock();
   }
   app.view.syncState(shell.state?.round);
   layout();
+}
+
+/** A few quick pings during a new round's countdown, so the clock is settled before it starts. */
+function settleClock(): void {
+  for (const ms of [250, 750, 1250, 1750]) setTimeout(() => shell.conn?.ping(), ms);
 }
 
 function onState(s: GameState, prev: GameState | null): void {
@@ -655,9 +661,12 @@ function wire(): void {
 
 wire();
 shell.start();
-// The shell pings on each welcome and every 5 s during a round. Every bottle runs on the server's
-// clock, so measure it more often, and in the lobby too, so it's settled before a round starts.
-setInterval(() => shell.conn?.ping(), 2000);
+// The shell pings on each welcome and every 5 s during a match. Every bottle runs on the server's
+// clock, so measure it more often while playing. Not in the lobby or on the results: a ping is a
+// real message, and would keep the room from hibernating.
+setInterval(() => {
+  if (shell.state?.phase === "playing") shell.conn?.ping();
+}, 2000);
 requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) Object.assign(window, { __pp: { app, controls, shell } });

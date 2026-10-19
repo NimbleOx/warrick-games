@@ -559,13 +559,38 @@ function renderHint(s: GameState): void {
 
 const OUT_TAG: Record<string, string> = { stuck: "out of moves", done: "all placed!", away: "away — out", left: "left" };
 
+/** The seats the player list's rows were built for. */
+let playersKey = "";
+
+/**
+ * One row per seat, built once a game. A move changes the turn highlight on two rows and the
+ * mover's pieces, so each row's class, header, meta and pieces are updated on their own, and
+ * only what changed is rebuilt: about 600 little SVGs a game would otherwise be rebuilt every move.
+ */
 function renderPlayers(s: GameState): void {
-  const rows = seated(s).map((p) => {
-    const cls = [
+  const list = $("game-players");
+  const seats = seated(s);
+  const key = `${s.game}|${seats.map((p) => p.id).join()}`;
+  if (key !== playersKey) {
+    playersKey = key;
+    list.innerHTML =
+      seats.map(() => `<li><div class="prow"></div><div class="pmeta muted"></div><div class="minis"></div></li>`).join("") +
+      `<li class="muted watchers" hidden></li>`;
+  }
+  seats.forEach((p, i) => {
+    const li = list.children[i] as HTMLElement;
+    li.dataset.id = p.id;
+    li.className = [
       s.turnPlayerId === p.id && s.phase === "playing" ? "turn" : "",
       p.out ? "out" : "",
       !p.cpu && !p.connected ? "offline" : "",
     ].join(" ");
+    const [head, meta, minis] = Array.from(li.children) as HTMLElement[];
+    setHtml(
+      head,
+      `<span class="chip" style="background:${p.color}"></span><span class="pname">${esc(p.name)}</span>
+        <span class="spacer"></span><b class="pscore" title="Score">${p.score}</b>`,
+    );
     const tags = [
       p.id === shell.me ? `<span class="tag tag-you">you</span>` : "",
       p.cpu ? `<span class="tag">CPU · ${p.cpu}</span>` : "",
@@ -573,19 +598,26 @@ function renderPlayers(s: GameState): void {
       !p.cpu && !p.connected && !p.out ? `<span class="tag">offline</span>` : "",
       s.winners.includes(p.id) ? `<span class="tag tag-host">winner</span>` : "",
     ].join("");
-    const minis = PIECE_IDS.map((id) =>
-      p.tray.includes(id) ? `<i title="${pieceDef(id).name}">${pieceSvg(id, p.color, [5, 3], 0.2)}</i>` : `<i class="gone"></i>`,
-    ).join("");
-    return `<li class="${cls}">
-      <div class="prow"><span class="chip" style="background:${p.color}"></span><span class="pname">${esc(p.name)}</span>
-        <span class="spacer"></span><b class="pscore" title="Score">${p.score}</b></div>
-      <div class="pmeta muted">${tags}<span>${p.tray.length} piece${p.tray.length === 1 ? "" : "s"} · ${squaresLeft(p.tray)} squares left</span></div>
-      <div class="minis" aria-label="${p.tray.length} pieces left">${minis}</div>
-    </li>`;
+    setHtml(
+      meta,
+      `${tags}<span>${p.tray.length} piece${p.tray.length === 1 ? "" : "s"} · ${squaresLeft(p.tray)} squares left</span>`,
+    );
+    // The tray, then the colour: the pieces' markup only changes when one of them does.
+    const trayKey = `${p.tray.join()}|${p.color}`;
+    if (minis.dataset.tray !== trayKey) {
+      minis.dataset.tray = trayKey;
+      minis.setAttribute("aria-label", `${p.tray.length} pieces left`);
+      minis.innerHTML = PIECE_IDS.map((id) =>
+        p.tray.includes(id)
+          ? `<i title="${pieceDef(id).name}">${pieceSvg(id, p.color, [5, 3], 0.2)}</i>`
+          : `<i class="gone"></i>`,
+      ).join("");
+    }
   });
   const watchers = s.players.filter((p) => p.seat < 0);
-  if (watchers.length) rows.push(`<li class="muted watchers">Watching: ${watchers.map((p) => esc(p.name)).join(", ")}</li>`);
-  setHtml($("game-players"), rows.join(""));
+  const extra = list.lastElementChild as HTMLElement;
+  extra.hidden = !watchers.length;
+  setHtml(extra, watchers.length ? `Watching: ${watchers.map((p) => esc(p.name)).join(", ")}` : "");
 }
 
 function flashBanner(html: string, ms: number): void {
@@ -929,6 +961,7 @@ if (import.meta.env.DEV) {
     __cs: {
       app,
       shell,
+      attract,
       /** Dev aid: play a legal move for yourself, with the biggest piece that fits. */
       auto() {
         const s = shell.state;

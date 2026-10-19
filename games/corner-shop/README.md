@@ -44,6 +44,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **A move is the piece, its orientation and where it goes** (`{ piece, orient, x, y }`). The 21 pieces have 91 distinct orientations, and a table from rotation and flip to orientation lets the client turn pieces without any geometry of its own.
 - **Moves are found from open corners**: the empty squares diagonal to one of a player's pieces and not next to any. Whether a player is out of moves is checked when their turn comes round, and the game is over when everyone is out.
 - **One alarm drives every timer:** the turn clock, the 10-second wait for a missing player and a CPU's thinking time (0.8 seconds a move). The turn clock is the kit's (`@warrick/kit/worker/turns`). Solitaire has no clock and never passes, so its alarm is only the clean-up. Timers pause when nobody is connected, and a game with no connections for 12 hours is deleted.
+- **The client redraws only what a move changed.** The player list has one row per seat for the whole game, and a move rebuilds just the mover's pieces, score and count. The home screen's demo draws its board off screen once a move; between moves it copies that in and lightens the new piece's squares while they flash, then draws nothing until the next move.
 - **CPU players** run on the server. Easy plays a random legal move, favouring big pieces. Normal scores every move by the squares it places and the open corners it gains and takes away. Hard looks one move ahead from Normal's best 8, which stays well under 100 ms on a mid-game 20×20 board.
 
 ### Layout
@@ -55,7 +56,7 @@ src/shared/    code used by both sides
   ai.ts          CPU players
   protocol.ts    settings, game state and message types
 src/worker/    index.ts (routes), room.ts (Durable Object: messages and the alarm), game.ts (seats, turns, passing, scores)
-src/client/    main.ts (the game screen, the tray and the controls, and its hooks into the shell), board.ts (the board on a canvas),
+src/client/    main.ts (the game screen, the tray, the player list and the controls, and its hooks into the shell), board.ts (the board on a canvas),
                shapes.ts (pieces as SVG for the tray and the player list), audio.ts (sounds), attract.ts (the home screen's demo)
 test/          Vitest tests for the pieces and rules, the CPUs and the game flow, and room.test.ts, which runs the real room
                (reloads, second tabs, deploys, solitaire) through the kit's test harness

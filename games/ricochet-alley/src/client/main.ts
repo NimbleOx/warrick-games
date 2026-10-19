@@ -72,7 +72,12 @@ const app = {
   /** Which tanks were alive when the HUD and scores were last drawn. */
   aliveKey: "",
   sandbox: null as LocalMatch | null,
+  /** When the game over covered the maze (performance.now()), or -1. */
+  coveredAt: -1,
 };
+
+/** How long the maze keeps drawing under the game over, so the last explosions settle. */
+const SETTLE_MS = 1000;
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "ricochet-alley",
@@ -293,13 +298,22 @@ function frame(now: number): void {
   }
   const r = app.round;
   const s = shell.state;
+  // Under the game over, whose blurred backdrop the browser would redo for every frame drawn
+  // beneath it, the maze keeps its last frame once it has settled (unless a layout wiped it).
+  const covered = !$("gameover").hidden;
+  if (!covered) app.coveredAt = -1;
+  else if (app.coveredAt < 0) app.coveredAt = now;
+  const still = covered && now - app.coveredAt > SETTLE_MS && !renderer.blank;
   if (r && s) {
     r.update(now, s.phase === "playing", () => controls.update());
+    // The round still moves its bullets on (and plays their bounces), drawn or not.
     const { tanks, bullets } = r.draw(now);
-    renderer.draw(
-      { tanks, bullets, findMe: s.phase === "countdown", names: s.phase === "countdown" || s.phase === "roundover" },
-      now,
-    );
+    if (!still) {
+      renderer.draw(
+        { tanks, bullets, findMe: s.phase === "countdown", names: s.phase === "countdown" || s.phase === "roundover" },
+        now,
+      );
+    }
     renderPips(r);
     // Tanks fall between state messages; keep the HUD and the score list in step.
     const key = r.alive.join();
@@ -460,10 +474,9 @@ function layoutStage(): void {
 }
 
 function resizeAttract(): void {
-  // Cover the whole screen: fit to the larger box, and let CSS crop the overflow.
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  attractRenderer.fit(Math.max(w, h * 1.5), Math.max(h, w / 1.5));
+  // Cover the whole screen, cropping the maze to it: a canvas sized for the larger fit and
+  // cropped by CSS would draw three times the pixels on a phone held upright.
+  attractRenderer.fitCover(window.innerWidth, window.innerHeight);
   attractRenderer.canvas.style.width = "100%";
   attractRenderer.canvas.style.height = "100%";
 }

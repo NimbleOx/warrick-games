@@ -64,6 +64,13 @@ export class Renderer {
   private scorches: { x: number; y: number; r: number }[] = [];
   private boxW = 0;
   private boxH = 0;
+  /** The maze fills the box, centred and cropped like CSS `object-fit: cover` (the home screen's demo). */
+  private cover = false;
+  /** Where the maze's box sits on the canvas, in canvas pixels: off its edges when cropped. */
+  private ox = 0;
+  private oy = 0;
+  /** Nothing has been drawn since the canvas was last laid out, which clears it. */
+  blank = true;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -84,6 +91,18 @@ export class Renderer {
   fit(maxW: number, maxH: number): void {
     this.boxW = Math.max(100, maxW);
     this.boxH = Math.max(80, maxH);
+    this.cover = false;
+    this.layout();
+  }
+
+  /**
+   * Fill a box of this many CSS pixels (the window) with the maze, centred and cropped: what a
+   * bigger canvas cropped by CSS `object-fit: cover` would show, without drawing what it crops.
+   */
+  fitCover(w: number, h: number): void {
+    this.boxW = Math.max(1, Math.round(w));
+    this.boxH = Math.max(1, Math.round(h));
+    this.cover = true;
     this.layout();
   }
 
@@ -92,22 +111,25 @@ export class Renderer {
     if (!m || !this.boxW) return;
     const ww = mazeWidth(m) + PAD * 2;
     const wh = mazeHeight(m) + PAD * 2;
-    this.scale = Math.min(this.boxW / ww, this.boxH / wh);
+    this.scale = (this.cover ? Math.max : Math.min)(this.boxW / ww, this.boxH / wh);
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
-    const cssW = Math.floor(ww * this.scale);
-    const cssH = Math.floor(wh * this.scale);
+    const cssW = this.cover ? this.boxW : Math.floor(ww * this.scale);
+    const cssH = this.cover ? this.boxH : Math.floor(wh * this.scale);
+    this.ox = this.cover ? ((cssW - ww * this.scale) / 2) * this.dpr : 0;
+    this.oy = this.cover ? ((cssH - wh * this.scale) / 2) * this.dpr : 0;
     this.canvas.style.width = `${cssW}px`;
     this.canvas.style.height = `${cssH}px`;
     this.canvas.width = Math.round(cssW * this.dpr);
     this.canvas.height = Math.round(cssH * this.dpr);
     this.layer.width = this.canvas.width;
     this.layer.height = this.canvas.height;
+    this.blank = true;
     this.paintLayer();
   }
 
   private toWorld(ctx: CanvasRenderingContext2D): void {
     const k = this.scale * this.dpr;
-    ctx.setTransform(k, 0, 0, k, PAD * k, PAD * k);
+    ctx.setTransform(k, 0, 0, k, this.ox + PAD * k, this.oy + PAD * k);
   }
 
   /** The static part: floor, walls and scorch marks, painted once per maze or resize. */
@@ -208,6 +230,7 @@ export class Renderer {
   draw(o: DrawOpts, now: number): void {
     const ctx = this.ctx;
     if (!this.maze) return;
+    this.blank = false;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.layer, 0, 0);
     this.toWorld(ctx);
@@ -328,8 +351,8 @@ export class Renderer {
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
     for (const t of tanks) {
-      const x = (t.x + PAD) * k;
-      const y = (t.y + PAD - TANK_R - 6) * k;
+      const x = this.ox + (t.x + PAD) * k;
+      const y = this.oy + (t.y + PAD - TANK_R - 6) * k;
       const label = t.me ? "YOU" : t.name;
       ctx.lineWidth = 3 * this.dpr;
       ctx.strokeStyle = "rgb(0 0 0 / 0.55)";

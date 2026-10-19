@@ -54,7 +54,9 @@ export class Renderer {
   private skyTheme = -1;
   private groundWorld: World | null = null;
   private groundVersion = -1;
-  private groundTheme = -1;
+  /** The ground as it was last painted: each column's height, in which theme. */
+  private paintedHeights = new Float64Array(WORLD_W);
+  private paintedTheme = -1;
   private trails = new Map<number, Trail>();
   private tracerPaths: Trail[] = [];
   private floaters: Floater[] = [];
@@ -68,6 +70,10 @@ export class Renderer {
   private shown = "";
   /** The last frame has something on it that changes by itself (a shake, a flash, a fading trail, a floater). */
   private moving = false;
+  /** Set by `resizeCover`: the world fills the canvas and is centred, cropped like CSS `object-fit: cover`. */
+  private cover: { k: number; x: number; y: number } | null = null;
+  /** Nothing has been drawn since the canvas was last resized, which clears it. */
+  blank = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -83,11 +89,31 @@ export class Renderer {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(200, Math.round(cssWidth * dpr));
     const h = Math.round((w * WORLD_H) / WORLD_W);
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
+    this.setSize(w, h);
+    this.cover = null;
     this.ui = Math.min(2.2, Math.max(0.8, WORLD_W / Math.max(1, cssWidth)));
+  }
+
+  /**
+   * Size the canvas to a box of CSS pixels (the window, for the home screen's demo), with the
+   * world filling it and centred: what CSS `object-fit: cover` would show of a bigger canvas,
+   * without drawing the parts it would crop.
+   */
+  resizeCover(cssWidth: number, cssHeight: number): void {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(1, Math.round(cssWidth * dpr));
+    const h = Math.max(1, Math.round(cssHeight * dpr));
+    this.setSize(w, h);
+    const k = Math.max(w / WORLD_W, h / WORLD_H);
+    this.cover = { k, x: (w - WORLD_W * k) / 2, y: (h - WORLD_H * k) / 2 };
+    this.ui = Math.min(2.2, Math.max(0.8, dpr / k));
+  }
+
+  private setSize(w: number, h: number): void {
+    if (this.canvas.width === w && this.canvas.height === h) return;
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.blank = true;
   }
 
   /** Map a pointer position on the canvas element to world coordinates. */
@@ -157,17 +183,17 @@ export class Renderer {
     if (!this.moving && world === this.shownWorld && key === this.shown) return false;
     this.shownWorld = world;
     this.shown = key;
+    this.blank = false;
 
     const ctx = this.ctx;
-    const k = this.canvas.width / WORLD_W;
+    const k = this.cover?.k ?? this.canvas.width / WORLD_W;
     const theme = THEMES[opts.theme % THEMES.length];
 
     if (this.skyTheme !== opts.theme) this.renderSky(theme, opts.theme);
-    if (this.groundWorld !== world || this.groundVersion !== world.terrainVersion || this.groundTheme !== opts.theme) {
-      this.renderGround(world.heights, theme);
+    if (this.groundWorld !== world || this.groundVersion !== world.terrainVersion || this.paintedTheme !== opts.theme) {
+      this.renderGround(world.heights, theme, opts.theme);
       this.groundWorld = world;
       this.groundVersion = world.terrainVersion;
-      this.groundTheme = opts.theme;
     }
 
     let ox = 0;
@@ -184,7 +210,7 @@ export class Renderer {
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.setTransform(k, 0, 0, k, ox * k, oy * k);
+    ctx.setTransform(k, 0, 0, k, (this.cover?.x ?? 0) + ox * k, (this.cover?.y ?? 0) + oy * k);
     ctx.drawImage(this.sky, 0, 0);
     this.windStreaks.draw(ctx, world.wind, now, this.ui);
 
@@ -283,9 +309,25 @@ export class Renderer {
     this.skyTheme = seed;
   }
 
-  private renderGround(heights: number[], theme: Theme): void {
+  /**
+   * Paint the ground's columns that changed since it was last painted, all of them in a new
+   * theme. A crater changes a few dozen of the 1200, and a state message with the same ground
+   * (every one between shots) changes none, so it needn't repaint the whole image.
+   */
+  private renderGround(heights: number[], theme: Theme, themeIndex: number): void {
+    const all = themeIndex !== this.paintedTheme;
+    const painted = this.paintedHeights;
+    let x0 = WORLD_W;
+    let x1 = -1;
+    for (let x = 0; x < WORLD_W; x++) {
+      if (all || heights[x] !== painted[x]) {
+        x0 = Math.min(x0, x);
+        x1 = x;
+      }
+    }
+    this.paintedTheme = themeIndex;
+    if (x1 < x0) return;
     const d = this.groundImg.data;
-    d.fill(0);
     const lo = hexToRgb(theme.ground[0]);
     const hi = hexToRgb(theme.ground[1]);
     const crust = hexToRgb(theme.crust);
@@ -293,8 +335,15 @@ export class Renderer {
     const band = Array.from({ length: BANDS }, (_, i) => mix(lo, hi, i / (BANDS - 1)));
     const crust2 = mix(crust, hi, 0.55);
     const span = WORLD_H * 0.8;
-    for (let x = 0; x < WORLD_W; x++) {
+    for (let x = x0; x <= x1; x++) {
       const h = heights[x];
+      if (!all && h === painted[x]) continue;
+      painted[x] = h;
+      // The column's sky first: what was ground may be a crater now.
+      for (let row = 0; row < WORLD_H; row++) {
+        const i = (row * WORLD_W + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0;
+      }
       for (let y = 0; y < h; y++) {
         const row = WORLD_H - 1 - y;
         const depth = h - 1 - y;
@@ -312,7 +361,7 @@ export class Renderer {
         d[i + 3] = 255;
       }
     }
-    this.ground.getContext("2d")!.putImageData(this.groundImg, 0, 0);
+    this.ground.getContext("2d")!.putImageData(this.groundImg, 0, 0, x0, 0, x1 - x0 + 1, WORLD_H);
   }
 
   // ---------------------------------------------------------------- tanks

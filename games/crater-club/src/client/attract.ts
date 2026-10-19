@@ -39,8 +39,9 @@ export class Attract {
   }
 
   resize(): void {
-    // The canvas is CSS-scaled with object-fit: cover, so size it for the larger fit.
-    this.renderer.resize(Math.max(window.innerWidth, (window.innerHeight * 16) / 9));
+    // The window's size, with the battle cropped to fill it: a canvas sized for the larger fit
+    // and cropped by CSS would draw three times the pixels on a phone held upright.
+    this.renderer.resizeCover(window.innerWidth, window.innerHeight);
   }
 
   frame(now: number): void {

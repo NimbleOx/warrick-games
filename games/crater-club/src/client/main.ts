@@ -49,7 +49,12 @@ const app = {
   aimGuide: null as DrawOpts["aimGuide"],
   bannerUntil: 0,
   shopRound: -1,
+  /** When the shop or the game over covered the map (performance.now()), or -1. */
+  coveredAt: -1,
 };
+
+/** How long the map keeps drawing under the shop or the game over, so what's moving settles. */
+const SETTLE_MS = 1000;
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   slug: "crater-club",
@@ -235,7 +240,14 @@ function frame(now: number): void {
     drainEvents(a, now);
     if (a.world.done || a.world.timedOut) finishShot();
   }
-  if (app.world && shell.state) renderer.draw(app.world, drawOpts(shell.state), now);
+  // Under the shop or the game over, whose blurred backdrop the browser would redo for every
+  // frame drawn beneath it, the map keeps its last frame once it has settled (unless a resize
+  // wiped it). The wind streaks would otherwise redraw it 30 times a second.
+  const covered = !$("shop").hidden || !$("gameover").hidden;
+  if (!covered) app.coveredAt = -1;
+  else if (app.coveredAt < 0) app.coveredAt = now;
+  const still = covered && now - app.coveredAt > SETTLE_MS && !renderer.blank;
+  if (app.world && shell.state && !still) renderer.draw(app.world, drawOpts(shell.state), now);
   tickClocks();
 }
 

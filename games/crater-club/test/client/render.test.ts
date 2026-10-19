@@ -4,12 +4,16 @@ import { mulberry32 } from "@warrick/kit/shared/rng";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Renderer, type DrawOpts, type TankInfo } from "../../src/client/render";
 import { WindStreaks } from "../../src/client/wind";
+import { WORLD_H, WORLD_W } from "../../src/shared/constants";
 import { World, launchFor } from "../../src/shared/sim";
 import { flattenPad, generateTerrain } from "../../src/shared/terrain";
 
 const FRAME_MS = 1000 / 60;
 
-/** A canvas whose 2D context does nothing but count the calls that draw. */
+/** Every call drawn on every fake canvas: its name and arguments. */
+let drawn: [string, unknown[]][] = [];
+
+/** A canvas whose 2D context does nothing but count (and note) the calls that draw. */
 function fakeCanvas() {
   let calls = 0;
   const props: Record<string | symbol, unknown> = {};
@@ -18,8 +22,9 @@ function fakeCanvas() {
       if (key in target) return target[key];
       if (key === "createImageData") return (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) });
       if (key === "createRadialGradient" || key === "createLinearGradient") return () => ({ addColorStop() {} });
-      return () => {
+      return (...args: unknown[]) => {
         calls++;
+        drawn.push([String(key), args]);
       };
     },
     set(target, key, value) {
@@ -69,6 +74,7 @@ let canvas: ReturnType<typeof fakeCanvas>;
 let r: Renderer;
 
 beforeEach(() => {
+  drawn = [];
   vi.stubGlobal("document", { createElement: () => fakeCanvas() });
   vi.stubGlobal(
     "ImageData",
@@ -104,6 +110,37 @@ describe("the renderer", () => {
     expect(r.draw(world(), opts({ angle: 61 }), 3048)).toBe(true);
     r.invalidate();
     expect(r.draw(w, opts({ angle: 61 }), 3064)).toBe(true);
+  });
+
+  it("repaints only the ground that changed", () => {
+    // The ground's own canvas is repainted with a dirty rect: (image, 0, 0, x, y, width, height).
+    const painted = () => drawn.filter(([k, a]) => k === "putImageData" && a.length === 7).map(([, a]) => a.slice(3));
+    const w = world();
+    r.draw(w, opts(), 0);
+    expect(painted()).toEqual([[0, 0, WORLD_W, WORLD_H]]);
+    // The same ground in a new state (every state between shots brings one): nothing to paint.
+    expect(r.draw(world(), opts(), 100)).toBe(true);
+    expect(painted()).toHaveLength(1);
+    // A crater: just its columns.
+    for (let x = 590; x <= 610; x++) w.heights[x] -= 20;
+    w.terrainVersion++;
+    r.draw(w, opts(), 200);
+    expect(painted().at(-1)).toEqual([590, 0, 21, WORLD_H]);
+    // A new theme: all of it, in its colours.
+    r.draw(w, { ...opts(), theme: 1 }, 300);
+    expect(painted().at(-1)).toEqual([0, 0, WORLD_W, WORLD_H]);
+  });
+
+  it("fills a box with the world, centred and cropped, drawing only what shows", () => {
+    // A phone held upright: the world is scaled to its height, and its middle shows.
+    r.resizeCover(390, 844);
+    expect([canvas.width, canvas.height]).toEqual([390, 844]);
+    expect(r.blank).toBe(true);
+    expect(r.draw(world(), opts(), 0)).toBe(true);
+    expect(r.blank).toBe(false);
+    const k = 844 / WORLD_H;
+    const scaled = drawn.find(([key, a]) => key === "setTransform" && a[0] === k);
+    expect(scaled?.[1]).toEqual([k, 0, 0, k, (390 - WORLD_W * k) / 2, 0]);
   });
 
   it("redraws a few times a second while the arrow over the player whose turn it is bobs", () => {

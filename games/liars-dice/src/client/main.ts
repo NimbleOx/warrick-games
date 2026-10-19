@@ -259,7 +259,8 @@ function renderSeats(s: GameState): void {
     .join("");
   const watching = s.players.filter((p) => p.spectator);
   const extra = watching.length ? `<li class="watchers muted">Watching: ${watching.map((p) => esc(p.name)).join(", ")}</li>` : "";
-  $("seats").innerHTML = html + extra;
+  // Unchanged seats keep their elements: the seat clock and the lit dice stay put between states.
+  setHtml($("seats"), html + extra);
   $("seats").dataset.count = String(Math.min(8, s.order.length));
 }
 

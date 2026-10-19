@@ -47,7 +47,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **The rules are pure functions** in `src/shared/`: bids, counting and resolving a call (`rules.ts`), the odds (`odds.ts`) and the CPUs (`ai.ts`). The `Game` class in `src/worker/game.ts` is turns, timers, the log and who sees what.
 - **A call** plays out from the server's time of the call: the cups lift, the dice that count light up one at a time, then the table sees who loses a die. The reveal lasts 4.5 seconds plus 0.16 seconds a counted die, at most 10 seconds, and someone who reconnects mid-reveal sees it from where it is.
 - **One alarm drives every timer:** the turn clock, the 5-second wait for a missing player, CPU thinking time (1–2 seconds a move) and the reveal. The turn clock is the kit's (`@warrick/kit/worker/turns`). Timers pause when nobody is connected, and a game with no connections for 12 hours is deleted.
-- **The table is DOM, not canvas**: cards, buttons and text, sized to fit a phone.
+- **The table is DOM, not canvas**: cards, buttons and text, sized to fit a phone. Each part is rebuilt only when its markup changes (the kit's `setHtml`), so the seat clock and the lit dice stay put between states.
 
 ### CPUs
 

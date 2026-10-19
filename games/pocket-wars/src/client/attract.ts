@@ -30,6 +30,8 @@ export class Attract {
   private day = 1;
   private nextAt = 0;
   private colors: string[] = [];
+  /** The board changed since the last draw. */
+  private dirty = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -63,11 +65,19 @@ export class Attract {
     r.oy = (r.h - m.h * r.scale) / 2;
   }
 
+  /**
+   * Called every animation frame, but the board only changes every STEP_MS, and the home card
+   * blurs whatever is under it: so draw only after a step, a resize (which clears the canvas) or
+   * while a hit's effects play.
+   */
   frame(now: number): void {
     if (now >= this.nextAt) {
       this.nextAt = now + STEP_MS;
       this.step();
+      this.dirty = true;
     }
+    if (!this.dirty && !this.renderer.stale && !this.renderer.busy) return;
+    this.dirty = false;
     this.renderer.draw({ m: this.m, b: this.b, colors: this.colors, activeSeat: this.seat }, now);
   }
 

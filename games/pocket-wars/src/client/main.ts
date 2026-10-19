@@ -322,14 +322,22 @@ function turnStarted(ev: TurnEvent, s: GameState): void {
 
 /** What the canvas was last drawn from: the state, the mode (and its target), the tile under the mouse. */
 let drawnFrom: unknown[] = [];
+let drawnAt = 0;
+/** The gap between draws that are only for the pulsing selection and targets: every 3rd frame at 60 Hz, every 6th at 120 Hz. */
+const PULSE_MS = 45;
 
 /**
  * The canvas is drawn again only when what it shows changes, or while something on it moves: a
- * unit sliding or being built, effects, the pulsing selection and targets. Otherwise a frame
- * just keeps the clock up to date.
+ * unit sliding or being built, or effects. The pulsing selection and targets alone draw it about
+ * 20 times a second. Otherwise a frame just keeps the clock up to date.
  */
 function frame(now: number): void {
   requestAnimationFrame(frame);
+  draw(now);
+}
+
+/** One frame's drawing (see `frame`). */
+function draw(now: number): void {
   if (shell.screen === "home") {
     attract.frame(now);
     return;
@@ -341,11 +349,14 @@ function frame(now: number): void {
   if (s && m && b) {
     const mode = app.mode;
     const from = [s, mode, mode.k === "target" ? mode.focus : null, app.hover];
-    const o = overlay(m, b);
-    const moving = !!events.anim || renderer.busy || o.selected !== undefined || !!o.targets?.length;
-    if (moving || renderer.stale || from.some((v, i) => v !== drawnFrom[i])) {
+    const moving = !!events.anim || renderer.busy;
+    // A unit is selected or inspected, with its brackets (and any targets) pulsing.
+    const pulsing = mode.k !== "idle" && mode.k !== "sent" && now - drawnAt >= PULSE_MS;
+    if (moving || pulsing || renderer.stale || from.some((v, i) => v !== drawnFrom[i])) {
       drawnFrom = from;
+      drawnAt = now;
       const g = ghosts(m, b, now);
+      const o = overlay(m, b);
       renderer.draw({ m, b, colors: colors(s), activeSeat: s.turn, hide: g.hide, ghosts: g.ghosts, overlay: o }, now);
     }
   }
@@ -579,23 +590,12 @@ function renderMenu(): void {
     let note = "";
     if (isIndirect(u.type) && mode.to !== mode.reach.origin) note = `<p class="act-note">Artillery can't fire after moving.</p>`;
     menu.innerHTML = items.join("") + note;
-    place(
-      menu,
-      m,
-      mode.to,
-      mode.targets.map((t) => unitTile(m, t)),
-    );
   } else if (mode.k === "target") {
     const u = unitById(b, mode.unit)!;
     const target = mode.targets.find((t) => t.id === mode.focus);
     if (!target) {
       fc.innerHTML = `<p>Tap a red target to see the damage.</p><div class="fc-row"><button class="btn btn-small" data-fc="back">Back</button></div>`;
-      place(
-        fc,
-        m,
-        mode.to,
-        mode.targets.map((t) => unitTile(m, t)),
-      );
+      placeMenu();
       return;
     }
     const s = shell.state!;
@@ -608,8 +608,20 @@ function renderMenu(): void {
       <div class="fc-side"><span class="chip" style="background:${them?.color}"></span>${UNITS[target.type].name} <b>${target.hp}</b> HP
         <span class="fc-dmg">${f.kills ? "<b>destroyed</b>" : f.counter ? `hits back <b>${f.taken}</b>${f.dies ? " — yours is destroyed" : ""}` : "can't hit back"}</span></div>
       <div class="fc-row"><button class="btn btn-small" data-fc="back">Back</button><button class="btn btn-small btn-primary" data-fc="fire">Attack</button></div>`;
-    place(fc, m, unitTile(m, target), [mode.to, ...mode.targets.map((t) => unitTile(m, t))]);
   }
+  placeMenu();
+}
+
+/** Put the open action menu or forecast beside its tile: after it's rebuilt, or when the camera moves. */
+function placeMenu(): void {
+  const mode = app.mode;
+  const m = mapOf();
+  if (!m || (mode.k !== "menu" && mode.k !== "target")) return;
+  const targets = mode.targets.map((t) => unitTile(m, t));
+  if (mode.k === "menu") return place($("action-menu"), m, mode.to, targets);
+  const target = mode.targets.find((t) => t.id === mode.focus);
+  if (target) place($("forecast"), m, unitTile(m, target), [mode.to, ...targets]);
+  else place($("forecast"), m, mode.to, targets);
 }
 
 /** Put a floating menu beside a tile, inside the stage, covering as few of `avoid` as it can. */
@@ -966,14 +978,14 @@ function wire(): void {
       renderer.zoom(m, d / Math.max(1, pinch.d), cx, cy);
       renderer.pan(m, cx - pinch.cx, cy - pinch.cy);
       pinch = { d, cx, cy };
-      renderMenu();
+      placeMenu();
       return;
     }
     if (drag) {
       if (!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) > 7) drag.moved = true;
       if (drag.moved) {
         renderer.pan(m, p.x - prev.x, p.y - prev.y);
-        renderMenu();
+        placeMenu();
       }
     }
   });
@@ -1003,7 +1015,7 @@ function wire(): void {
       e.preventDefault();
       const r = canvas.getBoundingClientRect();
       renderer.zoom(m, Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
-      renderMenu();
+      placeMenu();
     },
     { passive: false },
   );
@@ -1014,7 +1026,7 @@ function wire(): void {
       const z = b.dataset.zoom;
       if (z === "fit") renderer.fit(m);
       else renderer.zoom(m, z === "in" ? 1.35 : 1 / 1.35);
-      renderMenu();
+      placeMenu();
       b.blur();
     });
   }
@@ -1103,7 +1115,8 @@ requestAnimationFrame(frame);
 // Labels drawn before the pixel font arrived were drawn in the fallback font.
 document.fonts?.addEventListener("loadingdone", () => (renderer.stale = true));
 
-// Dev aid: the console can drive a seat with the CPU (`__pw.autoplay("hard")`) to play whole games.
+// Dev aid: the console can drive a seat with the CPU (`__pw.autoplay("hard")`) to play whole games,
+// and draw a frame (`__pw.draw(performance.now())`) where animation frames don't run, like a hidden pane.
 if (import.meta.env.DEV) {
   let auto: string | null = null;
   const autoStep = () => {
@@ -1127,5 +1140,7 @@ if (import.meta.env.DEV) {
     while (events.anim) events.finish(events.anim);
     autoStep();
   };
-  Object.assign(window, { __pw: { app, events, renderer, shell, tick, autoplay: (level: string | null) => (auto = level) } });
+  Object.assign(window, {
+    __pw: { app, attract, draw, events, renderer, shell, tick, autoplay: (level: string | null) => (auto = level) },
+  });
 }

@@ -25,8 +25,8 @@ Read `README.md` for how it plays, how it's built and how to run it; this file i
 - If the player whose turn it is isn't connected, their turn passes after 10 seconds. Back in time, they get the clock they had, not a new one (the kit's turn clock). A player who misses 3 turns in a row while away is out, so a game can't stall on someone who has gone for good. Leaving the game with the Leave button puts you out straight away; your pieces stay on the board and your score counts.
 - Controls:
   - Pick a piece from your tray. Pieces that don't fit anywhere right now are greyed out and say so.
-  - Rotate with R, right-click or the mouse wheel. Flip with F. Esc puts the piece back.
-  - A ghost shows where the piece would land: green where it's legal, red where it isn't, with the reason under the board ("Your first piece must cover your starting square", "Your pieces can't touch along an edge", and so on). Click to place. Arrow keys move the ghost and Enter places it.
+  - Rotate with R (Shift+R the other way), right-click or the mouse wheel (either way). Flip with F. Esc puts the piece back.
+  - A ghost shows where the piece would land: green where it's legal, red where it isn't, with the reason under the board ("Your first piece must cover your starting square", "Your pieces can't touch along an edge", and so on). Click to place. Arrow keys move the ghost, and Enter or Space places it.
   - On touch screens: tap a piece (the ghost jumps to the nearest spot where it fits) or drag it from the tray onto the board, drag on the board to move it, use the Rotate and Flip buttons, then Place.
   - The board marks your open corners: the squares where one of your remaining pieces could still go. While you hold a piece, the corners it fits are brighter.
 - CPU players (easy, normal, hard), each about 0.8 seconds per move so everyone can follow:

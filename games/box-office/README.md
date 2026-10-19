@@ -8,7 +8,7 @@ It runs on Cloudflare: a Worker serves the client and the API, and each game is 
 
 - **Create game** gives you a code like `K7Q2M` and a link like `https://warrick.games/box-office/g/K7Q2M`. Send either one to your friends.
 - The host picks the board (small, medium or large), the turn timer (off, 10, 20 or 30 seconds) and whether hints are on, and can add CPU players (easy, normal or hard). The board grows with the number of players, CPUs included, and the lobby shows the size you'll get: from 4 × 4 boxes for two players on small to 11 × 8 for eight on large.
-- On your turn, hover over or touch a line between two dots to highlight it, and click or tap to draw it. When the boxes are small on a touch screen, the first tap shows the line and a second tap on it draws it; tapping elsewhere moves or clears it.
+- On your turn, hover over or touch a line between two dots to highlight it, and click or tap to draw it. On a touch screen, when the boxes are small or your tap isn't close to a line, the first tap shows the line and a second tap on it draws it; tapping elsewhere moves or clears it.
 - Draw the fourth side of a box and it's yours, and you go again. A line between two boxes can close both. Most boxes when the board is full wins; ties share the win.
 - With more than two players, the chain you open goes to whoever sits after you, so it matters who that is.
 - With hints on, the boxes you can close pulse on your turn, and **Take all** (or T) takes every one of them at once. To decline the last boxes of a chain (a double-cross), take them one at a time. With hints off you spot them yourself. The HUD shows which it is all game.

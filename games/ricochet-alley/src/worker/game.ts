@@ -227,8 +227,7 @@ export class Game extends Lobby<GameState, ServerMsg, Live> {
       const brains = new Map<number, CpuBrain>();
       setup.tanks.forEach((id, i) => {
         const p = this.player(id);
-        if (!p)
-          world.tanks[i].alive = false; // left while the round was being rebuilt
+        if (!p) world.tanks[i].alive = false; // left while the round was being rebuilt
         else if (p.cpu) brains.set(i, new CpuBrain(p.cpu, mulberry32(randomSeed())));
       });
       this.live.round = { world, brains, hangUntil: -1 };

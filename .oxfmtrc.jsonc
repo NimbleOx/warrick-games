@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 130,
+  // Keep package.json keys in the order they were written.
+  "sortPackageJson": false,
+  // oxfmt also skips what .gitignore lists (node_modules, dist, .wrangler).
+  "ignorePatterns": [
+    // Generated.
+    "**/worker-configuration.d.ts",
+    "packages/kit/worker-runtime.d.ts",
+    "package-lock.json",
+    // Written by hand: the formatter's line breaks would make the markup and the tables harder to read.
+    "*.md",
+    "*.html"
+  ],
+  "overrides": [{ "files": ["*.jsonc"], "options": { "trailingComma": "none" } }]
+}

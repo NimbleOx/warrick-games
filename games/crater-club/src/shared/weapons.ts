@@ -1,5 +1,14 @@
 export type WeaponKind =
-  "missile" | "mirv" | "funky" | "leapfrog" | "roller" | "sandhog" | "napalm" | "laser" | "dirt" | "tracer";
+  | "missile"
+  | "mirv"
+  | "funky"
+  | "leapfrog"
+  | "roller"
+  | "sandhog"
+  | "napalm"
+  | "laser"
+  | "dirt"
+  | "tracer";
 
 export type WeaponId =
   | "baby_missile"

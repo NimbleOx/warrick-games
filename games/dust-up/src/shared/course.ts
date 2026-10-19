@@ -73,7 +73,18 @@ export function courseId(spec: CourseSpec): string {
 }
 
 type PieceKind =
-  "whoops" | "kicker" | "tabletop" | "gap" | "double" | "stepUp" | "drop" | "hill" | "climb" | "descent" | "log" | "rocks";
+  | "whoops"
+  | "kicker"
+  | "tabletop"
+  | "gap"
+  | "double"
+  | "stepUp"
+  | "drop"
+  | "hill"
+  | "climb"
+  | "descent"
+  | "log"
+  | "rocks";
 
 interface PieceDef {
   /** How often it comes up, on each difficulty. */

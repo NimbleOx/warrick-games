@@ -167,7 +167,9 @@ export interface Frame {
 }
 
 export type ClientMsg =
-  LobbyMsg | { t: "in"; e: number; n: number; k?: KeyEntry[]; g?: DropEntry[] } | { t: "resync"; own?: boolean };
+  | LobbyMsg
+  | { t: "in"; e: number; n: number; k?: KeyEntry[]; g?: DropEntry[] }
+  | { t: "resync"; own?: boolean };
 
 export type ServerMsg =
   | Exclude<RoomMsg<GameState>, { t: "welcome" }>

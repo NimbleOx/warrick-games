@@ -27,7 +27,7 @@ npm run typecheck -w games/pill-panic
 npm run test:live -w games/pill-panic           # two headless players and a CPU play a match through the dev server
 ```
 
-`test:live` expects the game at `http://localhost:5179/pill-panic`; set `PILL_PANIC_URL` if it's elsewhere.
+`test:live` plays a whole match against a dev server that's already running (start it with the first command, or as `pill-panic` from `.claude/launch.json`). It expects the game at `http://localhost:5179/pill-panic`; set `PILL_PANIC_URL` if it's elsewhere. The room turns away a page from a different build (see the kit's README), so the test's players read the dev server's build id from `/@vite/env` and send it in their `hello`, as the page does. For a server that isn't a Vite dev server, set `PILL_PANIC_BUILD` to its build id (the `WARRICK_BUILD` it was built with).
 
 ## Deploying
 

@@ -7,6 +7,19 @@ import { RoundView } from "../../src/client/view";
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const BASE = env.PILL_PANIC_URL ?? "http://localhost:5179/pill-panic";
 
+/**
+ * The room closes a page whose build id isn't its own (see the kit's `buildId`). A Vite dev
+ * server gives its page the id in /@vite/env, so read it there; set PILL_PANIC_BUILD for a
+ * server that isn't one.
+ */
+async function serverBuild(): Promise<string> {
+  if (env.PILL_PANIC_BUILD) return env.PILL_PANIC_BUILD;
+  const res = await fetch(`${BASE}/@vite/env`);
+  const build = res.ok ? /"__WARRICK_BUILD__":\s*"([^"]+)"/.exec(await res.text())?.[1] : undefined;
+  if (!build) throw new Error(`No build id at ${BASE}/@vite/env. Is a dev server there? If not, set PILL_PANIC_BUILD.`);
+  return build;
+}
+
 /** A headless player: the browser's RoundView, with a CPU brain on the buttons. */
 class Bot {
   ws!: WebSocket;
@@ -25,10 +38,11 @@ class Bot {
   attacks = 0;
   rounds = new Set<string>();
   private timer = 0 as unknown as ReturnType<typeof setInterval>;
-  private waiters: { test: () => boolean; resolve: () => void }[] = [];
+  private waiters: { test: () => boolean; resolve: () => void; reject: (e: Error) => void }[] = [];
 
   constructor(
     readonly code: string,
+    readonly build: string,
     readonly token: string,
     readonly name: string,
     level: "normal" | "hard",
@@ -39,11 +53,16 @@ class Bot {
   async connect(): Promise<void> {
     this.ws = new WebSocket(`${BASE.replace(/^http/, "ws")}/api/games/${this.code}/ws`);
     this.ws.addEventListener("message", (ev) => this.onMessage(JSON.parse(String(ev.data)) as ServerMsg));
+    // Nothing more will come, so fail whatever is waiting rather than let it time out.
+    this.ws.addEventListener("close", (ev) => {
+      const error = new Error(`${this.name}'s socket closed: ${ev.code} ${ev.reason}\n${this.describe()}`);
+      for (const w of this.waiters.splice(0)) w.reject(error);
+    });
     await new Promise<void>((resolve, reject) => {
       this.ws.addEventListener("open", () => resolve());
       this.ws.addEventListener("error", () => reject(new Error("socket error")));
     });
-    this.send({ t: "hello", token: this.token, name: this.name });
+    this.send({ t: "hello", token: this.token, name: this.name, build: this.build });
     this.timer = setInterval(() => this.tick(), 16);
     await this.until(() => !!this.state);
   }
@@ -63,7 +82,11 @@ class Bot {
     if (test()) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`${this.name} timed out waiting: ${test}\n${this.describe()}`)), ms);
-      this.waiters.push({ test, resolve: () => (clearTimeout(timer), resolve()) });
+      this.waiters.push({
+        test,
+        resolve: () => (clearTimeout(timer), resolve()),
+        reject: (e) => (clearTimeout(timer), reject(e)),
+      });
     });
   }
 
@@ -135,8 +158,9 @@ class Bot {
 it("plays a whole match between two browsers and a CPU without anyone drifting", async () => {
   const res = await fetch(`${BASE}/api/games`, { method: "POST" });
   const { code } = (await res.json()) as { code: string };
-  const ann = new Bot(code, "live-ann-token-1", "Ann", "hard");
-  const bob = new Bot(code, "live-bob-token-22", "Bob", "normal");
+  const build = await serverBuild();
+  const ann = new Bot(code, build, "live-ann-token-1", "Ann", "hard");
+  const bob = new Bot(code, build, "live-bob-token-22", "Bob", "normal");
   await ann.connect();
   await bob.connect();
   ann.send({ t: "settings", settings: { level: 0, speed: "hi", wins: 2, aim: "all" } });

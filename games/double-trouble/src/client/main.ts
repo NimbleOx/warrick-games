@@ -1,5 +1,5 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { $, esc, personalBest, setHtml } from "@warrick/kit/client/dom";
+import { $, esc, personalBest, setHtml, setText } from "@warrick/kit/client/dom";
 import { formatClock } from "@warrick/kit/client/format";
 import { Feed } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
@@ -109,6 +109,8 @@ const app = {
   sounded: "",
   arenaWidth: 0,
   boardsKey: "",
+  /** The HUD and scoreboard are out of date: the next frame renders them. */
+  hudDirty: false,
 };
 
 const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
@@ -194,9 +196,9 @@ function onMessage(msg: ServerMsg): void {
       setRound(msg.snap);
       break;
     case "f":
+      // The boards take every op at once; the HUD and scoreboard catch up on the next frame.
       for (const op of msg.o) onOp(op);
-      renderScoreboard();
-      renderHud();
+      renderSoon();
       break;
     case "fix":
       onFix(msg.s, msg.seat);
@@ -282,7 +284,7 @@ function onFix(slot: number, seat: SeatSnap): void {
     view.atk = seat.atk;
     if (lane.out) view.out = true;
   }
-  renderHud();
+  renderSoon();
 }
 
 /**
@@ -334,7 +336,7 @@ function moved(res: MoveResult, before: number, now: number): void {
     setTimeout(() => sfx.land(res.landed.length), 120);
   }
   if (res.out) sfx.die();
-  renderHud();
+  renderSoon();
 }
 
 function onOp(op: Op): void {
@@ -416,7 +418,6 @@ function onOp(op: Op): void {
         sfx.win();
       }
       feed.push(`${who(op.s)} made <b class="t">${SOLO_GOAL}</b> and ${mine ? "win! Keep going" : "wins!"}`);
-      renderHud();
       return;
     }
     app.round.over = true;
@@ -467,6 +468,11 @@ function frame(now: number): void {
     return;
   }
   if (shell.screen !== "game") return;
+  if (app.hudDirty) {
+    app.hudDirty = false;
+    renderScoreboard();
+    renderHud();
+  }
   drawBoards(now);
   renderBanner();
   renderClock();
@@ -535,7 +541,7 @@ function buildBoards(): void {
   const key = `${app.round?.n ?? ""}|${app.round?.seed ?? ""}|${app.mySlot}|${slots.join()}|${app.looks.map((l) => l?.color).join()}`;
   $("own").hidden = !app.lane;
   if (key === app.boardsKey) {
-    for (const s of app.seats) if (s?.el) s.el.querySelector(".opp-kos")!.textContent = s.kos ? `${s.kos} KO` : "";
+    for (const s of app.seats) if (s?.el) setText(s.el.querySelector<HTMLElement>(".opp-kos")!, s.kos ? `${s.kos} KO` : "");
     return;
   }
   app.boardsKey = key;
@@ -635,6 +641,15 @@ function renderGame(s: GameState): void {
   }
 }
 
+/**
+ * Moves and ops come in faster than frames with a few players (30–40 a second with 8), so they
+ * only mark the HUD and scoreboard out of date, and the frame renders them once. Nothing the game
+ * needs waits on it: the boards and lanes are already up to date.
+ */
+function renderSoon(): void {
+  app.hudDirty = true;
+}
+
 function renderHud(): void {
   const s = shell.state;
   if (!s || shell.screen !== "game") return;
@@ -671,17 +686,19 @@ function renderHud(): void {
   $("hud").classList.toggle("solo", solo());
   $("screen-game").classList.toggle("solo", solo());
   const goal = solo() ? SOLO_GOAL : (app.round?.goal ?? s.settings.goal);
-  $("hud-goal").textContent = goal ? String(goal) : "Survive";
-  $("hud-goal").title = solo()
+  const goalEl = $("hud-goal");
+  setText(goalEl, goal ? String(goal) : "Survive");
+  const title = solo()
     ? `Make a ${SOLO_GOAL} tile to win, then keep going`
     : goal
       ? `First to make a ${goal} tile wins (or be the last one standing)`
       : "Last one standing wins";
-  $("hud-moves").textContent = lane ? String(lane.n) : "—";
-  $("hud-best").textContent = lane ? tile(lane.best) : "—";
-  $("hud-score").textContent = lane ? String(lane.score) : "—";
-  $("hud-sent").textContent = seat ? String(seat.atk) : "—";
-  $("hud-kos").textContent = seat ? String(seat.kos) : "—";
+  if (goalEl.title !== title) goalEl.title = title;
+  setText($("hud-moves"), lane ? String(lane.n) : "—");
+  setText($("hud-best"), lane ? tile(lane.best) : "—");
+  setText($("hud-score"), lane ? String(lane.score) : "—");
+  setText($("hud-sent"), seat ? String(seat.atk) : "—");
+  setText($("hud-kos"), seat ? String(seat.kos) : "—");
 }
 
 /** The rock multiplier goes up on its own, so it's refreshed every frame. */
@@ -848,4 +865,4 @@ wire();
 shell.start();
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) Object.assign(window, { __dt: { app, own, shell, tryMove } });
+if (import.meta.env.DEV) Object.assign(window, { __dt: { app, own, shell, tryMove, attract } });

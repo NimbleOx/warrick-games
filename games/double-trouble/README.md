@@ -46,7 +46,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **Rock timing is deterministic.** A move marks rocks up to its `g` as seen, and they land on the third move after that. Only seen rocks can be smashed by a move's power. So the browser and server always agree on what landed, whatever the latency. The checksum covers only rocks the browser had seen. The browser's word only goes so far, though: rocks sent more than 1.5 seconds before a move arrives count as seen anyway (and the server overrules that move), so a modified client can't keep rocks off its board by never reporting them.
 - **The multiplier and idle drops are the server's alone.** Smashing incoming rocks uses the plain power inside `Lane`, and the server scales up only the rocks that go out. Rocks dropped on a player who's sat still are a server action (`Lane.drop()`) followed by a correction.
 - **The server can overrule.** If a move doesn't check out, moves come faster than anyone could make them (more than 20 at once, or 15 a second for long), or rocks were dropped on an idle player, the server bumps that board's epoch and sends the player their real board. Moves from an older epoch are ignored.
-- **Everyone else's boards** arrive as one op per move: the board as one character per cell, plus score, power and rocks waiting.
+- **Everyone else's boards** arrive as one op per move: the board as one character per cell, plus score, power and rocks waiting. The boards take each op as it comes; the HUD and scoreboard catch up once a frame, since ops come faster than frames with a full table.
 - **The Durable Object** holds the lobby, tokens and chat in storage and the round in memory. While a round is on and someone is connected, a 50 ms loop moves the CPUs and drops rocks on idle players. It stops between rounds so the object can hibernate. A deploy restarts every Durable Object: the first player to reconnect finds the round gone, and it starts over.
 - **CPU players** score boards the usual 2048 way (empty cells, pairs ready to merge, big tiles in order along an edge), with rocks counted as filled cells that break up pairs. Easy looks one move ahead and often slips. Normal looks one move ahead. Hard also averages over where the next tile might land. They move about 1, 2 and 3 times a second.
 
@@ -61,7 +61,8 @@ src/shared/    code used by both sides
 src/worker/    index.ts (routes), room.ts (Durable Object: move messages, the tick loop), game.ts (match rules),
                round.ts (one round: checking moves, routing rocks, KOs, the goal, CPUs, idle players)
 src/client/    main.ts (the game screen and its hooks into the shell), render.ts (canvas: boards, tiles,
-               rocks, meters, animations), input.ts (keys and swipes), audio.ts (sounds), attract.ts (home-screen demo)
+               rocks, meters, animations), input.ts (keys and swipes), audio.ts (sounds), attract.ts (home-screen demo:
+               a frame draws only the boards that moved)
 test/          Vitest tests: sliding, rocks, power, rock timing, replay, CPUs, game flow
 ```
 

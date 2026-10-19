@@ -11,31 +11,41 @@ interface Demo {
   lane: Lane;
   level: CpuLevel;
   next: number;
+  /** Moved since it was last drawn. */
+  dirty: boolean;
 }
 
 /**
  * The home screen's backdrop: a row of CPUs playing a real battle with the same engine and AI
- * the server uses, rocks and all.
+ * the server uses, rocks and all. Each board moves a couple of times a second and nothing on it
+ * animates, and the home card blurs whatever is under it: so a frame draws only the boards that
+ * moved since the last one, and nothing at all most of the time.
  */
 export class Attract {
   private ctx: CanvasRenderingContext2D;
   private demos: Demo[] = [];
   private rng = mulberry32(randomSeed());
   private u = 36;
+  private dpr = 1;
   private garbageId = 0;
   private still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  /** Draw every board on the next frame: after a resize, a lost context or a font arriving. */
+  private all = true;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
+    canvas.addEventListener("contextrestored", () => (this.all = true));
+    // Tile numbers are drawn in a web font: draw them again once it's in.
+    document.fonts?.addEventListener("loadingdone", () => (this.all = true));
   }
 
   resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.canvas.width = Math.round(w * dpr);
-    this.canvas.height = Math.round(h * dpr);
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.canvas.width = Math.round(w * this.dpr);
+    this.canvas.height = Math.round(h * this.dpr);
+    this.all = true;
     this.u = Math.max(24, Math.min(54, Math.floor(h / 10)));
     const count = Math.max(2, Math.min(7, Math.floor(w / (boardUnits(SIZE) * this.u * 1.3))));
     if (count !== this.demos.length) {
@@ -50,19 +60,29 @@ export class Attract {
     const { ctx, u } = this;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    ctx.clearRect(0, 0, w, h);
+    const all = this.all;
+    this.all = false;
+    if (all) {
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+    }
     const n = this.demos.length;
     const bw = boardUnits(SIZE) * u;
     const gap = (w - n * bw) / (n + 1);
     this.demos.forEach((d, i) => {
+      // A move changes only the board that made it: rocks it sends wait in the other's queue.
       if (!this.still && now >= d.next) {
         if (!d.next) d.next = now;
         this.step(d);
         d.next = now + cpuPace(d.level, this.rng) * 1.3;
+        d.dirty = true;
       }
+      if (!all && !d.dirty) return;
+      d.dirty = false;
       const x0 = Math.round(gap + i * (bw + gap));
       // Stagger the boards up and down a little.
       const y0 = Math.round((h - bw) / 2 + (i % 2 ? 1 : -1) * u * 0.9);
+      if (!all) ctx.clearRect(x0 - 1, y0 - 1, bw + 2, bw + 2);
       ctx.fillStyle = "rgb(14 17 34 / 0.85)";
       ctx.beginPath();
       ctx.roundRect(x0, y0, bw, bw, u * 0.12);
@@ -81,7 +101,7 @@ export class Attract {
   }
 
   private fresh(level: CpuLevel, next: number): Demo {
-    return { lane: new Lane(randomSeed(), SIZE), level, next };
+    return { lane: new Lane(randomSeed(), SIZE), level, next, dirty: true };
   }
 
   private step(d: Demo): void {

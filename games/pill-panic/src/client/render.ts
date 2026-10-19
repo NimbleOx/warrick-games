@@ -1,4 +1,17 @@
-import { COLOR, KIND, LINK_D, LINK_L, LINK_R, LINK_U, POP, VIRUS, pieceCells, type Bottle, type Garbage } from "../shared/bottle";
+import {
+  COLOR,
+  KIND,
+  LINK_D,
+  LINK_L,
+  LINK_R,
+  LINK_U,
+  LONE,
+  POP,
+  VIRUS,
+  pieceCells,
+  type Bottle,
+  type Garbage,
+} from "../shared/bottle";
 import { COLS, POP_TICKS, ROWS, SPAWN_X } from "../shared/constants";
 
 /** Fill, shadow and highlight for red, yellow and blue. */
@@ -54,6 +67,9 @@ export class BottleCanvas {
   readonly ctx: CanvasRenderingContext2D;
   private g = geometry(10, false);
   private dpr = 1;
+  private sprites = spritesFor(this.g.cell, this.dpr);
+  /** Nothing drawn since the last resize, which clears the canvas. */
+  blank = true;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -66,6 +82,8 @@ export class BottleCanvas {
     cell = Math.max(4, Math.floor(cell));
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.g = geometry(cell, this.next);
+    this.sprites = spritesFor(cell, this.dpr);
+    this.blank = true;
     this.canvas.width = Math.round(this.g.width * this.dpr);
     this.canvas.height = Math.round(this.g.height * this.dpr);
     this.canvas.style.width = `${this.g.width}px`;
@@ -78,23 +96,28 @@ export class BottleCanvas {
 
   draw(b: Bottle, look: Look): void {
     const { ctx } = this;
+    this.blank = false;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.g.width, this.g.height);
-    drawBottle(ctx, this.g, b, look);
+    drawBottle(ctx, this.g, b, look, this.sprites);
   }
 }
 
 type Geometry = ReturnType<typeof geometry>;
 
-/** Draw a bottle with its top-left corner at (x, y), into any canvas. */
+/**
+ * Draw a bottle with its top-left corner at (x, y), into any canvas. Keep (x, y) on whole pixels:
+ * its cells are copied from sprites, which blur in between.
+ */
 export function paintBottle(ctx: CanvasRenderingContext2D, x: number, y: number, cell: number, b: Bottle, look: Look): void {
+  const sprites = spritesFor(cell, ctx.getTransform().a);
   ctx.save();
   ctx.translate(x, y);
-  drawBottle(ctx, geometry(cell, look.next), b, look);
+  drawBottle(ctx, geometry(cell, look.next), b, look, sprites);
   ctx.restore();
 }
 
-function drawBottle(ctx: CanvasRenderingContext2D, g: Geometry, b: Bottle, look: Look): void {
+function drawBottle(ctx: CanvasRenderingContext2D, g: Geometry, b: Bottle, look: Look, sprites: Sprites): void {
   const { cell, wall, x0, y0, neck } = g;
   const w = COLS * cell;
   const h = ROWS * cell;
@@ -148,8 +171,8 @@ function drawBottle(ctx: CanvasRenderingContext2D, g: Geometry, b: Bottle, look:
       const px = x0 + x * cell;
       const py = y0 + y * cell;
       if (c & POP) drawPop(ctx, px, py, cell, c, popT);
-      else if ((c & KIND) === VIRUS) drawVirus(ctx, px, py, cell, c & COLOR, look.time, x * 7 + y * 3);
-      else drawHalf(ctx, px, py, cell, c & COLOR, c & KIND);
+      else if ((c & KIND) === VIRUS) sprites.virus(ctx, px, py, c & COLOR, virusBeat(look.time, x * 7 + y * 3));
+      else sprites.half(ctx, px, py, c & COLOR, c & KIND);
     }
   }
 
@@ -160,21 +183,22 @@ function drawBottle(ctx: CanvasRenderingContext2D, g: Geometry, b: Bottle, look:
       const gy = b.ghostY();
       if (gy !== p.y) {
         ctx.save();
-        ctx.globalAlpha = 0.22;
-        for (const [x, y, c, kind] of pieceCells({ ...p, y: gy })) drawHalf(ctx, x0 + x * cell, y0 + y * cell, cell, c, kind);
+        ctx.globalAlpha *= 0.22;
+        for (const [x, y, c, kind] of pieceCells({ ...p, y: gy })) sprites.half(ctx, x0 + x * cell, y0 + y * cell, c, kind);
         ctx.restore();
       }
     }
-    for (const [x, y, c, kind] of pieceCells(p)) drawHalf(ctx, x0 + x * cell, y0 + y * cell, cell, c, kind);
+    for (const [x, y, c, kind] of pieceCells(p)) sprites.half(ctx, x0 + x * cell, y0 + y * cell, c, kind);
   }
 
   // Rim, in the player's color.
   ctx.lineWidth = wall;
   ctx.lineJoin = "round";
   ctx.strokeStyle = look.accent;
-  ctx.globalAlpha = 0.85;
+  const alpha = ctx.globalAlpha;
+  ctx.globalAlpha = alpha * 0.85;
   ctx.stroke(glass);
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = alpha;
   if (cell >= 10) {
     ctx.lineWidth = Math.max(1, wall * 0.35);
     ctx.strokeStyle = "rgb(255 255 255 / 0.35)";
@@ -187,9 +211,9 @@ function drawBottle(ctx: CanvasRenderingContext2D, g: Geometry, b: Bottle, look:
   // The next capsule, above the neck.
   if (look.next) {
     const [a, c] = b.next;
-    const ny = y0 - neck - cell * 1.25;
-    drawHalf(ctx, x0 + SPAWN_X * cell, ny, cell, a, LINK_R);
-    drawHalf(ctx, x0 + (SPAWN_X + 1) * cell, ny, cell, c, LINK_L);
+    const ny = y0 - neck - Math.round(cell * 1.25);
+    sprites.half(ctx, x0 + SPAWN_X * cell, ny, a, LINK_R);
+    sprites.half(ctx, x0 + (SPAWN_X + 1) * cell, ny, c, LINK_L);
   }
 
   // Attacks waiting to drop in, as small halves along the top-left.
@@ -211,6 +235,77 @@ function drawBottle(ctx: CanvasRenderingContext2D, g: Geometry, b: Bottle, look:
     ctx.fillStyle = "rgb(8 10 20 / 0.6)";
     ctx.fill(glass);
   }
+}
+
+/** A sheet's capsule halves, one to a column: joined on the right, left, below or above, or alone. */
+const HALF_KINDS = [LINK_R, LINK_L, LINK_D, LINK_U, LONE];
+
+/**
+ * Every capsule half and germ, drawn once for a cell size at a scale (the canvas's pixels per
+ * CSS pixel), so drawing a cell copies it rather than tracing its paths. One row per color: the
+ * five halves, then the germ on each beat. Copied to whole device pixels, a cell looks the same
+ * as one drawn in place; at a fractional scale (a 1.5× screen) it comes out a little softer.
+ */
+class Sprites {
+  private sheet = document.createElement("canvas");
+  /** A cell, in the sheet's pixels. */
+  private size: number;
+  /** From one sprite to the next, with a gap so neighbours can't bleed in. */
+  private stride: number;
+
+  constructor(
+    private cell: number,
+    scale: number,
+  ) {
+    this.size = cell * scale;
+    this.stride = Math.ceil(this.size) + 2;
+    this.sheet.width = this.stride * (HALF_KINDS.length + 2);
+    this.sheet.height = this.stride * 3;
+    const ctx = this.sheet.getContext("2d")!;
+    for (let color = 1; color <= 3; color++) {
+      const top = (color - 1) * this.stride;
+      HALF_KINDS.forEach((kind, i) => {
+        ctx.setTransform(scale, 0, 0, scale, i * this.stride, top);
+        drawHalf(ctx, 0, 0, cell, color, kind);
+      });
+      for (const beat of [0, 1]) {
+        ctx.setTransform(scale, 0, 0, scale, (HALF_KINDS.length + beat) * this.stride, top);
+        drawVirus(ctx, 0, 0, cell, color, beat);
+      }
+    }
+  }
+
+  /** Half a capsule, as `drawHalf` draws it. */
+  half(ctx: CanvasRenderingContext2D, px: number, py: number, color: number, kind: number): void {
+    const i = HALF_KINDS.indexOf(kind);
+    this.copy(ctx, i < 0 ? HALF_KINDS.indexOf(LONE) : i, color, px, py);
+  }
+
+  /** A germ on beat 0 or 1, as `drawVirus` draws it. */
+  virus(ctx: CanvasRenderingContext2D, px: number, py: number, color: number, beat: number): void {
+    this.copy(ctx, HALF_KINDS.length + beat, color, px, py);
+  }
+
+  private copy(ctx: CanvasRenderingContext2D, column: number, color: number, px: number, py: number): void {
+    if (!PALETTE[color]) return;
+    const s = this.stride;
+    ctx.drawImage(this.sheet, column * s, (color - 1) * s, this.size, this.size, px, py, this.cell, this.cell);
+  }
+}
+
+/** Sprite sheets by cell size and scale, shared by every bottle drawn at that size. */
+const sheets = new Map<string, Sprites>();
+
+function spritesFor(cell: number, scale: number): Sprites {
+  const key = `${cell}@${scale}`;
+  let sprites = sheets.get(key);
+  if (!sprites) {
+    sprites = new Sprites(cell, scale);
+    sheets.set(key, sprites);
+    // Sizes change with the window: keep the latest few.
+    if (sheets.size > 8) sheets.delete(sheets.keys().next().value!);
+  }
+  return sprites;
 }
 
 /** Half a capsule, rounded on the side away from its partner. Kind 0 or LONE draws a round pill. */
@@ -249,28 +344,25 @@ function drawHalf(ctx: CanvasRenderingContext2D, px: number, py: number, cell: n
     ctx.strokeStyle = pal.dark;
     ctx.stroke();
     ctx.fillStyle = pal.light;
-    ctx.globalAlpha = 0.7;
+    const alpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha * 0.7;
     ctx.beginPath();
     ctx.ellipse(x + s * 0.36, y + s * 0.3, s * 0.18, s * 0.1, -0.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha;
   }
 }
 
-/** A germ: a bumpy blob with eyes that wiggles in place. */
-function drawVirus(
-  ctx: CanvasRenderingContext2D,
-  px: number,
-  py: number,
-  cell: number,
-  color: number,
-  time: number,
-  phase: number,
-): void {
+/** Which way a germ is wiggling (0 or 1). Each keeps its own time, from where it sits. */
+function virusBeat(time: number, phase: number): number {
+  return Math.floor((time + phase * 97) / 380) & 1;
+}
+
+/** A germ: a bumpy blob with eyes that wiggles in place, on beat 0 or 1. */
+function drawVirus(ctx: CanvasRenderingContext2D, px: number, py: number, cell: number, color: number, beat: number): void {
   const pal = PALETTE[color];
   if (!pal) return;
   const cx = px + cell / 2;
-  const beat = Math.floor((time + phase * 97) / 380) % 2;
   const cy = py + cell / 2 + (beat ? -cell * 0.03 : cell * 0.03);
   const r = cell * 0.36;
   ctx.beginPath();
@@ -321,20 +413,20 @@ function drawPop(ctx: CanvasRenderingContext2D, px: number, py: number, cell: nu
   if (!pal) return;
   const cx = px + cell / 2;
   const cy = py + cell / 2;
+  const alpha = ctx.globalAlpha;
   ctx.save();
   if (t < 0.35) {
     // Flash white over the piece.
-    ctx.globalAlpha = 1;
-    if ((c & KIND) === VIRUS) drawVirus(ctx, px, py, cell, c & COLOR, 0, 0);
+    if ((c & KIND) === VIRUS) drawVirus(ctx, px, py, cell, c & COLOR, 0);
     else drawHalf(ctx, px, py, cell, c & COLOR, 0);
-    ctx.globalAlpha = 0.6;
+    ctx.globalAlpha = alpha * 0.6;
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(cx, cy, cell * 0.42, 0, Math.PI * 2);
     ctx.fill();
   } else {
     const k = (t - 0.35) / 0.65;
-    ctx.globalAlpha = 1 - k;
+    ctx.globalAlpha = alpha * (1 - k);
     ctx.strokeStyle = pal.light;
     ctx.lineWidth = Math.max(1, cell * 0.1);
     ctx.beginPath();

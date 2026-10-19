@@ -302,7 +302,10 @@ function frame(now: number): void {
   if (shell.screen !== "game" || !v) return;
   v.stepOwn(wallTick(), () => controls.sample());
   v.advanceMirrors(Math.min(30, dt / TICK_MS));
-  if (v.own) {
+  // Under the results, whose blurred backdrop the browser would redo for every frame drawn
+  // beneath it, the bottles keep their last frame (unless a resize wiped them).
+  const still = !$("results").hidden;
+  if (v.own && (!still || ownCanvas.blank)) {
     ownCanvas.draw(v.own.b, {
       time: now,
       ghost: true,
@@ -314,7 +317,7 @@ function frame(now: number): void {
   }
   for (const card of app.rivals.values()) {
     const b = v.bottle(card.slot);
-    if (!b) continue;
+    if (!b || (still && !card.canvas.blank)) continue;
     card.canvas.draw(b, {
       time: now,
       ghost: false,

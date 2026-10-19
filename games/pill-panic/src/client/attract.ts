@@ -69,11 +69,11 @@ export class Attract {
     const cell = Math.max(10, Math.min(34, Math.floor((h * 0.9) / 21)));
     const size = bottleSize(cell, true);
     const gap = Math.max(size.w * 0.3, (w - size.w * 2) / 3);
-    const y = (h - size.h) / 2;
+    const y = Math.round((h - size.h) / 2);
     const xs = w > size.w * 3.2 ? [w / 2 - size.w * 1.6 - 160, w / 2 + size.w * 0.6 + 160] : [gap, w - gap - size.w];
     ctx.globalAlpha = 0.55;
     this.pair.forEach(({ b }, i) => {
-      paintBottle(ctx, Math.max(8, Math.min(w - size.w - 8, xs[i])), y, cell, b, {
+      paintBottle(ctx, Math.round(Math.max(8, Math.min(w - size.w - 8, xs[i]))), y, cell, b, {
         time: now,
         ghost: false,
         next: true,

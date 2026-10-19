@@ -2,7 +2,6 @@ import { unlockAudio } from "@warrick/kit/client/audio";
 import { $, $$, esc, setHtml, toast } from "@warrick/kit/client/dom";
 import { showClock } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
-import { ATTACK_MS, BUILD_MS, MOVE_MS_PER_TILE } from "../shared/constants";
 import { MAPS, type MapDef } from "../shared/maps";
 import {
   SETTING_CHOICES,
@@ -25,9 +24,7 @@ import {
   unitById,
   unitTile,
   type Act,
-  type ActEvent,
   type Board,
-  type BuildEvent,
   type Reach,
   type Unit,
 } from "../shared/rules";
@@ -36,6 +33,7 @@ import { MAX_HP, UNITS, UNIT_TYPES, isIndirect, type UnitType } from "../shared/
 import { cpuNext } from "../shared/ai";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
+import { EventQueue, type Anim, type Item } from "./queue";
 import { Renderer, unitIcon, type Ghost, type Overlay } from "./render";
 
 // ------------------------------------------------------------------ helpers
@@ -44,22 +42,6 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 const stars = (n: number) => (n ? "★".repeat(n) : "no cover");
 
 // ------------------------------------------------------------------ app state
-
-/** Server events wait here while an earlier one animates; plain states queue behind them. */
-type Item =
-  | { kind: "act"; ev: ActEvent; state: GameState }
-  | { kind: "build"; ev: BuildEvent; state: GameState }
-  | { kind: "turn"; ev: TurnEvent; state: GameState }
-  | { kind: "state"; state: GameState };
-
-interface Anim {
-  item: Extract<Item, { kind: "act" | "build" }>;
-  start: number;
-  /** Time spent sliding along the path, then the action, in ms. */
-  moveMs: number;
-  actionMs: number;
-  fired: boolean;
-}
 
 /** What tapping the map does next. */
 type Mode =
@@ -76,8 +58,6 @@ type Mode =
   | { k: "sent"; unit: number; to: number; at: number };
 
 const app = {
-  queue: [] as Item[],
-  anim: null as Anim | null,
   mode: { k: "idle" } as Mode,
   /** The tile the info bar describes: under the mouse, or the last one tapped. */
   focus: -1,
@@ -118,8 +98,7 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
   choices: SETTING_CHOICES,
   intercept,
   onWelcome: () => {
-    app.queue = [];
-    app.anim = null;
+    events.clear();
     app.mode = { k: "idle" };
     renderer.clearEffects();
   },
@@ -134,6 +113,16 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
 });
 const renderer = new Renderer($<HTMLCanvasElement>("game-canvas"));
 const attract = new Attract($<HTMLCanvasElement>("attract"));
+const events = new EventQueue({
+  seat: () => mySeat(),
+  canPlay: () => !!mapOf() && !!boardOf() && !document.hidden,
+  apply: (s) => shell.applyState(s),
+  turn: turnStarted,
+  started: (a) => {
+    if (a.item.kind === "act" && a.moveMs > 0) sfx.step();
+  },
+  fire: fireEffects,
+});
 
 const mine = (s = shell.state): PlayerState | undefined => s?.players.find((p) => p.id === shell.me);
 const mySeat = (s = shell.state) => mine(s)?.seat ?? -1;
@@ -141,7 +130,7 @@ const mapOf = (s = shell.state): MapDef | null => (s?.mapId ? (MAPS[s.mapId] ?? 
 const boardOf = (s = shell.state): Board | null => s?.board ?? null;
 const seatPlayer = (seat: number, s = shell.state) => s?.players.find((p) => p.id === s.order[seat]);
 const colors = (s = shell.state): string[] => (s?.order ?? []).map((id) => s!.players.find((p) => p.id === id)?.color ?? "#ccc");
-const busy = () => !!app.anim || app.queue.length > 0;
+const busy = () => events.busy;
 
 /** It's my turn and I can act: no animation playing, nothing waiting on the server. */
 function canAct(s = shell.state): boolean {
@@ -169,8 +158,7 @@ function onScreen(screen: Screen): void {
 
 /** Left the game, or lost it for good. */
 function onReset(): void {
-  app.queue = [];
-  app.anim = null;
+  events.clear();
   app.mode = { k: "idle" };
   app.camKey = "";
   $("build").hidden = true;
@@ -181,12 +169,11 @@ function onReset(): void {
 
 function intercept(msg: ServerMsg): boolean {
   if (msg.t === "act" || msg.t === "build" || msg.t === "turn") {
-    app.queue.push({ kind: msg.t, ev: msg.ev, state: msg.state } as Item);
-    pump();
+    events.push({ kind: msg.t, ev: msg.ev, state: msg.state } as Item);
     return true;
   }
   if (msg.t === "state" && busy()) {
-    app.queue.push({ kind: "state", state: msg.state });
+    events.push({ kind: "state", state: msg.state });
     return true;
   }
   return false;
@@ -235,59 +222,13 @@ function validateMode(s: GameState): void {
 
 // ------------------------------------------------------------------ events and animation
 
-function pump(): void {
-  while (!app.anim && app.queue.length) {
-    const item = app.queue.shift()!;
-    if (item.kind === "state") {
-      shell.applyState(item.state);
-    } else if (item.kind === "turn") {
-      shell.applyState(item.state);
-      turnStarted(item.ev, item.state);
-    } else {
-      startAnim(item);
-    }
-  }
-}
-
-function startAnim(item: Anim["item"]): void {
-  const s = shell.state;
-  const m = mapOf(s);
-  if (!s || !m || !s.board || document.hidden) {
-    shell.applyState(item.state);
-    return;
-  }
-  // Catch up when events pile up (Fast CPUs, a reconnect).
-  const speed = app.queue.length >= 2 ? 0.3 : app.queue.length === 1 ? 0.6 : 1;
-  let moveMs = 0;
-  let actionMs = BUILD_MS * speed;
-  if (item.kind === "act") {
-    const own = item.ev.seat === mySeat(s);
-    moveMs = own ? 0 : (item.ev.path.length - 1) * MOVE_MS_PER_TILE * speed;
-    actionMs = (item.ev.action === "attack" ? ATTACK_MS : item.ev.action === "capture" ? 700 : 120) * speed;
-  }
-  const a: Anim = { item, start: performance.now(), moveMs, actionMs, fired: false };
-  app.anim = a;
-  if (item.kind === "act" && moveMs > 0) sfx.step();
-  // Timers, not animation frames, move the queue on: frames stop in background tabs.
-  window.setTimeout(() => {
-    if (app.anim !== a) return;
-    a.fired = true;
-    fireEffects(a, m);
-  }, moveMs);
-  window.setTimeout(() => finishAnim(a), moveMs + actionMs);
-}
-
-function finishAnim(a: Anim): void {
-  if (app.anim !== a) return;
-  app.anim = null;
-  shell.applyState(a.item.state);
-  pump();
-}
-
-function fireEffects(a: Anim, m: MapDef): void {
+/** An event's action lands: the hit, the numbers and the sounds. `quiet` when it was hurried to catch up: no sounds. */
+function fireEffects(a: Anim, quiet: boolean): void {
+  const m = mapOf();
   const item = a.item;
+  if (!m) return;
   if (item.kind === "build") {
-    sfx.build();
+    if (!quiet) sfx.build();
     return;
   }
   const ev = item.ev;
@@ -297,25 +238,25 @@ function fireEffects(a: Anim, m: MapDef): void {
     const target = before ? unitById(before, ev.target!) : undefined;
     const tTile = target ? unitTile(m, target) : end;
     const heavy = ev.type === "heavy" || ev.type === "artillery" || ev.type === "tank";
-    sfx.shot(heavy);
+    if (!quiet) sfx.shot(heavy);
     renderer.flash(m, tTile);
     renderer.float(m, tTile, `-${ev.dealt}`, "#ff8a8a");
     if (ev.killed) {
       renderer.boom(m, tTile, 180);
-      setTimeout(() => sfx.boom(), 180);
+      if (!quiet) setTimeout(() => sfx.boom(), 180);
     }
     if (ev.taken) {
       const d = a.actionMs * 0.4;
-      setTimeout(() => sfx.shot(ev.targetType === "heavy" || ev.targetType === "tank"), d);
+      if (!quiet) setTimeout(() => sfx.shot(ev.targetType === "heavy" || ev.targetType === "tank"), d);
       renderer.flash(m, end, d);
       renderer.float(m, end, `-${ev.taken}`, "#ff8a8a", d);
       if (ev.lost) {
         renderer.boom(m, end, d + 180);
-        setTimeout(() => sfx.boom(), d + 180);
+        if (!quiet) setTimeout(() => sfx.boom(), d + 180);
       }
     }
   } else if (ev.action === "capture") {
-    sfx.capture(!!ev.captured);
+    if (!quiet) sfx.capture(!!ev.captured);
     renderer.float(m, end, ev.captured ? "Captured!" : `${ev.left} left`, ev.captured ? "#ffd23f" : "#fff");
   }
 }
@@ -324,7 +265,7 @@ function fireEffects(a: Anim, m: MapDef): void {
 function ghosts(m: MapDef, b: Board, now: number): { hide: Set<number>; ghosts: Ghost[] } {
   const hide = new Set<number>();
   const out: Ghost[] = [];
-  const a = app.anim;
+  const a = events.anim;
   const mode = app.mode;
   if (a?.item.kind === "act") {
     const ev = a.item.ev;
@@ -401,7 +342,7 @@ function frame(now: number): void {
     const mode = app.mode;
     const from = [s, mode, mode.k === "target" ? mode.focus : null, app.hover];
     const o = overlay(m, b);
-    const moving = !!app.anim || renderer.busy || o.selected !== undefined || !!o.targets?.length;
+    const moving = !!events.anim || renderer.busy || o.selected !== undefined || !!o.targets?.length;
     if (moving || renderer.stale || from.some((v, i) => v !== drawnFrom[i])) {
       drawnFrom = from;
       const g = ghosts(m, b, now);
@@ -1152,7 +1093,7 @@ function wire(): void {
   });
   document.addEventListener("visibilitychange", () => {
     // Coming back to a hidden tab: skip whatever piled up.
-    if (document.visibilityState === "visible" && app.anim) finishAnim(app.anim);
+    if (document.visibilityState === "visible" && events.anim) events.finish(events.anim);
   });
 }
 
@@ -1183,8 +1124,8 @@ if (import.meta.env.DEV) {
   setInterval(autoStep, 250);
   /** Skip animations (a hidden pane throttles their timers), then take one autoplay step. */
   const tick = () => {
-    while (app.anim) finishAnim(app.anim);
+    while (events.anim) events.finish(events.anim);
     autoStep();
   };
-  Object.assign(window, { __pw: { app, renderer, shell, tick, autoplay: (level: string | null) => (auto = level) } });
+  Object.assign(window, { __pw: { app, events, renderer, shell, tick, autoplay: (level: string | null) => (auto = level) } });
 }

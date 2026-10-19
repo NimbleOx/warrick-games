@@ -24,7 +24,7 @@ From the repo root, after `npm install` there:
 
 ```bash
 npm run dev -w games/pocket-wars -- --port 5186  # http://localhost:5186/pocket-wars/, with the Worker and Durable Object in workerd
-npm test -w games/pocket-wars                    # rules, movement, maps, balance, CPU, game-flow and room tests (Node)
+npm test -w games/pocket-wars                    # rules, movement, maps, balance, CPU, game-flow, room and event-queue tests (Node)
 npm run typecheck -w games/pocket-wars
 ```
 
@@ -46,7 +46,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **The rules are pure functions** over a `Board` (units, building owners, capture points, funds and who's out) in `src/shared/`: the terrain and unit tables, pathfinding, damage, the action checks and their effects, the start of a turn, knockouts and the CPUs. The server, the CPUs and the home screen's demo, where CPUs play each other, all use them.
 - **The maps are static data** (`src/shared/maps.ts`, drawn in ASCII), and the clients have them too, so the state carries only the map id, the building owners and capture points, and the units.
 - **One message per unit action.** The client keeps a move to itself until you pick the action, which is how Cancel works, then sends the unit, its destination, the action and the target. The server checks all of it the same way for people and CPUs, and anything wrong comes back as an error you can read.
-- **Each action is broadcast as an event** (the path, the damage both ways, what was destroyed, capture progress) carrying the state right after it. Clients queue the events and play them in order, the unit sliding along its path and then the attack, before they snap to the state that came with each. A burst of events plays faster, so Fast CPUs and reconnects don't fall behind.
+- **Each action is broadcast as an event** (the path, the damage both ways, what was destroyed, capture progress) carrying the state right after it. Clients queue the events and play them in order, the unit sliding along its path and then the attack, before they snap to the state that came with each. The queue keeps up with the server: an event plays faster when others are waiting, and a Fast CPU's step plays within the 120 ms before the next one. Events it skips to catch up show their damage numbers but make no sound. It skips events while three or more are waiting, and when your own turn arrives it skips everything still ahead of it. So your turn is yours as soon as it arrives, since its clock is already running.
 - **One alarm drives every timer:** the turn clock, the minute an absent player has, each CPU step and the winner's banner. The turn clock is the kit's (`@warrick/kit/worker/turns`). Timers pause when nobody is connected, and a game with no connections for 12 hours is deleted.
 - **CPU turns are a sequence of steps**, about a second apart unless the host turns on Fast CPUs. Each step picks the best-scoring action for one unit (or a build, or End turn), with every score in funds, and goes through the same checks as a person's action. Easy goes for the best target in reach and captures what it lands on. Normal only makes trades that come out ahead, keeps artillery out of reach and pulls hurt units back to repair. Hard also steers clear of tiles enemies can hit hard, focuses fire, guards its HQ and plans captures several turns ahead. From day 25 they grow bolder, so long games don't stall.
 - **The canvas is drawn only when something on it changes or moves**, not on every frame.
@@ -67,12 +67,14 @@ src/shared/    code used by both sides
   constants.ts   seat funds, CPU pacing, animation timings, the away minute
   protocol.ts    settings, game state, events and message types
 src/worker/    index.ts (routes), room.ts (Durable Object: messages and the alarm), game.ts (seats, turns, actions, timers)
-src/client/    main.ts (the game screen, selection, menus and the event queue, and its hooks into the shell),
+src/client/    main.ts (the game screen, selection and menus, and its hooks into the shell),
+               queue.ts (the queue of server events, and how it keeps up),
                render.ts (the map and units on a canvas, panning and zooming), audio.ts (sounds),
                attract.ts (the home screen's CPU demo)
 test/          Vitest tests for the rules, movement, maps and their symmetry, the CPUs and the game flow, and room.test.ts,
                which runs the real room (reloads, restarts, stand-ins, events) through the kit's test harness;
-               sim.ts plays CPU-only games, and balance.test.ts uses it
+               sim.ts plays CPU-only games, and balance.test.ts uses it; queue.test.ts plays the client's
+               event queue against the real room and a Fast CPU
 ```
 
 The room, lobby rules, router, socket, home/lobby/chat shell and base styles come from `@warrick/kit` (`../../packages/kit`).

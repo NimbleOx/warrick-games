@@ -1,7 +1,15 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { newBrain, think, type Brain, type CpuLevel } from "./ai";
 import { B_QUIT, Bottle, PLAYER_BUTTONS, virusLayout, type BottleEvent, type Garbage } from "./bottle";
-import { COLS, GARBAGE_GRACE_TICKS, MAX_LAG_OFFLINE, MAX_LAG_TICKS, MAX_LEAD_TICKS, START_SPEED } from "./constants";
+import {
+  COLS,
+  GARBAGE_GRACE_TICKS,
+  MAX_CLAIM_TICKS,
+  MAX_LAG_OFFLINE,
+  MAX_LAG_TICKS,
+  MAX_LEAD_TICKS,
+  START_SPEED,
+} from "./constants";
 import type { Aim, Attack, DropEntry, Frame, KeyEntry, LaneSnap, RoundSnap, Segment, Speed } from "./protocol";
 import { randInt, shuffle, type Rng } from "@warrick/kit/shared/rng";
 
@@ -192,11 +200,13 @@ export class Round {
     const b = L.lane.bottle;
     const k = parseEntries(keys);
     const g = parseEntries(drops);
-    let ok = Number.isInteger(n) && (n as number) >= b.tick && !!k && !!g;
-    // Every input falls between the last one we have and the tick the browser says it reached.
-    let last = L.lane.keys.at(-1)?.[0] ?? b.tick;
+    // A browser can't be far ahead of the clock: inputs that far off would only pile up here.
+    let ok = Number.isInteger(n) && (n as number) >= b.tick && (n as number) <= wall + MAX_CLAIM_TICKS && !!k && !!g;
+    // Every input falls between the last one we have and the tick the browser says it reached,
+    // one to a tick, so no more of them wait here than there are ticks to replay.
+    let last = L.lane.keys.at(-1)?.[0] ?? b.tick - 1;
     for (const [t] of k ?? []) {
-      if (t < last || t > (n as number)) ok = false;
+      if (t <= last || t > (n as number)) ok = false;
       last = t;
     }
     // And an attack lands no later than it's due, or a browser could put it off forever.

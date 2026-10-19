@@ -4,7 +4,7 @@
 import { internals, openRoom, type TestRoom } from "@warrick/kit/testing/room";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameState } from "../src/shared/protocol";
-import type { Live } from "../src/worker/game";
+import { Game, type Live } from "../src/worker/game";
 import { GameRoom } from "../src/worker/room";
 
 beforeEach(() => {
@@ -61,6 +61,29 @@ describe("a round in progress", () => {
     expect(state(after).round!.n).toBe(1);
     expect(live(after)).not.toBeNull();
     expect(logged(after, "starts over")).toBe(true);
+  });
+});
+
+describe("inputs", () => {
+  it("takes 100 a second from one socket and drops the rest", async () => {
+    const { r, ann } = await playing();
+    const feed = vi.spyOn(Game.prototype, "feed");
+    const input = { t: "in", e: 0, n: 0, k: [], g: [] };
+    // A browser's usual 20 a second all go through.
+    for (let i = 0; i < 60; i++) {
+      await r.say(ann, input);
+      await vi.advanceTimersByTimeAsync(50);
+    }
+    expect(feed).toHaveBeenCalledTimes(60);
+    // A flood is cut off at 100 in the second, and the next second takes them again.
+    feed.mockClear();
+    await vi.advanceTimersByTimeAsync(1000);
+    for (let i = 0; i < 500; i++) await r.say(ann, input);
+    expect(feed).toHaveBeenCalledTimes(100);
+    await vi.advanceTimersByTimeAsync(1000);
+    await r.say(ann, input);
+    expect(feed).toHaveBeenCalledTimes(101);
+    feed.mockRestore();
   });
 });
 

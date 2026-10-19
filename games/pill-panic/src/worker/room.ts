@@ -6,6 +6,8 @@ import { Game, newGameState, type Live } from "./game";
 
 /** Inputs can run long: a tab waking from sleep catches up hundreds of ticks at once. */
 const MAX_MSG_BYTES = 8192;
+/** Inputs one socket may send in a second (browsers send about 20). Past this they're dropped. */
+const MAX_INPUTS_PER_SEC = 100;
 
 /**
  * One Durable Object per game code (the kit's Room does sockets, storage and cleanup). While a
@@ -14,6 +16,8 @@ const MAX_MSG_BYTES = 8192;
  */
 export class GameRoom extends Room<GameState, Game, Live> {
   protected readonly tickMs = LOOP_MS;
+  /** Each socket's inputs this second, since inputs skip the kit's rate limit. */
+  private inputs = new WeakMap<WebSocket, { at: number; n: number }>();
 
   protected newState(code: string, now: number): GameState {
     return newGameState(code, now);
@@ -32,11 +36,19 @@ export class GameRoom extends Room<GameState, Game, Live> {
     // Inputs are the busiest message by far, and can be longer than the kit takes. They only
     // feed the round; the loop broadcasts.
     if (msg?.t === "in") {
-      const pid = playerOf(ws);
+      const pid = this.takeInput(ws) ? playerOf(ws) : null;
       if (pid) this.makeGame(this.state!, this.io(), this.live).feed(pid, msg);
       return;
     }
     return super.webSocketMessage(ws, raw);
+  }
+
+  /** Count an input from this socket. False once it has sent too many this second. */
+  private takeInput(ws: WebSocket): boolean {
+    const now = Date.now();
+    let c = this.inputs.get(ws);
+    if (!c || now - c.at >= 1000) this.inputs.set(ws, (c = { at: now, n: 0 }));
+    return ++c.n <= MAX_INPUTS_PER_SEC;
   }
 
   protected afterHello(game: Game, pid: string): void {

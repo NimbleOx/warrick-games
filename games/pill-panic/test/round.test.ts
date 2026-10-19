@@ -3,6 +3,7 @@ import { newBrain, think, type Brain, type CpuLevel } from "../src/shared/ai";
 import { BLUE, Bottle, RED, type Garbage } from "../src/shared/bottle";
 import type { DropEntry, Frame, KeyEntry, LaneSnap } from "../src/shared/protocol";
 import { mulberry32 } from "@warrick/kit/shared/rng";
+import { MAX_LEAD_TICKS } from "../src/shared/constants";
 import { Mirror, Round, type Seat } from "../src/shared/round";
 
 function makeRound(seats: (CpuLevel | null)[], opts: { level?: number; aim?: "leader" | "random" | "all" } = {}) {
@@ -258,6 +259,45 @@ describe("a round", () => {
       expect(sentAt.size).toBeGreaterThanOrEqual(6);
       expect(round.outcome).toBeNull();
     }
+  });
+
+  it("waits for a browser a little ahead of the clock, and takes over one far ahead", () => {
+    const round = makeRound([null, "hard"], { level: 10 });
+    const ann = new Browser(0, round.snapshot(1).lanes[0], newBrain("normal", 3));
+    const queued = () => round.lanes[0]!.lane.keys.length;
+    let wall = 60;
+    ann.play(wall);
+    ann.send(round, wall);
+    round.step(wall, () => true);
+    round.collect();
+    // A second and a half ahead: replayed up to a second past the clock, the rest kept for later.
+    ann.play(wall + 90);
+    ann.send(round, wall);
+    expect(round.bottle(0)!.tick).toBe(wall + MAX_LEAD_TICKS);
+    expect(round.collect()!.fx).toBeUndefined();
+    // Ten seconds ahead (a modified browser, say) can't be replayed: the server takes over.
+    const epoch = ann.e;
+    ann.play(wall + 600);
+    ann.send(round, wall);
+    expect(queued()).toBe(0);
+    expect(round.bottle(0)!.tick).toBe(wall + MAX_LEAD_TICKS);
+    ann.receive(round.collect()!);
+    expect(ann.e).toBe(epoch + 1);
+    expect(ann.b.checksum()).toBe(round.bottle(0)!.checksum());
+
+    // Every input on its own tick, or one tick could hold any number of them.
+    wall += 120;
+    round.step(wall, () => true);
+    ann.play(wall);
+    ann.send(round, wall);
+    ann.receive(round.collect()!);
+    expect(ann.e).toBe(epoch + 1);
+    const t = ann.b.tick;
+    const flood = Array.from({ length: 600 }, () => [t, 1]);
+    round.feed(0, ann.e, t, flood, [], wall);
+    expect(queued()).toBe(0);
+    ann.receive(round.collect()!);
+    expect(ann.e).toBe(epoch + 2);
   });
 
   it("aims attacks at whoever has the fewest viruses left", () => {

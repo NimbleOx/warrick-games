@@ -54,6 +54,11 @@ export const MAX_LAG_TICKS = 2 * TICKS_PER_SEC;
 export const MAX_LAG_OFFLINE = 6;
 /** Inputs this far ahead of the server's clock aren't replayed yet. */
 export const MAX_LEAD_TICKS = TICKS_PER_SEC;
+/**
+ * A browser claiming a tick further ahead of the clock than this can't be replayed: the server
+ * takes the bottle over. Honest browsers run on the server's clock, so they're never near it.
+ */
+export const MAX_CLAIM_TICKS = 3 * TICKS_PER_SEC;
 /** A browser must take delivery of an attack within this long, or the server drops it in for them. */
 export const GARBAGE_GRACE_TICKS = 2 * TICKS_PER_SEC;
 /** Pause between rounds of a match. */

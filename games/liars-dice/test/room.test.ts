@@ -155,10 +155,16 @@ describe("the hands", () => {
     const bo = await r.connect("Bo");
     await r.say(ann, { t: "settings", settings: { turnSeconds: 0 } });
     const put = vi.spyOn(r.storage, "put");
-    const written = () => put.mock.calls.map(([keys]) => Object.keys(keys as object).sort());
+    // Which of the hands and the state each write had (the kit saves its tokens and log only when they change).
+    const written = () =>
+      put.mock.calls.map(([keys]) =>
+        Object.keys(keys as object)
+          .filter((k) => k === "hands" || k === "state")
+          .sort(),
+      );
 
     await r.say(ann, { t: "start" });
-    expect(written()).toEqual([["hands", "log", "state", "tokens"]]);
+    expect(written()).toEqual([["hands", "state"]]);
     expect(r.storage.data.get("hands")).toEqual(live());
     expect((r.storage.data.get("state") as GameState).round).toBe(1);
 
@@ -168,16 +174,13 @@ describe("the hands", () => {
     await r.say(ws[s().turnId!], { t: "bid", qty: 1, face: 2 });
     await r.say(ws[s().turnId!], { t: "liar" });
     expect(s().phase).toBe("reveal");
-    expect(written()).toEqual([
-      ["log", "state", "tokens"],
-      ["log", "state", "tokens"],
-    ]);
+    expect(written()).toEqual([["state"], ["state"]]);
 
     // The next round's dice go with the state that starts it.
     put.mockClear();
     await fireAlarm(r);
     expect(s().round).toBe(2);
-    expect(written()).toEqual([["hands", "log", "state", "tokens"]]);
+    expect(written()).toEqual([["hands", "state"]]);
     expect((r.storage.data.get("hands") as Hands).round).toBe(2);
   });
 

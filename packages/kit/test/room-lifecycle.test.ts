@@ -306,6 +306,30 @@ describe("rate limits", () => {
     expect(r.storage.puts()).toBe(puts);
     expect(ann.received.length).toBe(states);
   });
+
+  it("saves the tokens and the log only when they change", async () => {
+    const r = await openRoom(TurnRoom);
+    const written: string[][] = [];
+    const put = r.storage.put;
+    r.storage.put = (a, v) => {
+      written.push(typeof a === "string" ? [a] : Object.keys(a).sort());
+      return put(a, v);
+    };
+    // Someone new: their token, "Ann joined" and the state.
+    const ann = await r.connect("Ann");
+    expect(written.at(-1)).toEqual(["log", "state", "tokens"]);
+    // A change to the state alone writes the state alone.
+    await r.say(ann, { t: "settings", settings: {} });
+    expect(written.at(-1)).toEqual(["state"]);
+    // Chat adds to the log.
+    await r.say(ann, { t: "chat", text: "hi" });
+    expect(written.at(-1)).toEqual(["log", "state"]);
+    // And nothing was lost: after a restart, Ann is still Ann, and the chat is still there.
+    const again = await r.restart();
+    const back = await again.connect("Ann");
+    expect(back.you).toBe(ann.you);
+    expect(internals(again.room).log.map((e) => e.text)).toContain("hi");
+  });
 });
 
 describe("host", () => {

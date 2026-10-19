@@ -89,6 +89,9 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
   private buckets = new WeakMap<WebSocket, { any: Bucket; lobby: Bucket }>();
   /** Whether the game has heard which players went while it wasn't running (see `settle`). */
   private settled = false;
+  /** The tokens and the log changed since they were last saved. The state is saved every time. */
+  private tokensChanged = false;
+  private logChanged = false;
 
   constructor(ctx: DurableObjectState, env: unknown) {
     super(ctx, env as never);
@@ -125,7 +128,7 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
   }
   /**
    * The room's own storage keys that changed since it last saved them, to go in the same write as
-   * the state, tokens and log, so a crash can't keep one without the other. Asked whenever the
+   * the state (and the tokens and log, when they changed), so a crash can't keep one without the other. Asked whenever the
    * room might save; null (the default) when nothing changed. Load the keys in the room's own
    * constructor, inside `ctx.blockConcurrencyWhile`.
    */
@@ -147,6 +150,7 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
   async init(code: string): Promise<boolean> {
     if (this.state) return false;
     this.state = this.newState(code, Date.now());
+    this.tokensChanged = this.logChanged = true;
     await this.save();
     await this.reschedule();
     return true;
@@ -344,6 +348,7 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
       // Tokens whose player has gone would only pile up.
       for (const [t, id] of Object.entries(this.tokens)) if (!game.player(id)) delete this.tokens[t];
       this.tokens[token] = player.id;
+      this.tokensChanged = true;
     }
     this.attach(ws, player.id);
     game.setConnected(player.id, true);
@@ -369,7 +374,9 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
 
   private disconnectPlayer(pid: string): void {
     for (const [token, id] of Object.entries(this.tokens)) {
-      if (id === pid) delete this.tokens[token];
+      if (id !== pid) continue;
+      delete this.tokens[token];
+      this.tokensChanged = true;
     }
     for (const ws of this.ctx.getWebSockets()) {
       if (this.pidOfSocket(ws) !== pid) continue;
@@ -442,6 +449,7 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
     if (game.logs.length) {
       this.log.push(...game.logs);
       if (this.log.length > LOG_MAX) this.log.splice(0, this.log.length - LOG_MAX);
+      this.logChanged = true;
       this.broadcast({ t: "log", entries: game.logs });
     }
     // A message that carries the state itself (a shot and its outcome, say) stands in for a state message.
@@ -505,8 +513,16 @@ export abstract class Room<S extends BaseState, G extends Lobby<S, AnyMsg, L>, L
 
   // ---------------------------------------------------------------- storage
 
+  /**
+   * Save the state, with the tokens and the log only if they changed (most actions change
+   * neither, and the log is up to 80 entries), and the room's own changed keys.
+   */
   private async save(keys: Record<string, unknown> | null = null): Promise<void> {
-    await this.ctx.storage.put({ ...keys, state: this.state, tokens: this.tokens, log: this.log });
+    const entries: Record<string, unknown> = { ...keys, state: this.state };
+    if (this.tokensChanged) entries.tokens = this.tokens;
+    if (this.logChanged) entries.log = this.log;
+    this.tokensChanged = this.logChanged = false;
+    await this.ctx.storage.put(entries);
   }
 
   private async reschedule(): Promise<void> {

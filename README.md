@@ -6,7 +6,7 @@ One repo, one Cloudflare Worker per game. Each game is deployed on its own and s
 
 | Game | Path | Folder | Status | Dev port |
 | --- | --- | --- | --- | --- |
-| Hub page | `/` | `hub` | ready | 5170 |
+| Hub page | `/` | `hub` | live | 5170 |
 | Crater Club | `/crater-club/` | `games/crater-club` | live | 5173 |
 | Light Cycles | `/light-cycles/` | `games/light-cycles` | live | 5174 |
 | Ricochet Alley | `/ricochet-alley/` | `games/ricochet-alley` | live | 5176 |
@@ -35,7 +35,7 @@ packages/kit/   what the games share: rooms, the lobby, networking, the page she
 
 This is an npm workspace. The shared tooling (Vite, the Cloudflare Vite plugin, wrangler, Vitest, TypeScript) is in the root `package.json`, with one `package-lock.json`.
 
-The games' shared code lives in `packages/kit` (`@warrick/kit`; see its README): the Durable Object base, the lobby rules, the Worker router, the reconnecting socket, the home/lobby/chat shell, the sound core, the base stylesheet and the Vite and TypeScript config. Each game keeps only its own rules, screen and look. Every game is built on it.
+The games' shared code lives in `packages/kit` (`@warrick/kit`; see its README): the Durable Object base, the lobby rules, the Worker router, the reconnecting socket, the home/lobby/chat shell, the sound core, HUD and canvas helpers (a turn clock, a kill feed, colour arithmetic), the base stylesheet and the Vite and TypeScript config. Each game keeps only its own rules, screen and look. Every game is built on it.
 
 ## Commands
 
@@ -57,9 +57,10 @@ npm run deploy -w hub
 
 ## Adding a game
 
-1. Create `games/<name>/` and give it a free port in `.claude/launch.json`. Start from a game like it: Stack Attack or Turf War (real-time), Crater Club (turn-based), or Light Cycles (real-time rounds with timers between them).
+1. Create `games/<name>/`, give it a free port in `.claude/launch.json` and a row in the table above. Start from a game like it: Stack Attack or Turf War (real-time), Crater Club (turn-based), or Light Cycles (real-time rounds with timers between them).
 2. Build it on `@warrick/kit` (see its README): `vite.config.ts` is `gameConfig("<name>")`, which sets Vite's `base` to `/<name>/` and nests the built client under `dist/client/<name>/` (Workers static assets are looked up by request path and ignore Vite's `base`); the Worker is `gameWorker("<name>")`, with its API under `/<name>/api/...`; the client's `Shell` builds every URL from `import.meta.env.BASE_URL`. Its `tsconfig.worker.json` includes the kit's `worker-runtime.d.ts`, and its `cf-typegen` script is `wrangler types --include-runtime=false`, so its own `worker-configuration.d.ts` holds only its bindings.
 3. Give its `wrangler.jsonc` the route `{ "pattern": "warrick.games/<name>*", "zone_name": "warrick.games" }`, `workers_dev: false` and `run_worker_first: ["/<name>/api/*"]`.
 4. Pick its `localStorage` prefix (`cc`, `lc`, …) and pass it to the `Shell`: every game shares the warrick.games origin.
-5. Deploy the game, then give it a live card in `hub/public/index.html` (copy one; a game with solo play gets the Solo button too) and deploy the hub.
-6. Give it a sharing card, the picture a pasted link shows: `npm run share-cards` draws every game's from its hub card into `games/<name>/public/og.png` (and the hub's), and its `index.html` needs the same `og:` and `twitter:card` tags as the other games'.
+5. Write its `README.md` with the same sections as the other games' (Playing, Development, Deploying, How it works), and a `CLAUDE.md` with the rules and design its code keeps to.
+6. Deploy the game, then give it a live card in `hub/public/index.html` (copy one; a game with solo play gets the Solo button too) and an icon in `hub/public/icons/` (see the hub's README), and deploy the hub.
+7. Give it a sharing card, the picture a pasted link shows: `npm run share-cards` draws every game's from its hub card into `games/<name>/public/og.png` (and the hub's), and its `index.html` needs the same `og:` and `twitter:card` tags as the other games'.

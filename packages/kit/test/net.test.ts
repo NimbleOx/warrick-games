@@ -208,6 +208,26 @@ describe("clock sync", () => {
     expect(socket(0).sent.map((m) => (m === "ping" ? m : JSON.parse(m)))).toContainEqual({ t: "ping", c: Date.now() });
   });
 
+  it("keeps the beat when it's asked again and again (the shell asks on every state)", async () => {
+    const { conn, socket } = connect();
+    socket(0).accept();
+    socket(0).answering = true;
+    const beats = () => socket(0).sent.filter((m) => m.startsWith(`{"t":"ping"`)).length;
+    // States every 2 s, quicker than the beat: each one asks for it again.
+    for (let i = 0; i < 10; i++) {
+      conn.heartbeat(true);
+      await vi.advanceTimersByTimeAsync(2_000);
+    }
+    expect(beats()).toBe(4);
+    // Off stops it, and on starts it afresh.
+    conn.heartbeat(false);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(beats()).toBe(4);
+    conn.heartbeat(true);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(beats()).toBe(5);
+  });
+
   it("takes the server's clock from the quickest round trip", () => {
     vi.setSystemTime(1_000_000);
     const clock = new ClockSync();

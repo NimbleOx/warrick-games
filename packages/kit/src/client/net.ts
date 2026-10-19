@@ -95,7 +95,7 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
     this.stopped = true;
     clearTimeout(this.retryTimer);
     this.stopTimers();
-    clearInterval(this.heartbeatTimer);
+    this.stopHeartbeat();
     this.ws?.close(1000, "bye");
     this.ws = null;
   }
@@ -116,9 +116,12 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
    * While a game is live, send a real message every few seconds. It refreshes the clock skew and
    * keeps the room's CPU budget topped up: each incoming message resets a Durable Object's
    * 30-second budget, but the plain-text pings below are answered without waking the room.
+   * Call it as often as you like (the shell does on every state): only turning it on or off
+   * restarts it, so states that come quicker than the beat don't keep putting it off.
    */
   heartbeat(on: boolean): void {
-    clearInterval(this.heartbeatTimer);
+    if (on === !!this.heartbeatTimer) return;
+    this.stopHeartbeat();
     if (!on) return;
     this.heartbeatTimer = window.setInterval(() => {
       this.ping();
@@ -181,7 +184,7 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
     if (code === CLOSE_STALE) {
       if (!this.h.stale) return this.fail("This game has been updated. Reload the page to keep playing.");
       this.stopped = true;
-      clearInterval(this.heartbeatTimer);
+      this.stopHeartbeat();
       this.h.status("closed");
       return this.h.stale();
     }
@@ -222,9 +225,14 @@ export class Connection<C extends AnyMsg = AnyMsg, S extends AnyMsg = AnyMsg> {
     this.answerTimer = 0;
   }
 
+  private stopHeartbeat(): void {
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = 0;
+  }
+
   private fail(reason: string): void {
     this.stopped = true;
-    clearInterval(this.heartbeatTimer);
+    this.stopHeartbeat();
     this.h.status("closed");
     this.h.fatal(reason);
   }

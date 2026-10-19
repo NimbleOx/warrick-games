@@ -1,8 +1,5 @@
 // A board is size × size cells, stored row by row from the top left: cell i is (i % size, i / size).
 
-/** Board sizes the host can pick: 4 × 4 like the original, or a roomier 5 × 5. */
-export const SIZES = [4, 5] as const;
-
 /** Merges charge a player's power meter; each time it reaches this, one rock goes out. */
 export const ROCK_COST = 8;
 

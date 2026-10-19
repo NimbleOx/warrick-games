@@ -1,5 +1,5 @@
 import { BARREL_LEN, TANK_HALF_W, TURRET_Y, WORLD_H, WORLD_W } from "../shared/constants";
-import { hexToRgb, mix, rgba } from "@warrick/kit/client/color";
+import { hexToRgb, mix, rgba, shade } from "@warrick/kit/client/color";
 import { mulberry32 } from "@warrick/kit/shared/rng";
 import type { Flame, SimEvent, SimTank, World } from "../shared/sim";
 import { THEMES, gradientAt, type Theme } from "./themes";
@@ -476,21 +476,26 @@ export class Renderer {
     ctx.strokeStyle = rgba(tr.color, alpha);
     ctx.lineWidth = dotted ? 1.4 : 1.6;
     ctx.setLineDash(dotted ? [3, 4] : []);
+    this.tracePath(tr.pts);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /** Begin a path through x, y pairs in world units. A NaN x lifts the pen. */
+  private tracePath(pts: number[]): void {
+    const ctx = this.ctx;
     ctx.beginPath();
     let pen = false;
-    for (let i = 0; i < tr.pts.length; i += 2) {
-      const x = tr.pts[i];
-      const y = tr.pts[i + 1];
+    for (let i = 0; i < pts.length; i += 2) {
+      const x = pts[i];
       if (Number.isNaN(x)) {
         pen = false;
         continue;
       }
-      if (pen) ctx.lineTo(x, WORLD_H - y);
-      else ctx.moveTo(x, WORLD_H - y);
+      if (pen) ctx.lineTo(x, WORLD_H - pts[i + 1]);
+      else ctx.moveTo(x, WORLD_H - pts[i + 1]);
       pen = true;
     }
-    ctx.stroke();
-    ctx.setLineDash([]);
   }
 
   /** A laser beam: a wide glow in the shooter's colour around a white-hot core. */
@@ -505,18 +510,7 @@ export class Renderer {
     ] as const) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
-      ctx.beginPath();
-      let pen = false;
-      for (let i = 0; i < tr.pts.length; i += 2) {
-        const x = tr.pts[i];
-        if (Number.isNaN(x)) {
-          pen = false;
-          continue;
-        }
-        if (pen) ctx.lineTo(x, WORLD_H - tr.pts[i + 1]);
-        else ctx.moveTo(x, WORLD_H - tr.pts[i + 1]);
-        pen = true;
-      }
+      this.tracePath(tr.pts);
       ctx.stroke();
     }
   }
@@ -630,13 +624,6 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
   }
-}
-
-function shade(hex: string, amt: number): string {
-  const c = hexToRgb(hex);
-  const target: [number, number, number] = amt < 0 ? [0, 0, 0] : [255, 255, 255];
-  const m = mix(c, target, Math.abs(amt));
-  return `rgb(${m[0] | 0}, ${m[1] | 0}, ${m[2] | 0})`;
 }
 
 function lighten(hex: string, amt: number): string {

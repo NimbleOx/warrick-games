@@ -1,4 +1,4 @@
-import { $, esc, store } from "@warrick/kit/client/dom";
+import { $, esc, setHtml, store } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import type { CpuLevel } from "../shared/ai";
@@ -122,9 +122,7 @@ const controls = new Controls(
         app.sandbox.humanBits = bits;
         return;
       }
-      app.seq++;
-      app.round?.input(app.seq, bits);
-      shell.send({ t: "in", s: app.seq, b: bits });
+      sendInput(bits);
     },
     fire,
     active: () =>
@@ -185,11 +183,7 @@ function onState(s: GameState, prev: GameState | null): void {
     app.welcome = null;
     if (welcome.world) startRound(welcome.world);
     // Re-send whatever is held right now.
-    if (controls.bits) {
-      app.seq++;
-      app.round?.input(app.seq, controls.bits);
-      shell.send({ t: "in", s: app.seq, b: controls.bits });
-    }
+    if (controls.bits) sendInput(controls.bits);
   }
 }
 
@@ -247,6 +241,13 @@ function bounceSound(): void {
   if (now - lastBounce < 60) return;
   lastBounce = now;
   sfx.bounce();
+}
+
+/** Send the keys held now to the room, and predict them. */
+function sendInput(bits: number): void {
+  app.seq++;
+  app.round?.input(app.seq, bits);
+  shell.send({ t: "in", s: app.seq, b: bits });
 }
 
 function fire(): void {
@@ -351,11 +352,7 @@ function renderHud(s: GameState): void {
   } else {
     html = `<span class="who">Game over</span>`;
   }
-  const el = $("hud-status");
-  if (el.dataset.html !== html) {
-    el.dataset.html = html;
-    el.innerHTML = html;
-  }
+  setHtml($("hud-status"), html);
 }
 
 function renderPips(r: NetRound): void {
@@ -390,11 +387,7 @@ function renderPlayers(s: GameState): void {
         <span class="bar"><i style="width:${pct}%;background:${p.color}"></i></span></li>`;
     })
     .join("");
-  const el = $("game-players");
-  if (el.dataset.html !== html) {
-    el.dataset.html = html;
-    el.innerHTML = html;
-  }
+  setHtml($("game-players"), html);
 }
 
 function renderBanner(now: number): void {
@@ -497,7 +490,7 @@ function renderSandboxHud(): void {
   }
   $("hud-round").textContent = String(sb.round);
   const status = `<span class="dim">Sandbox · R for a new maze · wins ${sb.wins.join(" / ")}</span>`;
-  if ($("hud-status").innerHTML !== status) $("hud-status").innerHTML = status;
+  setHtml($("hud-status"), status);
 }
 
 // ------------------------------------------------------------------ wiring

@@ -1,4 +1,6 @@
-import { $, esc, toast } from "@warrick/kit/client/dom";
+import { $, esc, setHtml, toast } from "@warrick/kit/client/dom";
+import { formatSeconds } from "@warrick/kit/client/format";
+import { showClock } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { NONE, boardSize, boxCounts, boxesLeft, cloneBoard, geometry, type Board } from "../shared/board";
 import { capturable, takeAll } from "../shared/chains";
@@ -251,13 +253,8 @@ function draw(s: GameState, board: Board, mine: boolean, pulse: number[], now: n
 }
 
 function tick(s: GameState, now: number): void {
-  const clock = document.querySelector<HTMLElement>("#hud-turn .clock");
-  if (clock) {
-    const left = s.turnDeadline && s.phase === "playing" ? Math.max(0, s.turnDeadline - shell.serverNow()) : null;
-    const text = left === null ? "" : `${Math.ceil(left / 1000)}s`;
-    if (clock.textContent !== text) clock.textContent = text;
-    clock.classList.toggle("low", left !== null && left < 5000);
-  }
+  const left = s.turnDeadline && s.phase === "playing" ? Math.max(0, s.turnDeadline - shell.serverNow()) : null;
+  showClock(document.querySelector<HTMLElement>("#hud-turn .clock"), left, 5000, formatSeconds);
   if (app.bannerUntil && now > app.bannerUntil) {
     app.bannerUntil = 0;
     $("banner").hidden = true;
@@ -290,11 +287,7 @@ function renderHud(s: GameState): void {
     who = `<span class="who">Game over</span>`;
   }
   const html = `${who}<span class="clock"></span>`;
-  const el = $("hud-turn");
-  if (el.dataset.html !== html) {
-    el.innerHTML = html;
-    el.dataset.html = html;
-  }
+  setHtml($("hud-turn"), html);
   const hints = $("hud-hints");
   hints.hidden = s.phase !== "playing";
   hints.classList.toggle("on", hintsOn(s));
@@ -324,10 +317,7 @@ function renderScores(s: GameState): void {
     })
     .join("");
   const el = $("scores");
-  if (el.dataset.html !== html) {
-    el.innerHTML = html;
-    el.dataset.html = html;
-  }
+  setHtml(el, html);
   el.classList.toggle("crowded", s.seats.length > 4);
 }
 
@@ -355,8 +345,7 @@ function renderActions(s: GameState): void {
         ? `${esc(p.name)} is away. The game will move for them.`
         : `Waiting for ${esc(p?.name ?? "?")}…`;
   }
-  const el = $("hint");
-  if (el.innerHTML !== hint) el.innerHTML = hint;
+  setHtml($("hint"), hint);
 }
 
 /** The last line drawn was this seat's and it claimed a box. */

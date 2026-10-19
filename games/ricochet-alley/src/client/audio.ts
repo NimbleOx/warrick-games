@@ -27,7 +27,4 @@ export const sfx = {
     tone(659, 0.12, 0.14, "square", 659, 0.12);
     tone(784, 0.24, 0.14, "square", 784, 0.24);
   },
-  click(): void {
-    tone(1200, 0.03, 0.05, "square");
-  },
 };

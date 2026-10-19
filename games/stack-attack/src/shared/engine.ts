@@ -487,15 +487,9 @@ export function explore(b: Board, p: Piece): Map<number, Spot> {
     if (b.fits(p, r, x - 1, y)) visit(r, x - 1, y, -1);
     if (b.fits(p, r, x + 1, y)) visit(r, x + 1, y, -1);
     if (b.fits(p, r, x, y - 1)) visit(r, x, y - 1, -1);
-    for (const to of [(r + 1) % 4, (r + 3) % 4]) {
-      const ks = kicks(p, r, to);
-      for (let i = 0; i < ks.length; i++) {
-        const [kx, ky] = ks[i];
-        if (b.fits(p, to, x + kx, y + ky)) {
-          visit(to, x + kx, y + ky, i);
-          break;
-        }
-      }
+    for (const dir of [1, 3] as const) {
+      const t = turn(b, p, r, x, y, dir);
+      if (t) visit(t.r, t.x, t.y, t.kick);
     }
   }
   return spots;

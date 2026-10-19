@@ -3,8 +3,8 @@ import { CHAR_ITEM } from "../shared/arena";
 import { FALL_SHOW_MS, FUSE_MS } from "../shared/constants";
 import type { Dir } from "../shared/movement";
 import { mulberry32 } from "@warrick/kit/shared/rng";
-import { hexToRgb, mix, rgba, type RGB } from "@warrick/kit/client/color";
-import { THEMES, shade, type Theme } from "./themes";
+import { hexToRgb, mix, rgba, shade, type RGB } from "@warrick/kit/client/color";
+import { THEMES, type Theme } from "./themes";
 
 /** World units per tile. Pixel art is drawn at half this (16 art pixels per tile). */
 export const TILE = 32;

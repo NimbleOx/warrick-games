@@ -1,5 +1,3 @@
-import { hexToRgb, mix, type RGB } from "@warrick/kit/client/color";
-
 export interface Theme {
   name: string;
   /** Checkerboard floor colors. */
@@ -63,11 +61,3 @@ export const THEMES: Theme[] = [
     crate: { base: "#8bab2a", light: "#c6ec4c", dark: "#576d17", mortar: "#34420c" },
   },
 ];
-
-export function rgb(c: RGB): string {
-  return `rgb(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0})`;
-}
-
-export function shade(hex: string, amt: number): string {
-  return rgb(mix(hexToRgb(hex), amt < 0 ? [0, 0, 0] : [255, 255, 255], Math.abs(amt)));
-}

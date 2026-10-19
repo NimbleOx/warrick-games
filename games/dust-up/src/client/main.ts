@@ -227,14 +227,12 @@ function onState(s: GameState, prev: GameState | null): void {
   const welcomed = app.welcomed;
   app.welcomed = false;
   if (s.phase === "lobby" || s.phase === "gameover") app.race = null;
-  if (prev && !welcomed && prev.phase !== s.phase) {
-    if (s.phase === "results") {
-      controls.unlock();
-      const res = s.results?.find((r) => r.id === shell.me);
-      if (res?.place === 1 && res.ticks !== null && !s.solo) sfx.win();
-    }
+  if (prev && !welcomed && s.phase === "results" && prev.phase !== "results") {
+    controls.unlock();
+    const res = s.results?.find((r) => r.id === shell.me);
+    if (res?.place === 1 && res.ticks !== null && !s.solo) sfx.win();
+    noteBest(s);
   }
-  if (prev && !welcomed && s.phase === "results" && prev.phase !== "results") noteBest(s);
   render();
 }
 

@@ -128,18 +128,16 @@ export class NetRound {
     return Math.min(latest + MAX_AHEAD, Math.max(this.startTick, this.clock.tick(now)));
   }
 
-  draw(now: number): { tanks: DrawTank[]; bullets: DrawBullet[]; mine: (Vec & { h: number }) | null } {
+  draw(now: number): { tanks: DrawTank[]; bullets: DrawBullet[] } {
     const t = this.presentTick(now);
     const tOthers = Math.min(this.latestTick, t - this.clock.delay);
     const tanks: DrawTank[] = [];
     const others: Vec[] = [];
-    let mine: (Vec & { h: number }) | null = null;
     for (let i = 0; i < this.setup.tanks.length; i++) {
       let pose: (Vec & { h: number }) | null;
       if (i === this.me) {
         const f = this.stepAt < 0 ? 1 : Math.min(1, (now - this.stepAt) / TICK_MS);
         pose = this.alive[i] ? this.predictor.draw(f) : null;
-        mine = pose;
       } else {
         pose = this.alive[i] ? this.timeline.sample(i, tOthers) : null;
         if (pose) others.push({ x: pose.x, y: pose.y });
@@ -161,7 +159,7 @@ export class NetRound {
             (k) => Math.abs(k.x - b.x) < reach && Math.abs(k.y - b.y) < reach && Math.hypot(k.x - b.x, k.y - b.y) < reach,
           ),
       );
-    return { tanks, bullets, mine };
+    return { tanks, bullets };
   }
 
   /** Bullets of yours in flight. */

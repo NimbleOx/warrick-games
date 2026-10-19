@@ -130,7 +130,6 @@ export interface Outcome {
   /** Slots. Empty for a draw. */
   winners: number[];
   how: "cleared" | "survived" | "draw";
-  tick: number;
 }
 
 /**
@@ -209,12 +208,9 @@ export class Round {
       ids.add(id);
       last = t;
     }
-    if (!ok) {
-      // Inputs we can't replay: start the browser over from our copy.
-      L.held = false;
-      return this.takeOver(L);
-    }
     L.held = false;
+    // Inputs we can't replay: start the browser over from our copy.
+    if (!ok) return this.takeOver(L);
     for (const [t, mask] of k!) L.lane.keys.push([t, mask & PLAYER_BUTTONS]);
     for (const [t, id] of g!) {
       L.lane.drops.push([t, id]);
@@ -433,17 +429,17 @@ export class Round {
       while (i < done.length && done[i].doneAt === tick) group.push(done[i++]);
       const won = group.filter((L) => L.lane.bottle.phase === "won");
       if (won.length) {
-        this.outcome = { winners: won.map((L) => L.slot), how: "cleared", tick };
+        this.outcome = { winners: won.map((L) => L.slot), how: "cleared" };
         return;
       }
       for (const L of group) out.add(L);
       const standing = lanes.filter((L) => !out.has(L));
       if (standing.length === 1) {
-        this.outcome = { winners: [standing[0].slot], how: "survived", tick };
+        this.outcome = { winners: [standing[0].slot], how: "survived" };
         return;
       }
       if (!standing.length) {
-        this.outcome = { winners: [], how: "draw", tick };
+        this.outcome = { winners: [], how: "draw" };
         return;
       }
     }

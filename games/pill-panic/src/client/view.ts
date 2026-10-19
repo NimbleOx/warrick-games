@@ -36,7 +36,6 @@ const HISTORY_TICKS = 900;
  * from the server's segments a moment behind.
  */
 export class RoundView {
-  readonly round: number;
   /** The round's seed: tells this round apart from the last one. */
   readonly seed: number;
   /** Server time of tick 0. The server moves it if the round was paused. */
@@ -58,7 +57,6 @@ export class RoundView {
     me: string,
     private hooks: ViewHooks,
   ) {
-    this.round = snap.round;
     this.seed = snap.lanes[0]?.b.seed ?? 0;
     this.goAt = snap.goAt;
     this.who = snap.who;

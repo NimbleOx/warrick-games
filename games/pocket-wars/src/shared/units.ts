@@ -6,8 +6,6 @@ export type UnitType = (typeof UNIT_TYPES)[number];
 
 export interface UnitDef {
   name: string;
-  /** For tight spaces: the build menu on phones, the log. */
-  short: string;
   cost: number;
   move: number;
   moveType: MoveType;
@@ -21,7 +19,6 @@ export interface UnitDef {
 export const UNITS: Record<UnitType, UnitDef> = {
   infantry: {
     name: "Infantry",
-    short: "Inf",
     cost: 1000,
     move: 3,
     moveType: "foot",
@@ -32,7 +29,6 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   bazooka: {
     name: "Bazooka",
-    short: "Baz",
     cost: 3000,
     move: 2,
     moveType: "boots",
@@ -43,7 +39,6 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   recon: {
     name: "Recon",
-    short: "Rcn",
     cost: 4000,
     move: 8,
     moveType: "wheels",
@@ -54,7 +49,6 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   tank: {
     name: "Tank",
-    short: "Tnk",
     cost: 7000,
     move: 6,
     moveType: "treads",
@@ -65,7 +59,6 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   heavy: {
     name: "Heavy Tank",
-    short: "Hvy",
     cost: 16000,
     move: 5,
     moveType: "treads",
@@ -76,7 +69,6 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   artillery: {
     name: "Artillery",
-    short: "Art",
     cost: 6000,
     move: 5,
     moveType: "treads",

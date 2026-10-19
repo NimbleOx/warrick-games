@@ -2,7 +2,7 @@ import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randInt, randomSeed, shuffle, type Rng } from "@warrick/kit/shared/rng";
 import { Lobby, baseState, cleanName, type GameIO } from "@warrick/kit/worker/lobby";
 import { steer } from "../shared/ai";
-import { Arena, isDir, spawnPoints, type Dir } from "../shared/arena";
+import { Arena, spawnPoints, type Dir } from "../shared/arena";
 import { PLAYER_COLORS, SCORE_PER_KILL, SCORE_PER_OUTLAST, SCORE_PER_WIN, THEME_COUNT } from "../shared/constants";
 import {
   DEFAULT_SETTINGS,
@@ -13,8 +13,6 @@ import {
   type PlayerState,
   type ServerMsg,
 } from "../shared/protocol";
-
-export { GameError, type GameIO } from "@warrick/kit/worker/lobby";
 
 const CPU_NAMES = ["Bit", "Vector", "Kernel", "Daemon", "Sprite", "Cache", "Pixel", "Hex", "Null", "Glitch"];
 const COUNTDOWN_MS = 3000;
@@ -93,7 +91,7 @@ export class Game extends Lobby<GameState, ServerMsg, Arena> {
 
   turn(id: string, dir: Dir, at?: number): void {
     const i = this.cycleIndex(id);
-    if (i >= 0 && isDir(dir)) this.arena!.queueTurn(i, dir, at);
+    if (i >= 0) this.arena!.queueTurn(i, dir, at);
   }
 
   boost(id: string, at?: number): void {

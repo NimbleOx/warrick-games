@@ -88,7 +88,6 @@ export interface ArenaPlayer {
   fix: number;
   /** Movement allowance for checking positions reported by clients. */
   budget: number;
-  diedAt: number;
   killedBy: string | null;
   kills: number;
   items: number;
@@ -399,7 +398,6 @@ export class Arena {
         immuneUntil: 0,
         fix: 0,
         budget: 1,
-        diedAt: 0,
         killedBy: null,
         kills: 0,
         items: 0,
@@ -789,7 +787,6 @@ export class Arena {
 
   private kill(p: ArenaPlayer, by: string | null): void {
     p.alive = false;
-    p.diedAt = this.time;
     p.killedBy = by;
     p.press = 0;
     if (by && by !== p.id) {

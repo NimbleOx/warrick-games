@@ -12,8 +12,6 @@ export const GARBAGE = 8;
 
 export type Piece = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-export const PIECE_LETTERS = ".IOTSZJL#";
-
 export function isPiece(v: unknown): v is Piece {
   return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 7;
 }

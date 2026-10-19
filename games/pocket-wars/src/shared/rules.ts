@@ -112,17 +112,6 @@ export function newBoard(m: MapDef, startFunds: readonly number[] = []): Board {
   };
 }
 
-export function cloneBoard(b: Board): Board {
-  return {
-    units: b.units.map((u) => ({ ...u })),
-    owners: [...b.owners],
-    capture: [...b.capture],
-    funds: [...b.funds],
-    out: [...b.out],
-    nextId: b.nextId,
-  };
-}
-
 export const tileOf = (m: MapDef, x: number, y: number) => y * m.w + x;
 export const tileX = (m: MapDef, t: number) => t % m.w;
 export const tileY = (m: MapDef, t: number) => Math.floor(t / m.w);

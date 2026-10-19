@@ -230,16 +230,6 @@
   }
 }
 
-.waiting {
-  width: 100%;
-  text-align: center;
-  padding: 18px;
-  background: var(--panel);
-  border: 2px dashed var(--line);
-  border-radius: 6px;
-  color: var(--muted);
-}
-
 .touch {
   width: 100%;
   display: flex;

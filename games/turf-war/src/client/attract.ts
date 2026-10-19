@@ -70,7 +70,6 @@ export class Attract {
       if (round.board.heads[s].alive) round.steer(s, think(round, s, this.brains[s], this.rng));
     }
     round.step();
-    if (round.over) this.round = null;
-    if (!this.round) this.start();
+    if (round.over) this.start();
   }
 }

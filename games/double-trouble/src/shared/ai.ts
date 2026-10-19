@@ -1,5 +1,5 @@
 import { CPU_LEVELS } from "@warrick/kit/shared/constants";
-import type { Rng } from "@warrick/kit/shared/rng";
+import { shuffle, type Rng } from "@warrick/kit/shared/rng";
 import { Board, DIRS, type Dir, type Lane } from "./engine";
 
 export type CpuLevel = (typeof CPU_LEVELS)[number];
@@ -75,7 +75,7 @@ function chance(board: Board, depth: number, rng: Rng): number {
   const empty = board.empties();
   if (!empty.length) return search(board, depth, rng);
   // A sample of the empty cells is plenty, and keeps the cost flat as the board opens up.
-  const cells = empty.length <= 6 ? empty : pickSome(empty, 6, rng);
+  const cells = empty.length <= 6 ? empty : shuffle(rng, empty.slice()).slice(0, 6);
   let total = 0;
   for (const c of cells) {
     for (const [v, p] of [
@@ -88,15 +88,6 @@ function chance(board: Board, depth: number, rng: Rng): number {
     }
   }
   return total / cells.length;
-}
-
-function pickSome(arr: number[], n: number, rng: Rng): number[] {
-  const copy = arr.slice();
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy.slice(0, n);
 }
 
 /**

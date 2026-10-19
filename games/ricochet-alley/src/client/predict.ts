@@ -64,12 +64,10 @@ export class BulletField {
     this.list.push({ b: { ...b }, tick, last: null });
   }
 
-  /** Take a bullet out (it hit a tank). Returns where it was. */
-  remove(id: number): Vec | null {
+  /** Take a bullet out (it hit a tank). */
+  remove(id: number): void {
     const i = this.list.findIndex((f) => f.b.id === id);
-    if (i < 0) return null;
-    const [f] = this.list.splice(i, 1);
-    return { x: f.b.x, y: f.b.y };
+    if (i >= 0) this.list.splice(i, 1);
   }
 
   /** Fly every bullet forward to `tick`. Reports bounce points (for sparks and sounds) as it goes. */
@@ -162,7 +160,7 @@ export class ServerClock {
   }
 }
 
-/** One frame's tank poses: index → [x, y, h] (or null if dead). */
+/** One frame's tank poses, by index ( null if dead). */
 export type Poses = (TankPose | null)[];
 
 /** Recent frames, for drawing other tanks smoothly between server updates. */
@@ -260,14 +258,12 @@ export class Predictor {
     const nextFirst = this.firsts.get(seq + 1);
     let at = first + age - 1;
     if (nextFirst !== undefined && at >= nextFirst) at = nextFirst - 1;
-    let next: TankPose;
+    const next: TankPose = { ...server };
     if (at >= this.tick) {
       // The server is level with us or a tick ahead (very low latency, or this tab was asleep): catch up.
-      next = { ...server };
       this.tick = at;
       this.history.clear();
     } else {
-      next = { ...server };
       for (let k = at + 1; k <= this.tick; k++) moveTank(next, this.history.get(k) ?? this.bits, walls, others);
     }
     const ex = this.pose.x - next.x;

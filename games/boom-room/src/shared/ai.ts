@@ -2,7 +2,7 @@ import type { Arena, ArenaPlayer, ItemKind, SimInput } from "./arena";
 import { FLAME_MS } from "./constants";
 import { DX, DY, type Dir } from "./movement";
 import type { CpuLevel } from "./protocol";
-import type { Rng } from "@warrick/kit/shared/rng";
+import { shuffle, type Rng } from "@warrick/kit/shared/rng";
 
 interface Profile {
   /** How often to re-plan, in ms. */
@@ -236,11 +236,7 @@ export class Brain {
       if (a.inside(nx, ny)) out.push(a.idx(nx, ny));
     }
     // Shuffle so equal choices don't always break the same way.
-    for (let i = out.length - 1; i > 0; i--) {
-      const j = Math.floor(this.rng() * (i + 1));
-      [out[i], out[j]] = [out[j], out[i]];
-    }
-    return out;
+    return shuffle(this.rng, out);
   }
 
   /**

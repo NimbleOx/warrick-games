@@ -1,5 +1,7 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { $, $$, esc, toast } from "@warrick/kit/client/dom";
+import { $, $$, esc, setHtml, setText, toast } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
+import { Feed } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { applyFrame, Battle, planned, type BattleEvent, type Cmd, type Frame, type Group, type Snapshot } from "../shared/battle";
 import {
@@ -30,20 +32,15 @@ import { fitMap, Renderer, type Look, type Scene } from "./render";
 
 // ------------------------------------------------------------------ helpers
 
-function clock(ticks: number): string {
-  const secs = Math.max(0, Math.ceil(ticks / TICKS_PER_SEC));
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
-}
+const clock = (ticks: number) => formatClock(Math.max(0, ticks) * TICK_MS);
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const NO_PLAN: Cmd[] = [];
 
 // ------------------------------------------------------------------ app state
 
-interface FeedItem {
-  html: string;
-  at: number;
-}
+/** What just happened, over the board. */
+const feed = new Feed();
 
 const app = {
   /** Our copy of the battle, kept in step by the server's frames. */
@@ -54,8 +51,6 @@ const app = {
   /** When the last frame arrived (performance.now), for gliding units between frames. */
   frameAt: 0,
   resyncing: false,
-  feed: [] as FeedItem[],
-  bannerKey: "",
   sounded: "",
   stageWidth: 0,
   pct: 50 as SendPct,
@@ -187,12 +182,17 @@ function onScreen(screen: Screen): void {
 
 /** Left the game, or lost it for good. */
 function onReset(): void {
-  app.battle = null;
+  clearRound();
   app.mySlot = -1;
-  app.feed = [];
+  $("results").hidden = true;
+}
+
+/** Forget the round: its battle, feed and plan, and any selection. */
+function clearRound(): void {
+  app.battle = null;
+  feed.clear();
   app.plan = NO_PLAN;
   controls.clear();
-  $("results").hidden = true;
 }
 
 // ------------------------------------------------------------------ messages
@@ -225,8 +225,7 @@ function setBattle(snap: Snapshot | null): void {
   if (!prev || prev.map.id !== b.map.id || b.n < prev.n) {
     // A new round, or in turns, the same one picked up from an earlier turn after the server
     // restarted: what happened since, and any plan for then, are gone.
-    app.feed = [];
-    renderFeed();
+    feed.clear();
     controls.clear();
     app.plan = NO_PLAN;
     app.planSeen = 0;
@@ -270,8 +269,8 @@ function onFrame(f: Frame): void {
   renderOrders();
 }
 
-function who(slot: number, capital = true): string {
-  if (slot === app.mySlot) return `<b>${capital ? "You" : "you"}</b>`;
+function who(slot: number): string {
+  if (slot === app.mySlot) return "<b>You</b>";
   const look = app.looks[slot];
   return look ? `<b style="color:${look.color}">${esc(look.name)}</b>` : "<b>Someone</b>";
 }
@@ -285,13 +284,13 @@ function onEvent(ev: BattleEvent): void {
       if (ev.by === meSlot) {
         if (ev.from >= 0) {
           sfx.take();
-          pushFeed(`You took a base from ${who(ev.from)}`);
+          feed.push(`You took a base from ${who(ev.from)}`);
         } else {
           sfx.claim();
         }
       } else if (ev.from === meSlot && meSlot >= 0) {
         sfx.lose();
-        pushFeed(`${who(ev.by)} took one of your bases`);
+        feed.push(`${who(ev.by)} took one of your bases`);
       }
       return;
     case "hold":
@@ -301,19 +300,13 @@ function onEvent(ev: BattleEvent): void {
       if (ev.slot === meSlot) {
         sfx.dead();
         app.outAt = performance.now();
-        pushFeed(`<b>You're out.</b> Watch the rest, or leave.`);
+        feed.push(`<b>You're out.</b> Watch the rest, or leave.`);
       } else {
         sfx.out();
-        pushFeed(`${who(ev.slot)} is out`);
+        feed.push(`${who(ev.slot)} is out`);
       }
       return;
   }
-}
-
-function pushFeed(html: string): void {
-  app.feed.push({ html, at: performance.now() });
-  if (app.feed.length > 5) app.feed.shift();
-  renderFeed();
 }
 
 function onState(s: GameState, prev: GameState | null): void {
@@ -324,12 +317,7 @@ function onState(s: GameState, prev: GameState | null): void {
     app.looks = looks;
     app.mySlot = mine?.slot ?? -1;
   }
-  if (s.phase === "lobby") {
-    app.battle = null;
-    app.feed = [];
-    app.plan = NO_PLAN;
-    controls.clear();
-  }
+  if (s.phase === "lobby") clearRound();
   const turn = turnOf(s);
   const was = prev ? turnOf(prev) : null;
   const playing = app.mySlot >= 0 && !!app.battle?.alive(app.mySlot);
@@ -374,7 +362,7 @@ function frame(now: number): void {
   renderer.draw(scene, now);
   renderClock();
   renderBanner(now);
-  ageFeed(now);
+  feed.age(now);
 }
 
 // ------------------------------------------------------------------ game
@@ -410,7 +398,7 @@ function renderClock(): void {
         text = "no limit";
       } else {
         const left = Math.max(0, turn.deadline - shell.serverNow());
-        text = clock(Math.ceil(left / 1000) * TICKS_PER_SEC);
+        text = formatClock(left);
         low = left <= 5000;
         // A beep a second for the last five, while there's still something to decide.
         const secs = Math.ceil(left / 1000);
@@ -435,10 +423,9 @@ function renderClock(): void {
   } else {
     text = s.phase === "results" ? "Over" : "—";
   }
-  if (el.textContent !== text) el.textContent = text;
+  setText(el, text);
   el.classList.toggle("low", low);
-  const labelEl = $("hud-clock-label");
-  if (labelEl.textContent !== label) labelEl.textContent = label;
+  setText($("hud-clock-label"), label);
 }
 
 function renderHud(): void {
@@ -472,7 +459,7 @@ function renderHud(): void {
     $("hud-bases").textContent = `${b.basesOf(slot)}/${b.bases.length}`;
     $("hud-units").textContent = String(b.unitsOf(slot));
   }
-  if (main.innerHTML !== html) main.innerHTML = html;
+  setHtml(main, html);
 }
 
 /** Why the selected base can't be upgraded now, or null if it can. */
@@ -581,8 +568,6 @@ function waitingFor(): string {
     .map((p) => (p.connected ? p.name : `${p.name} (away)`));
   return names.length ? `Done · waiting for ${names.join(", ")}` : "Done";
 }
-
-let lastBoardHtml = "";
 function renderScoreboard(): void {
   const b = app.battle;
   const s = shell.state;
@@ -614,24 +599,7 @@ function renderScoreboard(): void {
       </li>`;
     })
     .join("");
-  if (html !== lastBoardHtml) {
-    lastBoardHtml = html;
-    $("scoreboard").innerHTML = html;
-  }
-}
-
-function renderFeed(): void {
-  $("feed").innerHTML = app.feed.map((f) => `<li data-at="${f.at}">${f.html}</li>`).join("");
-}
-
-function ageFeed(now: number): void {
-  const old = app.feed.filter((f) => now - f.at > 5000);
-  if (!old.length) return;
-  for (const li of $$("#feed li")) if (now - Number(li.dataset.at) > 4400) li.classList.add("old");
-  if (old.some((f) => now - f.at > 5200)) {
-    app.feed = app.feed.filter((f) => now - f.at <= 5200);
-    renderFeed();
-  }
+  setHtml($("scoreboard"), html);
 }
 
 /** The big message over the map: the countdown, GO, each turn, being out, time's up. */
@@ -675,12 +643,9 @@ function renderBanner(now: number): void {
     if (sound === "go") sfx.go();
     else sfx.count();
   }
-  const key = `${big}|${sub}`;
-  if (key === app.bannerKey) return;
-  app.bannerKey = key;
   const el = $("banner");
   el.hidden = !big;
-  el.innerHTML = big ? `<div class="big">${esc(big)}</div>${sub ? `<div class="sub">${sub}</div>` : ""}` : "";
+  setHtml(el, big ? `<div class="big">${esc(big)}</div>${sub ? `<div class="sub">${sub}</div>` : ""}` : "");
 }
 
 function renderResults(s: GameState): void {

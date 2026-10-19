@@ -1,5 +1,7 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { $, $$, esc, personalBest } from "@warrick/kit/client/dom";
+import { $, esc, personalBest, setHtml } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
+import { Feed } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { Board, Lane, type Dir, type MoveResult } from "../shared/engine";
 import {
@@ -24,11 +26,6 @@ import { MiniView, OwnView, miniHeight, miniWidth, ownHeight, ownWidth, type Ani
 
 // ------------------------------------------------------------------ helpers
 
-function clock(secs: number): string {
-  secs = Math.max(0, Math.round(secs));
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
-}
-
 const tile = (v: number) => (v > 0 ? String(2 ** v) : "—");
 
 const GOAL_LABELS: Record<Goal, string> = {
@@ -49,11 +46,6 @@ const AIM_LABELS: Record<Aim, string> = {
 const COMBO_NAMES = ["", "", "", "TRIPLE!", "QUAD!"];
 
 // ------------------------------------------------------------------ app state
-
-interface FeedItem {
-  html: string;
-  at: number;
-}
 
 /** A board in the round as this browser sees it. Our own is `app.lane`. */
 interface SeatView {
@@ -87,6 +79,9 @@ interface RoundView {
   solo: boolean;
 }
 
+/** What just happened, over the board. */
+const feed = new Feed();
+
 const app = {
   round: null as RoundView | null,
   seats: [] as (SeatView | null)[],
@@ -109,10 +104,8 @@ const app = {
   nudge: null as { dir: Dir; at: number } | null,
   /** Board slot → name and colour, kept from the last state seen in play. */
   looks: Array<{ name: string; color: string } | null>(MAX_PLAYERS).fill(null),
-  feed: [] as FeedItem[],
   /** When the results may open (after the last moment has had a beat on screen). */
   resultsAt: 0,
-  bannerKey: "",
   sounded: "",
   arenaWidth: 0,
   boardsKey: "",
@@ -252,10 +245,9 @@ function setRound(snap: RoundSnap | null): void {
   };
   app.mySlot = snap.who.indexOf(shell.me);
   if (fresh) {
-    app.feed = [];
+    feed.clear();
     app.popups = [];
     app.resultsAt = 0;
-    renderFeed();
   }
   app.seats = snap.seats.map((s, slot) => (s ? seatFromSnap(slot, s) : null));
   app.anim = null;
@@ -365,7 +357,7 @@ function onOp(op: Op): void {
     if (op.a >= 2) seat.popups.push({ text: `+${op.a}`, color: "#ff6bd6", at: now });
     if (lane.best > best && lane.best >= 8) {
       seat.popups.push({ text: tile(lane.best), color: "#ffd23f", at: now });
-      pushFeed(`${who(op.s)} made <b class="t">${tile(lane.best)}</b>`);
+      feed.push(`${who(op.s)} made <b class="t">${tile(lane.best)}</b>`);
     }
     if (seat.popups.length > 3) seat.popups.splice(0, seat.popups.length - 3);
   } else if (op.k === "g") {
@@ -400,17 +392,17 @@ function onOp(op: Op): void {
     }
     const victim = who(op.s);
     if (solo()) {
-      pushFeed(`${victim} ${op.s === app.mySlot ? "are" : "is"} out of moves`);
+      feed.push(`${victim} ${op.s === app.mySlot ? "are" : "is"} out of moves`);
       if (app.round) app.round.over = true;
       return;
     }
-    pushFeed(killer ? `${who(op.by)} knocked out ${victim}` : `${victim} ${op.s === app.mySlot ? "are" : "is"} out`);
+    feed.push(killer ? `${who(op.by)} knocked out ${victim}` : `${victim} ${op.s === app.mySlot ? "are" : "is"} out`);
     // Last one standing.
     if (app.round && alive() <= 1) {
       app.round.over = true;
       for (const s of app.seats) if (s && !s.out) s.place = 1;
       const winner = app.seats.find((s) => s && s.place === 1);
-      if (winner) pushFeed(`${who(winner.slot)} ${winner.slot === app.mySlot ? "win" : "wins"}!`);
+      if (winner) feed.push(`${who(winner.slot)} ${winner.slot === app.mySlot ? "win" : "wins"}!`);
     }
   } else if (op.k === "goal") {
     const seat = app.seats[op.s];
@@ -423,7 +415,7 @@ function onOp(op: Op): void {
         app.popups.push({ text: "YOU WIN!", color: "#ffd23f", at: now, big: true });
         sfx.win();
       }
-      pushFeed(`${who(op.s)} made <b class="t">${SOLO_GOAL}</b> and ${mine ? "win! Keep going" : "wins!"}`);
+      feed.push(`${who(op.s)} made <b class="t">${SOLO_GOAL}</b> and ${mine ? "win! Keep going" : "wins!"}`);
       renderHud();
       return;
     }
@@ -431,7 +423,7 @@ function onOp(op: Op): void {
     seat.place = 1;
     const mine = op.s === app.mySlot;
     if (!mine && app.lane && !app.lane.out) sfx.lose();
-    pushFeed(`${who(op.s)} made <b class="t">${app.round.goal}</b> and ${mine ? "win" : "wins"}!`);
+    feed.push(`${who(op.s)} made <b class="t">${app.round.goal}</b> and ${mine ? "win" : "wins"}!`);
   }
 }
 
@@ -439,12 +431,6 @@ function who(slot: number): string {
   if (slot === app.mySlot) return `<b>You</b>`;
   const look = app.looks[slot];
   return look ? `<b style="color:${look.color}">${esc(look.name)}</b>` : "<b>Someone</b>";
-}
-
-function pushFeed(html: string): void {
-  app.feed.push({ html, at: performance.now() });
-  if (app.feed.length > 5) app.feed.shift();
-  renderFeed();
 }
 
 function onState(s: GameState, prev: GameState | null): void {
@@ -484,7 +470,7 @@ function frame(now: number): void {
   drawBoards(now);
   renderBanner();
   renderClock();
-  ageFeed(now);
+  feed.age(now);
   if (app.resultsAt && now >= app.resultsAt) {
     app.resultsAt = 0;
     if (shell.state) renderResults(shell.state);
@@ -681,8 +667,7 @@ function renderHud(): void {
       (total && !solo() ? `<span class="tag">${left}/${total} left</span>` : "") +
       (status ? `<span class="note">${status}</span>` : "");
   }
-  const main = $("hud-main");
-  if (main.innerHTML !== html) main.innerHTML = html;
+  setHtml($("hud-main"), html);
   $("hud").classList.toggle("solo", solo());
   $("screen-game").classList.toggle("solo", solo());
   const goal = solo() ? SOLO_GOAL : (app.round?.goal ?? s.settings.goal);
@@ -711,8 +696,6 @@ function renderClock(): void {
     x.title = scale > 1 ? `Rocks sent are multiplied by ${scale} to bring the round to an end` : "";
   }
 }
-
-let lastBoardHtml = "";
 function renderScoreboard(): void {
   if (shell.screen !== "game") return;
   const rows = app.seats
@@ -733,25 +716,8 @@ function renderScoreboard(): void {
       </li>`;
     })
     .join("");
-  if (html !== lastBoardHtml) {
-    lastBoardHtml = html;
-    $("scoreboard").innerHTML = html;
-  }
+  setHtml($("scoreboard"), html);
   buildBoards();
-}
-
-function renderFeed(): void {
-  $("feed").innerHTML = app.feed.map((f) => `<li data-at="${f.at}">${f.html}</li>`).join("");
-}
-
-function ageFeed(now: number): void {
-  const old = app.feed.filter((f) => now - f.at > 5000);
-  if (!old.length) return;
-  for (const li of $$("#feed li")) if (now - Number(li.dataset.at) > 4400) li.classList.add("old");
-  if (old.some((f) => now - f.at > 5200)) {
-    app.feed = app.feed.filter((f) => now - f.at <= 5200);
-    renderFeed();
-  }
 }
 
 /** The big message over our board: the countdown, then GO. */
@@ -783,12 +749,9 @@ function renderBanner(): void {
     if (sound.startsWith("go")) sfx.go();
     else sfx.count();
   }
-  const key = `${big}|${sub}`;
-  if (key === app.bannerKey) return;
-  app.bannerKey = key;
   const el = $("banner");
   el.hidden = !big;
-  el.innerHTML = big ? `<div class="big">${esc(big)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}` : "";
+  setHtml(el, big ? `<div class="big">${esc(big)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}` : "");
 }
 
 /** The solo player's score against their best on this board size; null for a match, or someone else's round. */
@@ -826,7 +789,7 @@ function renderResults(s: GameState): void {
     $("results-rows").innerHTML = r.standings
       .map(
         (x) => `<tr class="${made ? "winner" : ""}"><td></td><td>${pcell(x)}</td><td>${tile(x.best)}</td><td>${x.score}</td>
-        <td>${x.moves}</td><td>${clock(x.secs)}</td></tr>`,
+        <td>${x.moves}</td><td>${formatClock(x.secs * 1000)}</td></tr>`,
       )
       .join("");
   } else {
@@ -847,7 +810,7 @@ function renderResults(s: GameState): void {
         return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
         <td>${x.place}</td>
         <td>${pcell(x)}</td>
-        <td>${tile(x.best)}</td><td>${x.score}</td><td>${x.sent}</td><td>${x.smashed}</td><td>${x.kos}</td><td>${clock(x.secs)}</td><td>${p?.wins ?? "—"}</td></tr>`;
+        <td>${tile(x.best)}</td><td>${x.score}</td><td>${x.sent}</td><td>${x.smashed}</td><td>${x.kos}</td><td>${formatClock(x.secs * 1000)}</td><td>${p?.wins ?? "—"}</td></tr>`;
       })
       .join("");
   }

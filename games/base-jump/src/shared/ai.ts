@@ -1,5 +1,5 @@
 import type { CpuLevel } from "@warrick/kit/shared/protocol";
-import type { Rng } from "@warrick/kit/shared/rng";
+import { randInt, type Rng } from "@warrick/kit/shared/rng";
 import { Battle, clash, type Cmd } from "./battle";
 import { BUILD_RATE, CAP, HELI, MAX_LEVEL, SEND_PCTS, TANK, UPGRADE_COST, type SendPct } from "./constants";
 import { distance, travelTicks } from "./map";
@@ -114,7 +114,7 @@ export function think(b: Battle, slot: number, brain: Brain, rng: Rng, act: (cmd
   if (!b.playing || !b.alive(slot) || b.n < brain.next) return;
   const style = STYLES[brain.level];
   const [lo, hi] = style.think;
-  brain.next = b.n + lo + Math.floor(rng() * (hi - lo + 1));
+  brain.next = b.n + randInt(rng, lo, hi);
   decide(b, slot, brain.level, style, rng, act);
 }
 

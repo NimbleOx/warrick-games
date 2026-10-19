@@ -322,8 +322,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     for (const t of world.tanks) {
       const pl = this.player(t.id)!;
       pl.tank = { x: t.x, y: t.y, health: t.health, alive: t.alive, shield: t.shield };
-      if (t.parachutes > 0) pl.inventory.parachute = t.parachutes;
-      else delete pl.inventory.parachute;
+      setCount(pl, "parachute", t.parachutes);
     }
     let hurt = false;
     for (const ev of world.events) {
@@ -451,8 +450,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     } else {
       if (have < def.bundle) throw new GameError("Nothing to sell");
       p.money += def.price;
-      if (have - def.bundle > 0) p.inventory[item] = have - def.bundle;
-      else delete p.inventory[item];
+      setCount(p, item, have - def.bundle);
     }
     this.touch();
   }
@@ -536,9 +534,13 @@ export class Game extends Lobby<GameState, ServerMsg> {
 }
 
 function spend(p: PlayerState, weapon: WeaponId): void {
-  const n = (p.inventory[weapon] ?? 0) - 1;
-  if (n > 0) p.inventory[weapon] = n;
-  else delete p.inventory[weapon];
+  setCount(p, weapon, (p.inventory[weapon] ?? 0) - 1);
+}
+
+/** Hold `n` of something, or none: an inventory only lists what the player has. */
+function setCount(p: PlayerState, id: ShopId, n: number): void {
+  if (n > 0) p.inventory[id] = n;
+  else delete p.inventory[id];
 }
 
 function clampInt(v: unknown, lo: number, hi: number): number {

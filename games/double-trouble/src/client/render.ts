@@ -31,10 +31,6 @@ const ROCK = "#59607f";
 const ROCK_HI = "#767ea3";
 const ROCK_LO = "#3a405c";
 
-export function tileColor(v: number): string {
-  return TILES[Math.min(v, TILES.length - 1)][0];
-}
-
 /** How long each part of a move's animation takes, in ms. */
 const SLIDE_MS = 90;
 const POP_MS = 150;

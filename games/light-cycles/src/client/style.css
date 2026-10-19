@@ -273,10 +273,6 @@ kbd {
   gap: 12px;
 }
 
-.modal-foot .hint {
-  margin: 0;
-}
-
 .gameover-modal {
   width: min(620px, 100%);
   text-align: center;
@@ -430,10 +426,6 @@ kbd {
 
 .btn-fire:disabled {
   opacity: 0.35;
-}
-
-.game-players li {
-  grid-template-columns: 14px 1fr auto;
 }
 
 .game-players .pts {

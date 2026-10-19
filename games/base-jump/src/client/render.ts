@@ -1,3 +1,4 @@
+import { shade } from "@warrick/kit/client/color";
 import { Battle, clash, type Group } from "../shared/battle";
 import { CAP, HELI, RADIUS, TANK, TURN_TICKS, type SendPct } from "../shared/constants";
 import { distance, travelTicks, type GameMap } from "../shared/map";
@@ -438,7 +439,7 @@ export class Renderer {
       ctx.globalAlpha = 1;
     }
 
-    ctx.fillStyle = base.owner >= 0 ? shade(color, 0.42) : NEUTRAL_FILL;
+    ctx.fillStyle = base.owner >= 0 ? shade(color, -0.42) : NEUTRAL_FILL;
     ctx.strokeStyle = color;
     ctx.lineWidth = base.owner === scene.me && scene.me >= 0 ? 3.5 : 2.5;
     shape(ctx, air, x, y, r);
@@ -447,7 +448,7 @@ export class Renderer {
 
     // Airfields get a helipad H behind the number.
     if (air) {
-      ctx.strokeStyle = base.owner >= 0 ? shade(color, 0.7) : "#454b3f";
+      ctx.strokeStyle = base.owner >= 0 ? shade(color, -0.7) : "#454b3f";
       ctx.lineWidth = Math.max(2, r * 0.12);
       const s = r * 0.42;
       ctx.beginPath();
@@ -520,12 +521,7 @@ function shape(ctx: CanvasRenderingContext2D, air: boolean, x: number, y: number
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+  ctx.roundRect(x, y, w, h, r);
 }
 
 function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, color: string): void {
@@ -538,11 +534,4 @@ function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number
   ctx.strokeText(text, x, y);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
-}
-
-/** A colour darkened toward black by `k` (0 = unchanged, 1 = black). */
-function shade(hex: string, k: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const f = (v: number) => Math.round(v * (1 - k));
-  return `rgb(${f(n >> 16)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`;
 }

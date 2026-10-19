@@ -72,14 +72,8 @@ export class Board {
     this.cells = cells ?? Array<number>(size * size).fill(0);
   }
 
-  clone(): Board {
-    return new Board(this.size, this.cells.slice());
-  }
-
   empties(): number[] {
-    const out: number[] = [];
-    for (let i = 0; i < this.cells.length; i++) if (this.cells[i] === 0) out.push(i);
-    return out;
+    return emptyCells(this.cells);
   }
 
   /** The biggest tile's exponent (11 for 2048), or 0. */
@@ -457,9 +451,4 @@ function emptyCells(cells: number[]): number[] {
   const out: number[] = [];
   for (let i = 0; i < cells.length; i++) if (cells[i] === 0) out.push(i);
   return out;
-}
-
-/** The value of a tile exponent, for showing: 11 → 2048. */
-export function tileValue(v: number): number {
-  return 2 ** v;
 }

@@ -1,5 +1,7 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, $$, esc, toast } from "@warrick/kit/client/dom";
+import { $, $$, esc, setHtml, setText, toast } from "@warrick/kit/client/dom";
+import { formatSeconds } from "@warrick/kit/client/format";
+import { showClock } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { REVEAL_COUNT_START_MS, REVEAL_LIFT_MS, REVEAL_PER_DIE_MS } from "../shared/constants";
 import {
@@ -288,10 +290,7 @@ function renderBidbox(s: GameState): void {
     html = `<div class="bid-by">Game over</div><div class="bid-empty">${winnerText(s)}</div>
       <div class="bid-note"><button class="btn btn-small" id="show-results">Results</button></div>`;
   }
-  if (box.dataset.html !== html) {
-    box.innerHTML = html;
-    box.dataset.html = html;
-  }
+  setHtml(box, html);
   box.classList.toggle("revealing", !!r);
 }
 
@@ -325,19 +324,15 @@ function renderCup(s: GameState): void {
   const r = shownReveal(s);
   const dice = myDice(s);
   let html: string;
-  if (r && r.hands.some((h) => h.id === shell.me)) {
-    const mine = r.hands.find((h) => h.id === shell.me)!.dice;
-    html = mine.map((d) => dieSvg(d, counts(d, r.bid.face, { wild: r.wild }) ? "counted lit" : "uncounted")).join("");
+  const hand = r?.hands.find((h) => h.id === shell.me);
+  if (r && hand) {
+    html = hand.dice.map((d) => dieSvg(d, counts(d, r.bid.face, { wild: r.wild }) ? "counted lit" : "uncounted")).join("");
   } else if (dice) {
     html = dice.map((d) => dieSvg(d)).join("");
   } else {
     html = Array.from({ length: p!.dice }, () => hiddenDie("rolling")).join("");
   }
-  const el = $("my-dice");
-  if (el.dataset.html !== html) {
-    el.innerHTML = html;
-    el.dataset.html = html;
-  }
+  setHtml($("my-dice"), html);
 }
 
 function renderPicker(s: GameState): void {
@@ -367,11 +362,7 @@ function renderPicker(s: GameState): void {
     return `<button class="face" data-face="${f}" aria-pressed="${app.face === f}" ${legal ? "" : "disabled"} title="${title}">
       ${dieSvg(f)}<span class="min">${hint}</span></button>`;
   }).join("");
-  const facesEl = $("faces");
-  if (facesEl.dataset.html !== faces) {
-    facesEl.innerHTML = faces;
-    facesEl.dataset.html = faces;
-  }
+  setHtml($("faces"), faces);
 
   const bidBtn = $<HTMLButtonElement>("bid-btn");
   const chosen = app.face !== null ? { qty: app.qty, face: app.face } : null;
@@ -392,8 +383,7 @@ function renderPicker(s: GameState): void {
     why = last
       ? `Pick a quantity and a face that raise ${bidText(last)}, or call Liar!`
       : "Open the bidding: pick a quantity and a face.";
-  const whyEl = $("why");
-  if (whyEl.innerHTML !== why) whyEl.innerHTML = why;
+  setHtml($("why"), why);
 }
 
 function renderHistory(s: GameState): void {
@@ -491,7 +481,7 @@ function animateReveal(_now: number): void {
     t < REVEAL_COUNT_START_MS ? 0 : Math.min(r.count, Math.floor((t - REVEAL_COUNT_START_MS) / REVEAL_PER_DIE_MS) + 1);
   for (const el of $$<HTMLElement>("#seats [data-k]")) el.classList.toggle("lit", Number(el.dataset.k) < shown);
   const countEl = document.getElementById("reveal-count");
-  if (countEl && countEl.textContent !== String(shown)) countEl.textContent = String(shown);
+  if (countEl) setText(countEl, String(shown));
   if (shown > app.revealShown) {
     if (app.revealShown >= 0 && t < revealEnd(r) + 500) sfx.tick(shown);
     app.revealShown = shown;
@@ -515,12 +505,9 @@ function tickClocks(): void {
   const s = shell.state;
   if (!s) return;
   const left = s.phase === "playing" && s.turnDeadline ? Math.max(0, s.turnDeadline - shell.serverNow()) : null;
-  const text = left === null ? "" : `${Math.ceil(left / 1000)}s`;
-  const clock = $("clock");
-  if (clock.textContent !== text) clock.textContent = text;
-  clock.classList.toggle("low", left !== null && left < 6000);
+  const text = showClock($("clock"), left, 6000, formatSeconds);
   const seatClock = document.querySelector<HTMLElement>("#seats .turn .seat-clock");
-  if (seatClock && seatClock.textContent !== text) seatClock.textContent = text;
+  if (seatClock) setText(seatClock, text);
 }
 
 function frame(now: number): void {

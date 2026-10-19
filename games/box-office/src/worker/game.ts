@@ -1,4 +1,4 @@
-import type { BasePlayer, CpuLevel } from "@warrick/kit/shared/protocol";
+import type { BasePlayer } from "@warrick/kit/shared/protocol";
 import { mulberry32, randomSeed, shuffle } from "@warrick/kit/shared/rng";
 import { GameError, Lobby, baseState, type GameIO } from "@warrick/kit/worker/lobby";
 import { type ClockRules, startTurnClock, turnHolderBack, turnHolderLeft, turnTimeUp } from "@warrick/kit/worker/turns";
@@ -259,7 +259,7 @@ export class Game extends Lobby<GameState, ServerMsg> {
     const seat = s.turn;
     const p = this.player(s.seats[seat]);
     if (t.kind === "cpu" && p?.cpu) {
-      this.play(seat, cpuMove(s, s.seats.length, seat, p.cpu as CpuLevel, mulberry32(randomSeed())));
+      this.play(seat, cpuMove(s, s.seats.length, seat, p.cpu, mulberry32(randomSeed())));
     } else {
       if (t.kind === "turn" && p) this.event(`⏱ ${p.name} ran out of time`);
       this.playFor(seat);

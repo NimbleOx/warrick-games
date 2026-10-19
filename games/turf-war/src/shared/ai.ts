@@ -165,13 +165,7 @@ function threat(b: Board, slot: number): number {
   const cells = [...b.trails[slot], b.heads[slot].cell];
   for (let s = 0; s < b.heads.length; s++) {
     const e = b.heads[s];
-    if (s === slot || !e.alive) continue;
-    const ex = e.cell % b.w;
-    const ey = Math.floor(e.cell / b.w);
-    for (const c of cells) {
-      const d = Math.abs((c % b.w) - ex) + Math.abs(Math.floor(c / b.w) - ey);
-      if (d < best) best = d;
-    }
+    if (s !== slot && e.alive) best = Math.min(best, nearest(b, e.cell, cells));
   }
   return best;
 }

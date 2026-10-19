@@ -1,4 +1,5 @@
 import { DX, DY, type Board } from "../shared/board";
+import { hexToRgb, mix, type RGB } from "@warrick/kit/client/color";
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 
 /** How a slot looks on the board. */
@@ -22,8 +23,8 @@ const MIN_FIT_CELL = 7;
 const FOLLOW_CELL = 12;
 
 const BG = "#0b0d17";
-const GROUND_A = rgb("#141932");
-const GROUND_B = rgb("#171d39");
+const GROUND_A = hexToRgb("#141932");
+const GROUND_B = hexToRgb("#171d39");
 
 /**
  * Draws the board on a canvas. The grid is painted into an offscreen image at
@@ -242,7 +243,7 @@ export class Renderer {
     if (key === this.paletteKey) return;
     this.paletteKey = key;
     for (let s = 0; s < MAX_PLAYERS; s++) {
-      const c = rgb(looks[s]?.color ?? "#777777");
+      const c = hexToRgb(looks[s]?.color ?? "#777777");
       this.landPx[s * 2] = pack(mix(c, GROUND_A, 0.42));
       this.landPx[s * 2 + 1] = pack(mix(c, GROUND_B, 0.36));
       this.trailPx[s] = pack(mix(c, [255, 255, 255], 0.38));
@@ -250,19 +251,8 @@ export class Renderer {
   }
 }
 
-type RGB = [number, number, number];
-
-function rgb(hex: string): RGB {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-/** `a` with `t` of `b` mixed in. */
-function mix(a: RGB, b: RGB, t: number): RGB {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t].map(Math.round) as RGB;
-}
-
-/** RGBA bytes as one little-endian 32-bit pixel. */
-function pack([r, g, b]: RGB): number {
+/** RGB channels, rounded to bytes, as one opaque little-endian 32-bit pixel. */
+function pack(c: RGB): number {
+  const [r, g, b] = c.map(Math.round);
   return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
 }

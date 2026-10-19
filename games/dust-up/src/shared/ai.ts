@@ -92,15 +92,18 @@ export class Pilot {
     this.rng = mulberry32(seed);
   }
 
+  /** Another crash at `x`: the count goes on while they're all in one place. */
+  private noteCrash(x: number): void {
+    this.crashes = Math.abs(x - this.crashX) < 15 ? this.crashes + 1 : 1;
+    this.crashX = x;
+  }
+
   /** The input for the ride's next tick. */
   decide(ride: Ride, course: Course, out: RideInput): RideInput {
     const b = ride.bike;
     out.respawn = 0;
     if (b.crashed) {
-      if (!this.wasCrashed) {
-        this.crashes = Math.abs(b.x - this.crashX) < 15 ? this.crashes + 1 : 1;
-        this.crashX = b.x;
-      }
+      if (!this.wasCrashed) this.noteCrash(b.x);
       this.wasCrashed = true;
       this.bestX = -Infinity;
       this.nextPlan = ride.tick;
@@ -112,10 +115,9 @@ export class Pilot {
     if (b.x > this.bestX + 1) {
       this.bestX = b.x;
       this.bestAt = ride.tick;
-    } else if (ride.tick - this.bestAt > STUCK_TICKS && ride.finishTick < 0) {
+    } else if (ride.tick - this.bestAt > STUCK_TICKS) {
       // Stuck counts as a crash here: it'll ride this bit differently next time.
-      this.crashes = Math.abs(b.x - this.crashX) < 15 ? this.crashes + 1 : 1;
-      this.crashX = b.x;
+      this.noteCrash(b.x);
       this.bestX = -Infinity;
       out.throttle = out.brake = out.lean = 0;
       out.respawn = 1;

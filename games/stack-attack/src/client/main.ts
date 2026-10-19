@@ -1,6 +1,8 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import { sfx } from "./audio";
-import { $, $$, esc, personalBest, store } from "@warrick/kit/client/dom";
+import { $, $$, esc, personalBest, setHtml, setText, store } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
+import { Feed } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { NEXT_COUNT, PLAYER_COLORS } from "../shared/constants";
 import { Board, Lane, SPIN_FULL, SPIN_NONE, spinName, type LockResult, type Placement } from "../shared/engine";
@@ -27,11 +29,6 @@ import { MINI_H, MINI_W, MiniView, OWN_H, OWN_W, OwnView, type Flash, type Popup
 
 const fmt = (n: number) => n.toLocaleString("en");
 
-function clock(secs: number): string {
-  secs = Math.max(0, Math.round(secs));
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
-}
-
 // ------------------------------------------------------------------ handling
 
 const DEFAULT_HANDLING: Handling = { das: 150, arr: 30, sdf: 20 };
@@ -53,11 +50,6 @@ function loadHandling(): Handling {
 let handling = loadHandling();
 
 // ------------------------------------------------------------------ app state
-
-interface FeedItem {
-  html: string;
-  at: number;
-}
 
 /** A board in the round as this browser sees it. Our own is the pilot's lane. */
 interface SeatView {
@@ -82,11 +74,13 @@ interface RoundView {
   seed: number;
   goAt: number;
   speed: Speed;
-  who: (string | null)[];
   over: boolean;
   /** One player on their own: score, lines and level, until they top out. */
   solo: boolean;
 }
+
+/** What just happened, over the board. */
+const feed = new Feed();
 
 const app = {
   round: null as RoundView | null,
@@ -100,7 +94,6 @@ const app = {
   flashes: [] as Flash[],
   popups: [] as Popup[],
   bumpAt: -1e9,
-  feed: [] as FeedItem[],
   /** When the results may open (after the last KO has had a moment on screen). */
   resultsAt: 0,
   bannerKey: "",
@@ -234,17 +227,15 @@ function setRound(snap: RoundSnap | null): void {
     seed: snap.seed,
     goAt: snap.goAt,
     speed: snap.speed,
-    who: snap.who,
     over: snap.over,
     solo: !!snap.solo,
   };
   app.mySlot = snap.who.indexOf(shell.me);
   if (fresh) {
-    app.feed = [];
+    feed.clear();
     app.popups = [];
     app.flashes = [];
     app.resultsAt = 0;
-    renderFeed();
   }
   app.seats = snap.seats.map((s, slot) => (s ? seatFromSnap(slot, s) : null));
   app.pilot?.stop();
@@ -369,7 +360,7 @@ function onOp(op: Op): void {
     const killer = op.by >= 0 ? app.seats[op.by] : null;
     if (killer) killer.kos++;
     if (op.s === app.mySlot) {
-      if (app.pilot && !app.pilot.lane.out) app.pilot.lane.out = true;
+      if (app.pilot) app.pilot.lane.out = true;
       app.pilot?.stop();
     } else if (op.by === app.mySlot) {
       sfx.ko();
@@ -379,18 +370,18 @@ function onOp(op: Op): void {
     }
     const victim = who(op.s);
     if (solo()) {
-      pushFeed(`${victim} topped out`);
+      feed.push(`${victim} topped out`);
       if (app.round) app.round.over = true;
       return;
     }
-    pushFeed(killer ? `${who(op.by)} knocked out ${victim}` : `${victim} ${op.s === app.mySlot ? "are" : "is"} out`);
+    feed.push(killer ? `${who(op.by)} knocked out ${victim}` : `${victim} ${op.s === app.mySlot ? "are" : "is"} out`);
     // Last one standing.
     if (app.round && alive() <= 1) {
       app.round.over = true;
       for (const s of app.seats) if (s && !s.out) s.place = 1;
       app.pilot?.stop();
       const winner = app.seats.find((s) => s && s.place === 1);
-      if (winner) pushFeed(`${who(winner.slot)} ${winner.slot === app.mySlot ? "win" : "wins"}!`);
+      if (winner) feed.push(`${who(winner.slot)} ${winner.slot === app.mySlot ? "win" : "wins"}!`);
     }
   }
 }
@@ -399,12 +390,6 @@ function who(slot: number): string {
   if (slot === app.mySlot) return `<b>You</b>`;
   const look = app.looks[slot];
   return look ? `<b style="color:${look.color}">${esc(look.name)}</b>` : "<b>Someone</b>";
-}
-
-function pushFeed(html: string): void {
-  app.feed.push({ html, at: performance.now() });
-  if (app.feed.length > 5) app.feed.shift();
-  renderFeed();
 }
 
 function onState(s: GameState, prev: GameState | null): void {
@@ -449,7 +434,7 @@ function frame(now: number): void {
   drawBoards(now);
   renderBanner();
   renderClock();
-  ageFeed(now);
+  feed.age(now);
   if (app.resultsAt && now >= app.resultsAt) {
     app.resultsAt = 0;
     if (shell.state) renderResults(shell.state);
@@ -648,8 +633,7 @@ function renderHud(): void {
       (total && !solo() ? `<span class="tag">${left} of ${total} left</span>` : "") +
       (status ? `<span class="note">${status}</span>` : "");
   }
-  const main = $("hud-main");
-  if (main.innerHTML !== html) main.innerHTML = html;
+  setHtml($("hud-main"), html);
   $("hud").classList.toggle("solo", solo());
   $("hud-score").textContent = seat ? fmt(seat.score) : "—";
   $("hud-lines").textContent = lane ? String(lane.lines) : "—";
@@ -663,8 +647,7 @@ function renderClock(): void {
   const t = r ? serverNow() - r.goAt : 0;
   const level = r ? String(levelAt(r.speed, t)) : "—";
   const scale = r ? attackScale(r.speed, t) : 1;
-  const el = $("hud-level");
-  if (el.textContent !== level) el.textContent = level;
+  setText($("hud-level"), level);
   const x = $("hud-scale");
   const text = `×${scale}`;
   if (x.textContent !== text) {
@@ -673,8 +656,6 @@ function renderClock(): void {
     x.title = scale > 1 ? `Garbage sent is multiplied by ${scale} to bring the round to an end` : "";
   }
 }
-
-let lastBoardHtml = "";
 function renderScoreboard(): void {
   if (shell.screen !== "game") return;
   const rows = app.seats
@@ -705,25 +686,8 @@ function renderScoreboard(): void {
       </li>`;
     })
     .join("");
-  if (html !== lastBoardHtml) {
-    lastBoardHtml = html;
-    $("scoreboard").innerHTML = html;
-  }
+  setHtml($("scoreboard"), html);
   buildBoards();
-}
-
-function renderFeed(): void {
-  $("feed").innerHTML = app.feed.map((f) => `<li data-at="${f.at}">${f.html}</li>`).join("");
-}
-
-function ageFeed(now: number): void {
-  const old = app.feed.filter((f) => now - f.at > 5000);
-  if (!old.length) return;
-  for (const li of $$("#feed li")) if (now - Number(li.dataset.at) > 4400) li.classList.add("old");
-  if (old.some((f) => now - f.at > 5200)) {
-    app.feed = app.feed.filter((f) => now - f.at <= 5200);
-    renderFeed();
-  }
 }
 
 /** The big message over our board: the countdown, then GO. */
@@ -793,7 +757,7 @@ function renderResults(s: GameState): void {
     $("results-rows").innerHTML = r.standings
       .map(
         (x) => `<tr><td></td><td>${name(x)}${you(x)}</span></td><td>${fmt(x.score)}</td><td>${x.lines}</td>
-        <td>${x.level}</td><td>${x.pieces}</td><td>${clock(x.secs)}</td></tr>`,
+        <td>${x.level}</td><td>${x.pieces}</td><td>${formatClock(x.secs * 1000)}</td></tr>`,
       )
       .join("");
   } else {
@@ -810,7 +774,7 @@ function renderResults(s: GameState): void {
         return `<tr class="${x.id === r.winnerId ? "winner" : ""}">
         <td>${x.place}</td>
         <td>${name(x)}${you(x)}</span></td>
-        <td>${x.kos}</td><td>${x.sent}</td><td>${x.lines}</td><td>${x.pieces}</td><td>${clock(x.secs)}</td><td>${p?.wins ?? "—"}</td></tr>`;
+        <td>${x.kos}</td><td>${x.sent}</td><td>${x.lines}</td><td>${x.pieces}</td><td>${formatClock(x.secs * 1000)}</td><td>${p?.wins ?? "—"}</td></tr>`;
       })
       .join("");
   }

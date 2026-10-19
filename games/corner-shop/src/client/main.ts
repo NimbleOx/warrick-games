@@ -1,6 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, esc, personalBest, setHtml, toast } from "@warrick/kit/client/dom";
-import { formatClock } from "@warrick/kit/client/format";
+import { $, esc, personalBest, setHtml, setText, toast } from "@warrick/kit/client/dom";
+import { showClock } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import {
   PIECE_COUNT,
@@ -531,6 +531,7 @@ function renderTools(s: GameState): void {
 
 function renderHint(s: GameState): void {
   const p = me(s);
+  const check = app.held ? ghostCheck() : null;
   let text = "";
   if (s.phase === "gameover") text = solo(s) ? "Solitaire over. Back to the lobby to try again." : "Game over. Nobody can move.";
   else if (!p || p.seat < 0) text = "You're watching this game. You'll get a seat when the host starts the next one.";
@@ -538,7 +539,6 @@ function renderHint(s: GameState): void {
   else if (p.out === "stuck") text = "No moves left for you. Final scores when everyone's done.";
   else if (p.out) text = "You're out of this game. Final scores when everyone's done.";
   else if (app.held) {
-    const check = ghostCheck();
     const name = pieceDef(app.held).name;
     if (!app.fits.has(app.held)) text = `The ${name} doesn't fit anywhere right now. Pick another piece.`;
     else if (check?.error) text = check.error;
@@ -552,8 +552,7 @@ function renderHint(s: GameState): void {
     text = `Waiting for ${shell.player(s.turnPlayerId)?.name ?? "the others"}… you can pick a piece and plan meanwhile.`;
   }
   const el = $("hint");
-  if (el.textContent !== text) el.textContent = text;
-  const check = app.held ? ghostCheck() : null;
+  setText(el, text);
   el.classList.toggle("bad", !!app.held && !!check?.error);
   el.classList.toggle("good", !!app.held && !!check && !check.error && isMyTurn(s));
 }
@@ -674,9 +673,7 @@ function tickClock(): void {
   const clock = document.querySelector<HTMLElement>("#hud-turn .clock");
   if (!s || !clock) return;
   const left = s.turnDeadline && s.phase === "playing" ? Math.max(0, s.turnDeadline - shell.serverNow()) : null;
-  const text = left === null ? "" : formatClock(left);
-  if (clock.textContent !== text) clock.textContent = text;
-  clock.classList.toggle("low", left !== null && left < 10000);
+  showClock(clock, left, 10_000);
 }
 
 // ------------------------------------------------------------------ layout
@@ -932,7 +929,7 @@ if (import.meta.env.DEV) {
     __cs: {
       app,
       shell,
-      /** Dev aid: play a legal move for yourself (the first one a normal CPU would pick is fine). */
+      /** Dev aid: play a legal move for yourself, with the biggest piece that fits. */
       auto() {
         const s = shell.state;
         const p = me(s);

@@ -1,5 +1,6 @@
 // The map on a canvas: a cached terrain layer, then buildings, overlays, units and effects,
 // all drawn in tile units under a pan-and-zoom camera. No image files: everything is paths.
+import { shade } from "@warrick/kit/client/color";
 import type { MapDef } from "../shared/maps";
 import type { Board, Unit } from "../shared/rules";
 import { CAPTURE_POINTS, type Terrain } from "../shared/terrain";
@@ -187,7 +188,8 @@ export class Renderer {
 
   draw(sc: Scene, now: number): void {
     this.stale = false;
-    const { ctx, m } = { ctx: this.ctx, m: sc.m };
+    const ctx = this.ctx;
+    const m = sc.m;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#0b1a10";
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -205,7 +207,7 @@ export class Renderer {
       for (const t of o.danger) tileFill(ctx, m, t, "rgba(255, 70, 70, 0.32)", "rgba(255, 190, 190, 0.45)", this.scale);
     if (o.path && o.path.length > 1) drawPath(ctx, m, o.path, this.scale);
 
-    const units = [...sc.b.units].filter((u) => !sc.hide?.has(u.id)).sort((a, c) => a.y - c.y);
+    const units = sc.b.units.filter((u) => !sc.hide?.has(u.id)).sort((a, c) => a.y - c.y);
     for (const u of units) {
       drawUnit(ctx, u.type, u.x, u.y, colorOf(sc, u.seat), faceOf(m, u.seat), u.done && u.seat === sc.activeSeat);
     }
@@ -363,12 +365,6 @@ export function faceOf(m: MapDef, seat: number): 1 | -1 {
 }
 
 // ------------------------------------------------------------------ colour helpers
-
-function shade(hex: string, k: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const f = (c: number) => Math.max(0, Math.min(255, Math.round(k < 0 ? c * (1 + k) : c + (255 - c) * k)));
-  return `rgb(${f(n >> 16)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`;
-}
 
 function mix(hex: string, other: string, k: number): string {
   const a = parseInt(hex.slice(1), 16);
@@ -720,8 +716,8 @@ export function drawUnit(
   done: boolean,
 ): void {
   const body = done ? mix(color, "#6a6a6a", 0.65) : color;
-  const dark = shade(body.startsWith("#") ? body : color, -0.45);
-  const light = shade(body.startsWith("#") ? body : color, 0.35);
+  const dark = shade(body, -0.45);
+  const light = shade(body, 0.35);
   const ink = "#15151c";
   g.save();
   g.translate(x + 0.5, y + 0.5);

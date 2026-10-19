@@ -28,7 +28,6 @@ export class LocalMatch {
   humanBits = 0;
   round = 0;
   wins: number[] = [];
-  onRound: (() => void) | null = null;
   private brains: (CpuBrain | null)[] = [];
   private prev: { x: number; y: number; h: number }[] = [];
   private rng: Rng = mulberry32(randomSeed());
@@ -67,7 +66,6 @@ export class LocalMatch {
     this.hangUntil = -1;
     this.nextRoundAt = 0;
     this.round++;
-    this.onRound?.();
   }
 
   requestFire(): void {
@@ -114,11 +112,6 @@ export class LocalMatch {
       if (winner >= 0 && w.aliveCount === 1) this.wins[winner]++;
       this.nextRoundAt = now + 1500;
     }
-  }
-
-  get winnerIndex(): number | null {
-    if (!this.nextRoundAt) return null;
-    return this.world.aliveCount === 1 ? this.world.tanks.findIndex((t) => t.alive) : -1;
   }
 
   frame(now: number): void {

@@ -1,5 +1,5 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { fnv1a, rleDecode, rleEncode } from "./codec";
+import { fnv1a, forEachRunCell, rleDecode, rleEncode } from "./codec";
 
 /** 0 up, 1 right, 2 down, 3 left. */
 export type Dir = 0 | 1 | 2 | 3;
@@ -118,10 +118,7 @@ export class Board {
       case "c": {
         const slot = op[1];
         this.clearTrail(slot, slot + 1);
-        for (let i = 2; i + 1 < op.length; i += 2) {
-          const end = (op[i] as number) + (op[i + 1] as number);
-          for (let c = op[i] as number; c < end; c++) this.setOwner(c, slot + 1);
-        }
+        forEachRunCell(op as number[], 2, (c) => this.setOwner(c, slot + 1));
         return;
       }
       case "d": {

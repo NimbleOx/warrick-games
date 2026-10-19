@@ -43,7 +43,4 @@ export const sfx = {
   win(): void {
     [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, 0.13, "square", f, i * 0.12));
   },
-  click(): void {
-    tone(1200, 0.03, 0.05, "square");
-  },
 };

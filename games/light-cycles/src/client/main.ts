@@ -1,5 +1,5 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, $$, esc } from "@warrick/kit/client/dom";
+import { $, $$, esc, setHtml, setText } from "@warrick/kit/client/dom";
 import { formatClock } from "@warrick/kit/client/format";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { Arena, type ArenaEvent, type ArenaSnapshot, type Cycle, type Dir, type Frame, type WallMode } from "../shared/arena";
@@ -270,7 +270,7 @@ function tickClocks(): void {
         if (left < 10000) cls = "low";
       }
     }
-    if (clock.textContent !== text) clock.textContent = text;
+    setText(clock, text);
     clock.title = a?.cfg.suddenDeathAt && isLive(s) ? "Time until the walls close in" : "";
     clock.classList.toggle("low", cls === "low");
     clock.classList.toggle("sd", cls === "sd");
@@ -280,10 +280,7 @@ function tickClocks(): void {
   else app.lastCount = 0;
   if (s.phase === "roundover") {
     const secs = s.phaseDeadline ? Math.max(0, Math.ceil((s.phaseDeadline - serverNow()) / 1000)) : 0;
-    for (const el of $$("[data-countdown]")) {
-      const text = String(secs);
-      if (el.textContent !== text) el.textContent = text;
-    }
+    for (const el of $$("[data-countdown]")) setText(el, String(secs));
   }
   if (app.bannerUntil && performance.now() > app.bannerUntil) {
     app.bannerUntil = 0;
@@ -318,11 +315,7 @@ function renderHud(s: GameState): void {
   else if (s.phase === "gameover") who = "Game over";
   const chip = p && !p.spectator ? `<span class="chip" style="background:${p.color}"></span>` : "";
   const html = `${chip}<span class="who">${who}</span><span class="clock"></span>`;
-  const status = $("hud-status");
-  if (status.dataset.html !== html) {
-    status.innerHTML = html;
-    status.dataset.html = html;
-  }
+  setHtml($("hud-status"), html);
   const a = app.arena;
   $("hud-riders").textContent = a ? `${a.aliveCount}/${a.cycles.length}` : "—";
   $("hud-score").textContent = p && !p.spectator ? String(p.score) : "—";
@@ -372,7 +365,7 @@ function renderPlayers(s: GameState): void {
       const cls = [
         p.id === shell.me ? "you" : "",
         s.phase === "roundover" && s.roundWinnerId === p.id ? "winner" : "",
-        (live && cyc && !cyc.alive) || (!cyc && live) ? "out" : "",
+        live && !cyc?.alive ? "out" : "",
         !p.cpu && !p.connected ? "offline" : "",
       ].join(" ");
       const tag = p.id === shell.me ? ` <span class="tag tag-you">you</span>` : p.cpu ? ` <span class="tag">CPU</span>` : "";
@@ -416,10 +409,7 @@ function flashBanner(html: string, ms: number, cls = ""): void {
 
 function setBanner(html: string, cls = ""): void {
   const el = $("banner");
-  if (el.dataset.html !== html) {
-    el.innerHTML = html;
-    el.dataset.html = html;
-  }
+  setHtml(el, html);
   el.className = `banner ${cls}`;
   el.hidden = false;
 }

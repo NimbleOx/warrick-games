@@ -8,7 +8,7 @@
 // Trailing spaces may be trimmed. The maps are symmetric so every seat gets the same start
 // (test/maps.test.ts checks it): 2-player maps turn 180° onto themselves, Four Corners is
 // mirrored both ways, and Three Crowns is mirrored left to right with seat 3 on the axis.
-import { CAPTURE_POINTS, isBuilding, type BuildingKind, type Terrain } from "./terrain";
+import { isBuilding, type BuildingKind, type Terrain } from "./terrain";
 
 export interface MapBuilding {
   x: number;
@@ -197,9 +197,4 @@ export const MAP_IDS = MAP_LIST.map((m) => m.id);
 
 export function mapsFor(players: number): MapDef[] {
   return MAP_LIST.filter((m) => m.players === players);
-}
-
-/** Capture points for a fresh game: every building untouched. */
-export function freshCapture(m: MapDef): number[] {
-  return m.buildings.map(() => CAPTURE_POINTS);
 }

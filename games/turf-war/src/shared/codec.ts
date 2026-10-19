@@ -35,13 +35,6 @@ export function forEachRunCell(runs: readonly number[], from: number, fn: (cell:
   }
 }
 
-/** Number of cells in a run list. */
-export function runCellCount(runs: readonly number[], from = 0): number {
-  let n = 0;
-  for (let i = from + 1; i < runs.length; i += 2) n += runs[i];
-  return n;
-}
-
 /** 32-bit FNV-1a over one or more byte arrays. */
 export function fnv1a(...arrays: Uint8Array[]): number {
   let h = 0x811c9dc5;

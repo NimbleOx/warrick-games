@@ -4,7 +4,7 @@
  * few segments near it. Vertical segments (step-ups, drops, walls) are fine; overhangs aren't in
  * v1, but nothing here depends on that except `heightAt`.
  *
- * Everything here is shared by the sim, so it keeps to the deterministic arithmetic in PLAN.md.
+ * Everything here is shared by the sim, so it keeps to the deterministic arithmetic in CLAUDE.md* ("The bike").
  */
 
 /** The largest radius a contact query may ask about: columns are padded by this much. */
@@ -34,7 +34,6 @@ export class Ground {
   /** The ends of the ground along x. */
   readonly minX: number;
   readonly maxX: number;
-  private readonly x0: number;
   private readonly columns: number;
   /** Segments in column c are segs[colStart[c]] .. segs[colStart[c + 1] - 1]. */
   private readonly colStart: Int32Array;
@@ -80,7 +79,6 @@ export class Ground {
     }
     this.minX = minX;
     this.maxX = maxX;
-    this.x0 = minX;
     this.columns = Math.floor((maxX - minX) / COLUMN_W) + 1;
     const lists: number[][] = [];
     for (let c = 0; c < this.columns; c++) lists.push([]);
@@ -103,7 +101,7 @@ export class Ground {
   }
 
   private column(x: number): number {
-    const c = Math.floor((x - this.x0) / COLUMN_W);
+    const c = Math.floor((x - this.minX) / COLUMN_W);
     return c < 0 ? 0 : c >= this.columns ? this.columns - 1 : c;
   }
 

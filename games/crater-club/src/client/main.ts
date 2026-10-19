@@ -1,6 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, $$, esc, toast } from "@warrick/kit/client/dom";
-import { formatClock } from "@warrick/kit/client/format";
+import { $, $$, esc, setHtml, setText, toast } from "@warrick/kit/client/dom";
+import { showClock } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { DRAW_TURNS_EACH, TICK_MS, TURRET_Y } from "../shared/constants";
 import {
@@ -259,20 +259,12 @@ function drawOpts(s: GameState): DrawOpts {
 function tickClocks(): void {
   const s = shell.state;
   if (!s) return;
-  const clock = document.querySelector<HTMLElement>("#hud-turn .clock");
-  if (clock) {
-    const left =
-      s.turnDeadline && s.phase === "playing" && !s.resolving && !app.anim ? Math.max(0, s.turnDeadline - serverNow()) : null;
-    const text = left === null ? "" : formatClock(left);
-    if (clock.textContent !== text) clock.textContent = text;
-    clock.classList.toggle("low", left !== null && left < 10000);
-  }
+  const left =
+    s.turnDeadline && s.phase === "playing" && !s.resolving && !app.anim ? Math.max(0, s.turnDeadline - serverNow()) : null;
+  showClock(document.querySelector<HTMLElement>("#hud-turn .clock"), left, 10_000);
   if (s.phase === "shop" || s.phase === "roundover") {
     const secs = s.phaseDeadline ? Math.max(0, Math.ceil((s.phaseDeadline - serverNow()) / 1000)) : 0;
-    for (const el of $$("[data-countdown]")) {
-      const text = String(secs);
-      if (el.textContent !== text) el.textContent = text;
-    }
+    for (const el of $$("[data-countdown]")) setText(el, String(secs));
   }
   if (app.bannerUntil && performance.now() > app.bannerUntil) {
     app.bannerUntil = 0;
@@ -308,11 +300,7 @@ function renderHud(): void {
   } else if (s.phase === "roundover") who = `<span class="who">Round over</span>`;
   else if (s.phase === "shop") who = `<span class="who">Shopping break</span>`;
   else if (s.phase === "gameover") who = `<span class="who">Game over</span>`;
-  const html = `${who}<span class="clock"></span>`;
-  if (turnEl.dataset.html !== html) {
-    turnEl.innerHTML = html;
-    turnEl.dataset.html = html;
-  }
+  setHtml(turnEl, `${who}<span class="clock"></span>`);
 
   const aim = turn ? (turn.id === shell.me && isMyTurn(s) ? app.aim : turn.aim) : null;
   const tank = turn?.tank;
@@ -416,7 +404,7 @@ function renderControls(): void {
   $("ctl-power-label").textContent = maxPower < 1000 ? `Power · max ${maxPower}` : "Power";
 
   const select = $<HTMLSelectElement>("ctl-weapon");
-  const owned = WEAPON_ORDER.filter((w) => weaponCount(p.inventory, w) > 0);
+  const owned = ownedWeapons(p);
   const key = owned.map((w) => `${w}:${p.inventory[w] ?? "∞"}`).join(",");
   if (select.dataset.key !== key) {
     select.dataset.key = key;
@@ -534,8 +522,6 @@ function renderGameOver(s: GameState): void {
   back.disabled = !host;
   back.textContent = host ? "Back to lobby" : `Waiting for ${playerById(s.hostId)?.name ?? "host"}…`;
 }
-
-// ------------------------------------------------------------------ log & chat
 
 // ------------------------------------------------------------------ aiming & firing
 

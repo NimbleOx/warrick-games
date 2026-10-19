@@ -33,8 +33,6 @@ export const SETTLE_MS = Math.max(LINE_MS, BOX_MS);
  */
 export class BoardView {
   readonly ctx: CanvasRenderingContext2D;
-  w = 0;
-  h = 0;
   transposed = false;
   /** CSS pixels per box, and where dot (0, 0) sits. */
   cell = 40;
@@ -53,8 +51,6 @@ export class BoardView {
    * whole space and the board sits in the middle (the home screen's backdrop).
    */
   fit(w: number, h: number, availW: number, availH: number, opts: { fill?: boolean; maxCell?: number } = {}): void {
-    this.w = w;
-    this.h = h;
     this.transposed = w > h && availH > availW * 1.05;
     const cols = this.transposed ? h : w;
     const rows = this.transposed ? w : h;

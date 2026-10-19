@@ -1,6 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, $$, esc, toast } from "@warrick/kit/client/dom";
-import { formatClock } from "@warrick/kit/client/format";
+import { $, $$, esc, setHtml, toast } from "@warrick/kit/client/dom";
+import { showClock } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { ATTACK_MS, BUILD_MS, MOVE_MS_PER_TILE } from "../shared/constants";
 import { MAPS, type MapDef } from "../shared/maps";
@@ -21,6 +21,7 @@ import {
   targetsFrom,
   threatTiles,
   tileOf,
+  unitAtTile,
   unitById,
   unitTile,
   type Act,
@@ -30,7 +31,7 @@ import {
   type Reach,
   type Unit,
 } from "../shared/rules";
-import { TERRAIN } from "../shared/terrain";
+import { CAPTURE_POINTS, TERRAIN } from "../shared/terrain";
 import { MAX_HP, UNITS, UNIT_TYPES, isIndirect, type UnitType } from "../shared/units";
 import { cpuNext } from "../shared/ai";
 import { Attract } from "./attract";
@@ -450,13 +451,8 @@ function reachableTargets(m: MapDef, b: Board, u: Unit, r: Reach): number[] {
 function tickClocks(now: number): void {
   const s = shell.state;
   if (!s) return;
-  const clock = document.querySelector<HTMLElement>("#hud-turn .clock");
-  if (clock) {
-    const left = s.turnDeadline && s.phase === "playing" && !s.winnerId ? Math.max(0, s.turnDeadline - shell.serverNow()) : null;
-    const text = left === null ? "" : formatClock(left);
-    if (clock.textContent !== text) clock.textContent = text;
-    clock.classList.toggle("low", left !== null && left < 15000);
-  }
+  const left = s.turnDeadline && s.phase === "playing" && !s.winnerId ? Math.max(0, s.turnDeadline - shell.serverNow()) : null;
+  showClock(document.querySelector<HTMLElement>("#hud-turn .clock"), left, 15_000);
   if (app.bannerUntil && now > app.bannerUntil) {
     app.bannerUntil = 0;
     renderBanner();
@@ -477,7 +473,7 @@ function tap(t: number): void {
   unlockAudio();
   app.focus = t;
   const mode = app.mode;
-  const u = b.units.find((x) => unitTile(m, x) === t);
+  const u = unitAtTile(m, b, t);
   const seat = mySeat(s);
   const act = canAct(s);
 
@@ -775,11 +771,7 @@ function renderHud(): void {
     who = `<span class="chip" style="background:${turnP.color}"></span><span class="who">${label}</span>`;
   }
   const html = `<span class="day">Day ${s.day || 1}</span>${who}<span class="clock"></span>`;
-  const turnEl = $("hud-turn");
-  if (turnEl.dataset.html !== html) {
-    turnEl.innerHTML = html;
-    turnEl.dataset.html = html;
-  }
+  setHtml($("hud-turn"), html);
   const b = s.board;
   const seat = me?.seat ?? -1;
   $("hud-funds").textContent = b && seat >= 0 ? fmt(b.funds[seat]) : "—";
@@ -888,9 +880,9 @@ function renderInfo(): void {
       const owner = b.owners[bi];
       const op = owner >= 0 ? seatPlayer(owner, s) : null;
       name = `${op ? `<span class="chip" style="background:${op.color}"></span>${esc(op.name)}'s ` : "Neutral "}${TERRAIN[terr].name.toLowerCase()}`;
-      if (b.capture[bi] < 20) name += ` · capture ${b.capture[bi]}/20`;
+      if (b.capture[bi] < CAPTURE_POINTS) name += ` · capture ${b.capture[bi]}/${CAPTURE_POINTS}`;
     }
-    const u = mode.k === "menu" || mode.k === "target" ? unitById(b, mode.unit) : b.units.find((x) => unitTile(m, x) === t);
+    const u = mode.k === "menu" || mode.k === "target" ? unitById(b, mode.unit) : unitAtTile(m, b, t);
     let unit = "";
     if (u) {
       const d = UNITS[u.type];
@@ -899,11 +891,7 @@ function renderInfo(): void {
     }
     tile = `<span class="info-tile">${name} <span class="stars" title="Defence">${stars(TERRAIN[terr].defense)}</span></span>${unit}`;
   }
-  const html = `<div class="info-row">${tile}</div>${hint ? `<div class="hint">${hint}</div>` : ""}`;
-  if (el.dataset.html !== html) {
-    el.innerHTML = html;
-    el.dataset.html = html;
-  }
+  setHtml(el, `<div class="info-row">${tile}</div>${hint ? `<div class="hint">${hint}</div>` : ""}`);
 }
 
 function flashBanner(html: string, ms: number): void {

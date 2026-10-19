@@ -1,3 +1,4 @@
+import { shade } from "@warrick/kit/client/color";
 import { BULLET_R, CELL, TANK_R } from "../shared/constants";
 import { mazeHeight, mazeWidth, wallRects, type Maze, type Rect } from "../shared/maze";
 import { THEMES, type Theme } from "./themes";
@@ -68,10 +69,6 @@ export class Renderer {
     this.ctx = canvas.getContext("2d")!;
   }
 
-  get currentTheme(): Theme {
-    return this.theme;
-  }
-
   setMaze(maze: Maze, theme: number): void {
     this.maze = maze;
     this.walls = wallRects(maze);
@@ -83,17 +80,11 @@ export class Renderer {
     this.layout();
   }
 
-  /** Fit the maze inside a box of this many CSS pixels. Returns the canvas's CSS size. */
-  fit(maxW: number, maxH: number): { w: number; h: number } {
+  /** Fit the maze inside a box of this many CSS pixels. */
+  fit(maxW: number, maxH: number): void {
     this.boxW = Math.max(100, maxW);
     this.boxH = Math.max(80, maxH);
     this.layout();
-    return { w: this.canvas.clientWidth, h: this.canvas.clientHeight };
-  }
-
-  /** Canvas CSS pixels per world unit. */
-  get pxPerUnit(): number {
-    return this.scale;
   }
 
   private layout(): void {
@@ -351,20 +342,5 @@ export class Renderer {
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-/** Lighten (amt > 0) or darken (amt < 0) a #rrggbb color. */
-export function shade(hex: string, amt: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const ch = (v: number) => Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt);
-  const r = ch((n >> 16) & 255);
-  const g = ch((n >> 8) & 255);
-  const b = ch(n & 255);
-  return `rgb(${r} ${g} ${b})`;
+  ctx.roundRect(x, y, w, h, r);
 }

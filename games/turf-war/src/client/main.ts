@@ -1,9 +1,11 @@
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
-import { $, $$, esc, personalBest } from "@warrick/kit/client/dom";
+import { $, esc, personalBest, setHtml } from "@warrick/kit/client/dom";
+import { formatClock } from "@warrick/kit/client/format";
+import { Feed } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import type { DeathCause, Dir, Frame, Op } from "../shared/board";
 import { forEachRunCell } from "../shared/codec";
-import { PLAYER_COLORS, RESYNC_MS, TICKS_PER_SEC } from "../shared/constants";
+import { PLAYER_COLORS, RESYNC_MS, TICKS_PER_SEC, TICK_MS } from "../shared/constants";
 import {
   BOARD_SIZES,
   SETTING_CHOICES,
@@ -26,17 +28,10 @@ import { Renderer, type Look, type Scene } from "./render";
 /** Ask again for a snapshot if none has come this long after asking (the server may have dropped the ask). */
 const RESYNC_RETRY_MS = RESYNC_MS + 500;
 
-function clock(ticks: number): string {
-  const secs = Math.max(0, Math.ceil(ticks / TICKS_PER_SEC));
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
-}
-
 // ------------------------------------------------------------------ app state
 
-interface FeedItem {
-  html: string;
-  at: number;
-}
+/** What just happened, over the board. */
+const feed = new Feed();
 
 const app = {
   /** Our copy of the round, kept in step by the server's frames. */
@@ -49,7 +44,6 @@ const app = {
   paintKey: "",
   /** When we last asked for a snapshot (performance.now()), while waiting for one. */
   resyncAskedAt: null as number | null,
-  feed: [] as FeedItem[],
   /** Why we last died, for the respawn banner. */
   death: null as { by: number; why: DeathCause } | null,
   bannerKey: "",
@@ -130,7 +124,7 @@ function onScreen(screen: Screen): void {
 function onReset(): void {
   app.view = null;
   app.mySlot = -1;
-  app.feed = [];
+  feed.clear();
   app.death = null;
   $("results").hidden = true;
 }
@@ -156,7 +150,7 @@ function setView(snap: Snapshot | null): void {
   const resized = !app.view || app.view.board.w !== v.board.w || app.view.board.h !== v.board.h;
   if (v.n === 0 || (app.view && v.n < app.view.n)) {
     // A new round.
-    app.feed = [];
+    feed.clear();
     app.death = null;
   }
   app.view = v;
@@ -216,11 +210,7 @@ function onOp(op: Op): void {
       // A head-on comes as one death each; report it once.
       if (why === "headon" && by >= 0 && by < slot) return;
       const text = feedText(slot, by, why);
-      if (text) {
-        app.feed.push({ html: text, at: performance.now() });
-        if (app.feed.length > 5) app.feed.shift();
-        renderFeed();
-      }
+      if (text) feed.push(text);
       return;
     }
     case "s":
@@ -268,7 +258,7 @@ function onState(s: GameState, prev: GameState | null): void {
   }
   if (s.phase === "lobby") {
     app.view = null;
-    app.feed = [];
+    feed.clear();
   }
   if (prev?.phase === "playing" && s.phase === "results") {
     const best = soloBest(s);
@@ -295,7 +285,7 @@ function frame(now: number): void {
   }
   renderer.draw(scene, now);
   renderBanner();
-  ageFeed(now);
+  feed.age(now);
 }
 
 function sceneNow(): Scene {
@@ -330,7 +320,7 @@ function renderHud(): void {
   const clockEl = $("hud-clock");
   if (v && s.phase === "playing") {
     const left = v.end - Math.max(v.n, v.go);
-    clockEl.textContent = clock(left);
+    clockEl.textContent = formatClock(Math.max(0, left) * TICK_MS);
     clockEl.classList.toggle("low", left <= 10 * TICKS_PER_SEC);
   } else {
     clockEl.textContent = s.phase === "results" ? "0:00" : "—";
@@ -366,7 +356,7 @@ function renderHud(): void {
     $("hud-deaths").textContent = v && slot >= 0 ? String(v.deaths[slot]) : "—";
   }
   $("hud").classList.toggle("solo", solo(s));
-  if (main.innerHTML !== html) main.innerHTML = html;
+  setHtml(main, html);
 }
 
 /** Why a spectator isn't playing, and when they will. */
@@ -376,9 +366,6 @@ function whyWatching(s: GameState): string {
   // A seat is free: someone left after you started watching, or you came in just as they were leaving.
   return "you'll get a seat next round";
 }
-
-let lastBoardHtml = "";
-let lastMiniHtml = "";
 function renderScoreboard(): void {
   const v = app.view;
   if (!v || shell.screen !== "game") return;
@@ -399,41 +386,22 @@ function renderScoreboard(): void {
       </li>`;
     })
     .join("");
-  if (html !== lastBoardHtml) {
-    lastBoardHtml = html;
-    $("scoreboard").innerHTML = html;
-  }
+  setHtml($("scoreboard"), html);
 
   // The compact board over the stage on small screens: the top three, and you.
   const top = rows.slice(0, 3);
   const mineRow = rows.find((r) => r.slot === app.mySlot);
   if (mineRow && !top.includes(mineRow)) top.push(mineRow);
   const mini = top
-    .map(({ slot, land }) => {
+    .map((row) => {
+      const { slot, land } = row;
       const look = app.looks[slot]!;
-      const rank = rows.indexOf(rows.find((r) => r.slot === slot)!) + 1;
+      const rank = rows.indexOf(row) + 1;
       return `<li class="${slot === app.mySlot ? "me" : ""}"><span>${rank}.</span><span class="chip" style="background:${look.color}"></span>
         <span>${slot === app.mySlot ? "You" : esc(look.name)}</span><span>${percent(land, v.board.size)}</span></li>`;
     })
     .join("");
-  if (mini !== lastMiniHtml) {
-    lastMiniHtml = mini;
-    $("mini-board").innerHTML = mini;
-  }
-}
-
-function renderFeed(): void {
-  $("feed").innerHTML = app.feed.map((f) => `<li data-at="${f.at}">${f.html}</li>`).join("");
-}
-
-function ageFeed(now: number): void {
-  const old = app.feed.filter((f) => now - f.at > 5000);
-  if (!old.length) return;
-  for (const li of $$("#feed li")) if (now - Number(li.dataset.at) > 4400) li.classList.add("old");
-  if (old.some((f) => now - f.at > 5200)) {
-    app.feed = app.feed.filter((f) => now - f.at <= 5200);
-    renderFeed();
-  }
+  setHtml($("mini-board"), mini);
 }
 
 /** The big message over the board: countdown, GO, why you died, time's up. */

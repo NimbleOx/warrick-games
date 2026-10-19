@@ -82,7 +82,7 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
     wins: { label: "First to", fmt: (v: number) => `${v} win${v > 1 ? "s" : ""}` },
     hurrySeconds: {
       label: "Hurry up",
-      fmt: (v: number) => (v ? `After ${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}` : "Never"),
+      fmt: (v: number) => (v ? `After ${formatClock(v * 1000)}` : "Never"),
     },
     crates: { label: "Crates", fmt: (v: string) => ({ sparse: "Sparse", normal: "Normal", packed: "Packed" })[v] ?? v },
     items: { label: "Power-ups", fmt: (v: string) => ({ few: "Few", normal: "Normal", lots: "Lots" })[v] ?? v },

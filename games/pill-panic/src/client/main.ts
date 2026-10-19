@@ -1,4 +1,4 @@
-import { $, esc, personalBest } from "@warrick/kit/client/dom";
+import { $, esc, personalBest, setHtml } from "@warrick/kit/client/dom";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { MAX_PLAYERS } from "@warrick/kit/shared/constants";
 import type { BottleEvent } from "../shared/bottle";
@@ -462,8 +462,7 @@ function renderScoreboard(): void {
       </li>`;
     })
     .join("");
-  const el = $("scoreboard");
-  if (el.innerHTML !== rows) el.innerHTML = rows;
+  setHtml($("scoreboard"), rows);
 }
 
 /** The big message over your bottle: countdown, GO, cleared, topped out, who took the round. */

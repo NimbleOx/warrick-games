@@ -55,7 +55,6 @@ function tryMap(rng: Rng, w: number, h: number, territories: number): number[] |
 
   const cells = new Array<number>(n).fill(-1);
   const seeds = spreadSeeds(rng, near, land, landCells, territories);
-  const size = new Array<number>(territories).fill(1);
   seeds.forEach((cell, t) => (cells[cell] = t));
 
   // Grow the smallest territory that still can, one cell at a time, preferring the frontier
@@ -67,7 +66,7 @@ function tryMap(rng: Rng, w: number, h: number, territories: number): number[] |
     let t = -1;
     for (let i = 0; i < territories; i++) {
       if (stuck[i]) continue;
-      if (t < 0 || size[i] < size[t] || (size[i] === size[t] && rng() < 0.5)) t = i;
+      if (t < 0 || members[i].length < members[t].length || (members[i].length === members[t].length && rng() < 0.5)) t = i;
     }
     if (t < 0) return null; // land nobody can reach: can't happen on one continent, but be safe
     let best = -1;
@@ -90,10 +89,9 @@ function tryMap(rng: Rng, w: number, h: number, territories: number): number[] |
     }
     cells[best] = t;
     members[t].push(best);
-    size[t]++;
     left--;
   }
-  if (size.some((s) => s < MIN_CELLS)) return null;
+  if (members.some((m) => m.length < MIN_CELLS)) return null;
   return cells;
 }
 

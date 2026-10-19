@@ -7,6 +7,7 @@ export type { CpuLevel, Dir, Garbage, LaneSnap, LogEntry };
 export type Phase = "lobby" | "playing" | "results";
 /** Make this tile first to win (0: last one standing only). */
 export type Goal = 0 | 256 | 512 | 1024;
+/** Board sizes the host can pick: 4 × 4 like the original, or a roomier 5 × 5. */
 export type Size = 4 | 5;
 /** Who a player's rocks go to. */
 export type Aim = "random" | "leader" | "weakest";

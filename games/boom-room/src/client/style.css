@@ -100,10 +100,6 @@
   color: var(--muted);
 }
 
-.hud-turn .clock.low {
-  color: var(--danger);
-}
-
 .stage {
   position: relative;
   width: 100%;
@@ -119,10 +115,6 @@
   width: 100%;
   height: auto;
   touch-action: none;
-}
-
-.stage.aiming canvas {
-  cursor: crosshair;
 }
 
 .banner {
@@ -220,10 +212,6 @@ kbd {
   border-radius: var(--radius);
   background: var(--panel-2);
   border: 2px solid transparent;
-}
-
-.game-players li.turn {
-  border-color: var(--accent-2);
 }
 
 .game-players li.dead {

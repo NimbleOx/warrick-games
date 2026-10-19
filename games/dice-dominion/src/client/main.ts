@@ -1,6 +1,6 @@
 import { unlockAudio } from "@warrick/kit/client/audio";
-import { $, $$, esc, toast } from "@warrick/kit/client/dom";
-import { formatClock } from "@warrick/kit/client/format";
+import { $, $$, esc, setHtml, setText, toast } from "@warrick/kit/client/dom";
+import { showClock } from "@warrick/kit/client/hud";
 import { Shell, type Screen } from "@warrick/kit/client/shell";
 import { dropMs } from "../shared/constants";
 import type { HexMap } from "../shared/map";
@@ -352,9 +352,7 @@ function tickClock(s: GameState | null): void {
   const clock = document.querySelector<HTMLElement>("#hud-turn .clock");
   if (!clock || !s) return;
   const left = s.phase === "playing" && s.turnDeadline && !s.winnerId ? Math.max(0, s.turnDeadline - shell.serverNow()) : null;
-  const text = left === null ? "" : formatClock(left);
-  if (clock.textContent !== text) clock.textContent = text;
-  clock.classList.toggle("low", left !== null && left < 10000);
+  showClock(clock, left, 10_000);
 }
 
 // ------------------------------------------------------------------ rendering
@@ -382,12 +380,7 @@ function renderHud(s: GameState): void {
         : `${esc(turn.name)}'s turn${turn.cpu ? "" : turn.connected ? "" : " (away)"}`;
     who = `<span class="chip" style="background:${turn.color}"></span><span class="who">${label}</span>`;
   } else if (s.phase === "gameover") who = `<span class="who">Game over</span>`;
-  const html = `${who}<span class="round">Round ${s.round}</span><span class="clock"></span>`;
-  const el = $("hud-turn");
-  if (el.dataset.html !== html) {
-    el.innerHTML = html;
-    el.dataset.html = html;
-  }
+  setHtml($("hud-turn"), `${who}<span class="round">Round ${s.round}</span><span class="clock"></span>`);
 
   const btn = $<HTMLButtonElement>("end-turn");
   const me = mine(s);
@@ -455,16 +448,9 @@ function renderHint(): void {
   const el = $("hint");
   const s = shell.state;
   if (!s || s.phase === "lobby") return;
-  let text = "";
-  let cls = "";
-  if (app.warning.until) {
-    text = app.warning.text;
-    cls = "warn";
-  } else {
-    text = hintText(s);
-  }
-  if (el.textContent !== text) el.textContent = text;
-  el.className = `hint-line ${cls}`;
+  const warn = !!app.warning.until;
+  setText(el, warn ? app.warning.text : hintText(s));
+  el.className = `hint-line ${warn ? "warn" : ""}`;
 }
 
 function hintText(s: GameState): string {

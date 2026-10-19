@@ -19,3 +19,9 @@ export function rgba(hex: string, a: number): string {
   const c = hexToRgb(hex);
   return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
 }
+
+/** A "#rrggbb" colour lightened towards white (`amt` > 0) or darkened towards black (`amt` < 0), as CSS. */
+export function shade(hex: string, amt: number): string {
+  const c = mix(hexToRgb(hex), amt < 0 ? [0, 0, 0] : [255, 255, 255], Math.abs(amt));
+  return `rgb(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])})`;
+}

@@ -44,11 +44,16 @@ function easyAttack({ adj, owner, dice }: BoardView, seat: number, rng: Rng): [n
   return moves[Math.floor(rng() * moves.length)];
 }
 
-/** More dice, or 8 against 8 (an 8-stack can't grow); best of all, an attack that joins two groups. */
-function normalAttack({ adj, owner, dice }: BoardView, seat: number, rng: Rng): [number, number] | null {
-  const moves = legalAttacks(adj, owner, dice, seat).filter(
+/** The attacks normal and hard consider: more dice, or 8 against 8 (an 8-stack can't grow). */
+function goodAttacks(adj: number[][], owner: number[], dice: number[], seat: number): [number, number][] {
+  return legalAttacks(adj, owner, dice, seat).filter(
     ([f, t]) => dice[f] > dice[t] || (dice[f] === MAX_DICE && dice[t] === MAX_DICE),
   );
+}
+
+/** More dice, or 8 against 8; best of all, an attack that joins two groups. */
+function normalAttack({ adj, owner, dice }: BoardView, seat: number, rng: Rng): [number, number] | null {
+  const moves = goodAttacks(adj, owner, dice, seat);
   if (!moves.length) return null;
   const groupOf = groupIndex(adj, owner, seat);
   let best: [number, number] | null = null;
@@ -72,9 +77,7 @@ function normalAttack({ adj, owner, dice }: BoardView, seat: number, rng: Rng): 
  * were tuned in simulated games against normal CPUs (see the README).
  */
 function hardAttack({ adj, owner, dice }: BoardView, seat: number, rng: Rng): [number, number] | null {
-  const moves = legalAttacks(adj, owner, dice, seat).filter(
-    ([f, t]) => dice[f] > dice[t] || (dice[f] === MAX_DICE && dice[t] === MAX_DICE),
-  );
+  const moves = goodAttacks(adj, owner, dice, seat);
   if (!moves.length) return null;
 
   // The leader: whoever else holds the most territory, if they're ahead of us.

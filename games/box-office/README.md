@@ -21,7 +21,7 @@ From the repo root, after `npm install` there:
 
 ```bash
 npm run dev -w games/box-office -- --port 5184  # http://localhost:5184/box-office/, with the Worker and Durable Object in workerd
-npm test -w games/box-office                    # board, chain, endgame, CPU, game-flow and room tests (Node)
+npm test -w games/box-office                    # board, chain, endgame, CPU, game-flow, room and line-queue tests (Node)
 npm run typecheck -w games/box-office
 ```
 
@@ -40,7 +40,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 ```
 
 - **One Durable Object per game code**, built on the kit's `Room`: the game state, each player's secret token and the chat/event log live in its storage, and it talks to browsers over hibernatable WebSockets, so a game costs nothing between moves. The board is part of the state, saved after every line, so a deploy mid-game picks up where it was.
-- **The whole board goes out in every state**: who drew each line, who claimed each box, and `order`, every line in the order it was drawn. The biggest board, 11 × 8, is a few hundred bytes. The client draws the lines it hasn't seen yet one at a time, faster the longer the run, and snaps straight to the board after a reconnect or in a background tab.
+- **The whole board goes out in every state**: who drew each line, who claimed each box, and `order`, every line in the order it was drawn. The biggest board, 11 × 8, is a few hundred bytes. The client draws the lines it hasn't seen yet one at a time, faster the longer the run. Timers play them, not animation frames, so a hidden pane or a covered window keeps up. It snaps straight to the board after a reconnect or in a background tab, and draws everything waiting at once when it falls behind.
 - **One alarm drives every timer:** the turn clock, the 5-second wait for a missing player, and a CPU's thinking time (0.8 seconds before its first line, 0.25 seconds a line through a capture run). The turn clock is the kit's (`@warrick/kit/worker/turns`). Timers pause when nobody is connected, and a game with no connections for 12 hours is deleted.
 - **The rules are pure functions** in `src/shared/`: the board's geometry and drawing a line (`board.ts`), the chain analysis (`chains.ts`: safe lines, chains and loops, what a line gives away) and the endgame model (`endgame.ts`). The server, the CPUs, the move made for a player out of time and the client's hints all use them.
 - **CPU players** (`src/shared/ai.ts`): easy takes boxes and otherwise draws at random, and normal never gives a box away while a safe line is left. Hard plays the chain endgame: in the last 10 safe lines it searches every order they can be drawn in, and it solves the endgame (every player taking the most boxes for themselves) to decide when to decline a chain. Its slowest decision, 8 players on the large board, takes about 120 ms.
@@ -57,9 +57,9 @@ src/shared/    code used by both sides
   ai.ts          CPU players and the move made for a player who ran out of time
   protocol.ts    settings, game state and message types, standings
 src/worker/    index.ts (routes), room.ts (Durable Object: messages and the alarm), game.ts (seats, lines, turns, timers)
-src/client/    main.ts (the game screen and its hooks into the shell), render.ts (the board on a canvas),
-               audio.ts (sounds), attract.ts (the home screen's self-playing demo)
-test/          Vitest tests for the board, the chain analysis and endgame, the CPUs and the game flow, and room.test.ts,
+src/client/    main.ts (the game screen and its hooks into the shell), lines.ts (the queue of lines still to draw),
+               render.ts (the board on a canvas), audio.ts (sounds), attract.ts (the home screen's self-playing demo)
+test/          Vitest tests for the board, the chain analysis and endgame, the CPUs, the game flow and the line queue, and room.test.ts,
                which runs the real room (reloads, second tabs, deploys) through the kit's test harness
 ```
 

@@ -48,9 +48,16 @@ export class BoardView {
 
   /**
    * Size the canvas for a w × h board in the space given. With `fill`, the canvas takes the
-   * whole space and the board sits in the middle (the home screen's backdrop).
+   * whole space and the board sits in the middle (the home screen's backdrop). `maxDpr` caps the
+   * pixel density (3 by default).
    */
-  fit(w: number, h: number, availW: number, availH: number, opts: { fill?: boolean; maxCell?: number } = {}): void {
+  fit(
+    w: number,
+    h: number,
+    availW: number,
+    availH: number,
+    opts: { fill?: boolean; maxCell?: number; maxDpr?: number } = {},
+  ): void {
     this.transposed = w > h && availH > availW * 1.05;
     const cols = this.transposed ? h : w;
     const rows = this.transposed ? w : h;
@@ -63,7 +70,7 @@ export class BoardView {
     this.cssH = opts.fill ? Math.round(availH) : boardH + 2 * pad;
     this.ox = Math.round((this.cssW - boardW) / 2);
     this.oy = Math.round((this.cssH - boardH) / 2);
-    this.dpr = Math.min(3, window.devicePixelRatio || 1);
+    this.dpr = Math.min(opts.maxDpr ?? 3, window.devicePixelRatio || 1);
     this.canvas.style.width = `${this.cssW}px`;
     this.canvas.style.height = `${this.cssH}px`;
     this.canvas.width = Math.round(this.cssW * this.dpr);
@@ -124,7 +131,7 @@ export class BoardView {
       const [cx, cy] = this.toScreen(c + 0.5, r + 0.5);
       const owner = board.boxes[b];
       if (owner >= 0) {
-        const t = Math.min(1, (now - (o.boxTime[b] ?? 0)) / BOX_MS);
+        const t = progress(now, o.boxTime[b], BOX_MS);
         const s = (cell - lineW) * (0.55 + 0.45 * easeOut(t));
         const color = o.colors[owner] ?? "#888";
         ctx.globalAlpha = alpha * 0.3;
@@ -168,7 +175,7 @@ export class BoardView {
     for (let e = 0; e < g.edgeCount; e++) {
       const seat = board.lines[e];
       if (seat === NONE) continue;
-      const t = Math.min(1, (now - (o.lineTime[e] ?? 0)) / LINE_MS);
+      const t = progress(now, o.lineTime[e], LINE_MS);
       const color = o.colors[seat] ?? "#9aa0c0";
       if (e === o.last) {
         ctx.shadowColor = color;
@@ -206,6 +213,14 @@ export class BoardView {
     ctx.lineTo(ax + (bx - ax) * easeOut(t), ay + (by - ay) * easeOut(t));
     ctx.stroke();
   }
+}
+
+/**
+ * How far through its animation something that appeared at `at` is, 0–1. A line timed by the
+ * queue's timer can be a moment later than the frame drawing it.
+ */
+function progress(now: number, at: number | undefined, ms: number): number {
+  return Math.max(0, Math.min(1, (now - (at ?? 0)) / ms));
 }
 
 function easeOut(t: number): number {

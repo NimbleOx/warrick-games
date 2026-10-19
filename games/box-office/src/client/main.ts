@@ -7,6 +7,7 @@ import { capturable, takeAll } from "../shared/chains";
 import { SETTING_CHOICES, standings, type BoardSize, type ClientMsg, type GameState, type ServerMsg } from "../shared/protocol";
 import { Attract } from "./attract";
 import { sfx } from "./audio";
+import { LineQueue } from "./lines";
 import { BoardView, SETTLE_MS } from "./render";
 
 const SIZE_NAMES: Record<BoardSize, string> = { small: "Small", medium: "Medium", large: "Large" };
@@ -19,11 +20,9 @@ const app = {
   /** The board as drawn: it catches up with the server's, one line at a time. */
   view: null as Board | null,
   game: -1,
-  /** The lines the view has or has queued, in order; how many it shows; the ones still to animate. */
+  /** The lines the view has or has queued, in order; how many it shows; boxes in the run so far. */
   known: [] as number[],
   shown: 0,
-  queue: [] as number[],
-  nextAt: 0,
   run: 0,
   lineTime: [] as number[],
   boxTime: [] as number[],
@@ -90,6 +89,8 @@ const shell: Shell<GameState, ClientMsg, ServerMsg> = new Shell({
 });
 const view = new BoardView($<HTMLCanvasElement>("board"));
 const attract = new Attract($<HTMLCanvasElement>("attract"));
+/** The lines still to draw, played one at a time by timers. */
+const lines = new LineQueue({ show: showLines, done: linesDone });
 
 const mySeat = (s = shell.state) => (s ? s.seats.indexOf(shell.me) : -1);
 const isMyTurn = (s = shell.state) => !!s && s.phase === "playing" && s.turn >= 0 && s.seats[s.turn] === shell.me;
@@ -112,7 +113,7 @@ function onReset(): void {
   app.view = null;
   app.game = -1;
   app.known = [];
-  app.queue = [];
+  lines.clear();
   app.pending = app.preview = app.hover = -1;
   app.caps = [];
   $("results").hidden = true;
@@ -161,49 +162,52 @@ function sync(s: GameState): void {
     known.some((e, i) => s.order[i] !== e);
   app.known = s.order.slice();
   if (!fresh) {
-    app.queue.push(...s.order.slice(known.length));
+    lines.push(s.order.slice(known.length));
     return;
   }
   const sizeChanged = !v || v.w !== s.w || v.h !== s.h;
+  lines.clear();
   app.view = cloneBoard(s);
   app.game = s.game;
   app.shown = s.order.length;
-  app.queue = [];
   app.lineTime = [];
   app.boxTime = [];
   app.run = 0;
   if (sizeChanged) layout();
 }
 
-function step(now: number): void {
+/** The queue's next lines: draw them on the view, with their boxes. Quiet ones are catching up. */
+function showLines(edges: number[], quiet: boolean): void {
   const s = shell.state;
   const v = app.view;
   if (!s || !v) return;
-  while (app.queue.length && now >= app.nextAt) {
-    const e = app.queue.shift()!;
+  const now = performance.now();
+  const g = geometry(v.w, v.h);
+  for (const e of edges) {
     app.shown++;
     v.lines[e] = s.lines[e];
     app.lineTime[e] = now;
     let claimed = 0;
-    for (const b of geometry(v.w, v.h).edgeBoxes[e]) {
+    for (const b of g.edgeBoxes[e]) {
       if (v.boxes[b] !== NONE) continue;
-      if (geometry(v.w, v.h).boxEdges[b].every((x) => v.lines[x] !== NONE)) {
+      if (g.boxEdges[b].every((x) => v.lines[x] !== NONE)) {
         v.boxes[b] = s.boxes[b];
         app.boxTime[b] = now;
         claimed++;
       }
     }
     app.run = claimed ? app.run + claimed : 0;
+    if (quiet) continue;
     if (claimed) sfx.box(app.run);
     else sfx.line();
-    app.settleUntil = now + SETTLE_MS;
-    redraw();
-    // A long run plays faster, so chains don't drag.
-    const left = app.queue.length;
-    app.nextAt = now + (left > 8 ? 45 : left > 3 ? 80 : 140);
-    renderScores(s);
-    if (!app.queue.length && s.phase === "results") sfx.win();
   }
+  app.settleUntil = now + SETTLE_MS;
+  redraw();
+  renderScores(s);
+}
+
+function linesDone(quiet: boolean): void {
+  if (!quiet && shell.state?.phase === "results") sfx.win();
 }
 
 // ------------------------------------------------------------------ frame loop
@@ -217,8 +221,7 @@ function frame(now: number): void {
   if (shell.screen !== "game") return;
   const s = shell.state;
   if (!s || !app.view) return;
-  step(now);
-  const mine = isMyTurn(s) && !app.queue.length;
+  const mine = isMyTurn(s) && !lines.busy;
   const pulse = mine && hintsOn(s) ? app.caps : [];
   // Idle, nothing moves: the last drawing still stands. Pulsing boxes and a preview line throb.
   // Once they stop, one more frame draws where they ended, however late it comes.
@@ -260,7 +263,7 @@ function tick(s: GameState, now: number): void {
     $("banner").hidden = true;
   }
   // The results open once the last lines have played.
-  if (s.phase === "results" && !app.queue.length && !app.resultsClosed && $("results").hidden) {
+  if (s.phase === "results" && !lines.busy && !app.resultsClosed && $("results").hidden) {
     app.resultsAt ||= now + 900;
     if (now >= app.resultsAt) renderResults(s);
   }
@@ -557,10 +560,12 @@ function queueLayout(): void {
 // ------------------------------------------------------------------ start
 
 window.addEventListener("resize", queueLayout);
+// A hidden tab draws what's waiting at once, so it's up to date when it comes back.
+document.addEventListener("visibilitychange", () => document.hidden && lines.flush());
 new ResizeObserver(queueLayout).observe($("scores"));
 new ResizeObserver(queueLayout).observe(document.querySelector<HTMLElement>(".stage-col")!);
 wireInput();
 shell.start();
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) Object.assign(window, { __bo: { app, view, shell } });
+if (import.meta.env.DEV) Object.assign(window, { __bo: { app, view, shell, lines, attract } });

@@ -19,3 +19,4 @@ Read `README.md` for how it plays, how it's built and how to run it; this file i
 
 - A grid with discrete ticks is deterministic and cheap to network. Clients send direction changes; the server broadcasts per-tick changes (head moves, plus claimed cells as runs or bitmasks), and a full board snapshot on join or reconnect.
 - Grid games tolerate latency well. Movement on the client can simply snap to each tick, with no prediction.
+- The home screen's demo changes only on a tick (10 a second) and sits under the home card's blur, so it draws only when it ticks or the window resizes, never in between. It starts a new round only when the window's grid (one cell every 16 px) changes size, and the canvas is resized only when its size really changes, since sizing a canvas clears it.

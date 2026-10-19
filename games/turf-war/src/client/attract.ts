@@ -22,29 +22,42 @@ export class Attract {
   private acc = 0;
   private last = 0;
   private still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  /** Something changed since the last draw. */
+  private dirty = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
+    canvas.addEventListener("contextrestored", () => (this.dirty = true));
   }
 
   resize(): void {
     this.renderer.resize(window.innerWidth, window.innerHeight);
-    this.round = null;
+    // A new round only when the board would be a different size: setting one up runs 150 ticks.
+    const [w, h] = gridSize();
+    const b = this.round?.board;
+    if (b && (b.w !== w || b.h !== h)) this.round = null;
+    this.dirty = true;
   }
 
+  /**
+   * Called every animation frame, but the board only changes on a tick (10 a second), and the
+   * home card blurs whatever is under it: so draw only when something changed. Nothing in it
+   * fades or glides, so between changes it draws nothing at all.
+   */
   frame(now: number): void {
     if (!this.round) this.start();
     const dt = this.last ? Math.min(250, now - this.last) : 0;
     this.last = now;
     if (!this.still) this.acc += dt;
-    let stepped = false;
     while (this.acc >= TICK_MS) {
       this.acc -= TICK_MS;
       this.step();
-      stepped = true;
+      this.dirty = true;
     }
+    if (!this.dirty) return;
+    this.dirty = false;
     const scene = this.scene();
-    if (stepped || this.still) this.renderer.paint(scene);
+    this.renderer.paint(scene);
     this.renderer.draw(scene, now);
   }
 
@@ -53,8 +66,7 @@ export class Attract {
   }
 
   private start(): void {
-    const w = Math.max(24, Math.floor(window.innerWidth / CELL));
-    const h = Math.max(18, Math.floor(window.innerHeight / CELL));
+    const [w, h] = gridSize();
     const slots = Array.from({ length: PLAYERS }, (_, i) => i);
     this.round = new Round(this.rng, { w, h, slots, ticks: 1200, countdown: 0 });
     this.brains = slots.map((i) => newBrain(LEVELS[i]));
@@ -62,6 +74,7 @@ export class Attract {
     this.looks = slots.map((i) => ({ color: colors[i], name: "" }));
     // Start with some land already taken, so the screen never opens empty.
     for (let i = 0; i < 150; i++) this.step();
+    this.dirty = true;
   }
 
   private step(): void {
@@ -72,4 +85,9 @@ export class Attract {
     round.step();
     if (round.over) this.start();
   }
+}
+
+/** The board's size in cells for the window: one cell every 16 CSS px. */
+function gridSize(): [number, number] {
+  return [Math.max(24, Math.floor(window.innerWidth / CELL)), Math.max(18, Math.floor(window.innerHeight / CELL))];
 }

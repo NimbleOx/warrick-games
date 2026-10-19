@@ -54,9 +54,14 @@ export class Renderer {
 
   /** Size the canvas to its box. */
   resize(cssW: number, cssH: number): void {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.cssW = Math.max(1, Math.floor(cssW));
-    this.cssH = Math.max(1, Math.floor(cssH));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.floor(cssW));
+    const h = Math.max(1, Math.floor(cssH));
+    // Sizing a canvas clears it and its buffers, even to the size it already is.
+    if (w === this.cssW && h === this.cssH && dpr === this.dpr) return;
+    this.dpr = dpr;
+    this.cssW = w;
+    this.cssH = h;
     this.canvas.width = Math.round(this.cssW * this.dpr);
     this.canvas.height = Math.round(this.cssH * this.dpr);
     this.canvas.style.width = `${this.cssW}px`;

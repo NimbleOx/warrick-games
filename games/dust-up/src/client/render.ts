@@ -45,6 +45,8 @@ export class Renderer {
   readonly cam = { x: 0, y: 0, ppm: 60, ready: false };
   /** A dev aid: draws closer (2) or further out (0.5). */
   zoom = 1;
+  /** Nothing drawn since the canvas was last sized (which clears it). */
+  blank = true;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -61,6 +63,7 @@ export class Renderer {
     this.h = this.canvas.clientHeight;
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
+    this.blank = true;
   }
 
   /**
@@ -97,6 +100,7 @@ export class Renderer {
   draw(course: Course, bikes: DrawBike[], passed: number): void {
     const { ctx, w, h, dpr, cam } = this;
     if (!w || !h) return;
+    this.blank = false;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.drawSky();
 

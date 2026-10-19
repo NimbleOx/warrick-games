@@ -84,12 +84,19 @@ export class Pilot {
   private crashes = 0;
   private wasCrashed = false;
 
+  /**
+   * `firstPlan` is the tick it first plans at. Pilots stepped on one thread can start at
+   * different ticks, so they don't all plan on the same frame; the room's start at 0, as they
+   * were when the CPU levels were measured.
+   */
   constructor(
     readonly cpu: CpuLevel,
     seed: number,
+    firstPlan = 0,
   ) {
     this.level = LEVELS[cpu];
     this.rng = mulberry32(seed);
+    this.nextPlan = firstPlan;
   }
 
   /** Another crash at `x`: the count goes on while they're all in one place. */

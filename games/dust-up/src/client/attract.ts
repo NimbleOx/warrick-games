@@ -74,7 +74,9 @@ export class Attract {
     for (let i = 0; i < n; i++) {
       const ride = startRide(this.course);
       this.riders.push({
-        pilot: new Pilot(levels[i], randomSeed()),
+        // Pilots plan every 30 to 48 ticks: start them 6 ticks apart, so they don't all plan
+        // on the same frame.
+        pilot: new Pilot(levels[i], randomSeed(), i * 6),
         ride,
         prev: new Ride().copyFrom(ride),
         input: { throttle: 0, brake: 0, lean: 0, respawn: 0 },

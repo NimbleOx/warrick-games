@@ -40,6 +40,8 @@ const app = {
   resyncAt: 0,
   /** When the last animation frame ran. */
   lastNow: 0,
+  /** When the results first covered the course (0: they don't). */
+  coveredAt: 0,
   /** Who the camera follows when you're not riding (null: the leader). */
   follow: null as string | null,
   /** A message in the banner for a moment (a checkpoint split, "GO!"). */
@@ -61,6 +63,8 @@ const app = {
 
 /** No animation frame for this long (ms): the page isn't animating (a hidden tab or pane). */
 const STILL_MS = 250;
+/** How long the course goes on drawing under the results, for the camera to settle (ms). */
+const SETTLE_MS = 1000;
 /** You're "stuck" after this long without getting anywhere. */
 const STUCK_MS = 3500;
 
@@ -258,7 +262,12 @@ function frame(now: number): void {
   }
   if (shell.screen !== "game") return;
   step(now);
-  draw(now);
+  // Under the results, whose blurred backdrop the browser would redo for every frame drawn
+  // beneath it, the course keeps its last frame once the camera has settled (unless a resize
+  // wiped it).
+  const covered = !$("results").hidden;
+  app.coveredAt = covered ? app.coveredAt || now : 0;
+  if (!covered || now - app.coveredAt < SETTLE_MS || renderer.blank) draw(now);
   hud(now);
 }
 

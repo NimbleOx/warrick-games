@@ -26,6 +26,9 @@ export interface Flash {
   at: number;
 }
 
+/** How long a small board flashes after we send it garbage (ms). */
+export const HIT_MS = 500;
+
 export interface OwnScene {
   board: Board;
   active: Active | null;
@@ -136,6 +139,8 @@ function drawPopups(ctx: CanvasRenderingContext2D, popups: Popup[], cx: number, 
 export class OwnView {
   private ctx: CanvasRenderingContext2D;
   private c = 24;
+  /** Nothing drawn since the canvas was last sized (which clears it). */
+  blank = true;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -144,10 +149,12 @@ export class OwnView {
   resize(c: number): void {
     this.c = c;
     this.ctx = setup(this.canvas, Math.round(OWN_W * c), Math.round(OWN_H * c));
+    this.blank = true;
   }
 
   draw(s: OwnScene, now: number): void {
     const { ctx, c } = this;
+    this.blank = false;
     const W = OWN_W * c;
     const H = OWN_H * c;
     ctx.clearRect(0, 0, W, H);
@@ -275,6 +282,8 @@ export class OwnView {
 export class MiniView {
   private ctx: CanvasRenderingContext2D;
   private m = 8;
+  /** Nothing drawn since the canvas was last sized (which clears it). */
+  blank = true;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -283,10 +292,12 @@ export class MiniView {
   resize(m: number): void {
     this.m = m;
     this.ctx = setup(this.canvas, Math.round(MINI_W * m), Math.round(MINI_H * m));
+    this.blank = true;
   }
 
   draw(s: MiniScene, now: number): void {
     const { ctx, m } = this;
+    this.blank = false;
     const W = MINI_W * m;
     const H = MINI_H * m;
     ctx.clearRect(0, 0, W, H);
@@ -312,7 +323,7 @@ export class MiniView {
     const hit = now - s.hitAt;
     const danger = !s.out && s.board.height() >= VISIBLE - 4;
     ctx.lineWidth = 2;
-    ctx.strokeStyle = hit < 500 ? `rgb(255 210 63 / ${1 - hit / 500})` : danger ? "#7a2a35" : LINE;
+    ctx.strokeStyle = hit < HIT_MS ? `rgb(255 210 63 / ${1 - hit / HIT_MS})` : danger ? "#7a2a35" : LINE;
     ctx.strokeRect(bx - 1, 1, bw + 2, H - 2);
 
     if (s.out) {

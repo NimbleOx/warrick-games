@@ -23,7 +23,7 @@ import {
 import { Attract } from "./attract";
 import { Input } from "./input";
 import { Pilot, type Action, type Handling } from "./pilot";
-import { MINI_H, MINI_W, MiniView, OWN_H, OWN_W, OwnView, type Flash, type Popup } from "./render";
+import { HIT_MS, MINI_H, MINI_W, MiniView, OWN_H, OWN_W, OwnView, type Flash, type Popup } from "./render";
 
 // ------------------------------------------------------------------ helpers
 
@@ -66,6 +66,8 @@ interface SeatView {
   popups: Popup[];
   hitAt: number;
   mini: MiniView | null;
+  /** What its small board showed when last drawn (see `drawBoards`). */
+  drawn: string;
   el: HTMLElement | null;
 }
 
@@ -96,6 +98,8 @@ const app = {
   bumpAt: -1e9,
   /** When the results may open (after the last KO has had a moment on screen). */
   resultsAt: 0,
+  /** When the results first covered the boards (0: they don't). */
+  coveredAt: 0,
   bannerKey: "",
   sounded: "",
   lastFrame: 0,
@@ -207,6 +211,7 @@ function seatFromSnap(slot: number, s: SeatSnap): SeatView {
     popups: [],
     hitAt: -1e9,
     mini: null,
+    drawn: "",
     el: null,
   };
 }
@@ -441,10 +446,19 @@ function frame(now: number): void {
   }
 }
 
+/** How long the boards go on drawing under the results, for their effects to play out (ms). */
+const SETTLE_MS = 1000;
+
 function drawBoards(now: number): void {
   const pilot = app.pilot;
   const seat = mySeat();
-  if (pilot && seat) {
+  // Under the results, whose blurred backdrop the browser would redo for every frame drawn
+  // beneath it, the boards keep their last frame once their effects have played out (unless a
+  // resize wiped them).
+  const covered = !$("results").hidden;
+  app.coveredAt = covered ? app.coveredAt || now : 0;
+  const still = covered && now - app.coveredAt >= SETTLE_MS;
+  if (pilot && seat && (!still || own.blank)) {
     app.flashes = app.flashes.filter((f) => now - f.at < 300);
     app.popups = app.popups.filter((p) => now - p.at < 1500);
     const lane = pilot.lane;
@@ -471,9 +485,16 @@ function drawBoards(now: number): void {
   for (const s of app.seats) {
     if (!s?.mini) continue;
     s.popups = s.popups.filter((p) => now - p.at < 1500);
+    // A small board changes once or twice a second: draw it then, and while a popup rises or
+    // the flash of a hit fades, and once more when they're gone.
+    const lane = laneOf(s);
+    const hit = now - s.hitAt < HIT_MS;
+    const key = `${lane.n}|${lane.pc}|${pendingOf(s)}|${s.out}|${s.place}|${s.popups.length}|${hit}`;
+    if (!s.mini.blank && (still || (key === s.drawn && !hit && !s.popups.length))) continue;
+    s.drawn = key;
     s.mini.draw(
       {
-        board: laneOf(s).board,
+        board: lane.board,
         pending: pendingOf(s),
         out: s.out,
         place: s.place,

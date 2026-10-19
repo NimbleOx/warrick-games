@@ -49,6 +49,7 @@ browser ──HTTP──▶ Worker ──▶ static assets (client)
 - **The arena lives in memory only**, since it changes every tick. If the room restarts mid-round, the round is replayed from a fresh grid. Everything else (scores, settings, phase) is in storage.
 - **One alarm drives the phase timers**: the 3-second countdown, the round-over pause and cleanup. A game with no connections for 12 hours is deleted.
 - **CPU riders** (`src/shared/ai.ts`) look at going straight, left or right. Each option is scored by the open floor it can reach (flood fill). Hard riders also count the floor they'd reach before anyone else (Voronoi territory), which makes them cut you off. Normal and hard riders avoid cells another head could enter next tick. With 8 hard CPUs on the large arena, that costs about 6 ms per tick. The home screen's demo race uses the same bots.
+- **The canvas draws only what shows.** Under the game over, the arena keeps its last frame once the crashes have settled. The home screen's demo draws on a canvas the size of the window, showing the middle of a race that covers it, so a phone held upright doesn't draw the parts it would crop.
 
 ### Layout
 

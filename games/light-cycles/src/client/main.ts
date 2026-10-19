@@ -42,7 +42,12 @@ const app = {
   bannerUntil: 0,
   lastCount: 0,
   swipe: null as { x: number; y: number; dir: Dir | null } | null,
+  /** When the game over covered the arena (performance.now()), or -1. */
+  coveredAt: -1,
 };
+
+/** How long the arena keeps drawing under the game over, so crashes and the shake settle. */
+const SETTLE_MS = 1000;
 
 /** No animation frame for this long (in ms) means the page isn't animating: it's in a hidden pane, say. */
 const STILL_MS = 250;
@@ -233,7 +238,13 @@ function frame(now: number): void {
   advance(now);
   const s = shell.state;
   app.ahead = s?.phase === "playing" ? app.predictor.predict(shell.me, now, shell.rtt) : null;
-  if (app.arena && s) renderer.draw(app.arena, drawOpts(s), now);
+  // Under the game over, whose blurred backdrop the browser would redo for every frame drawn
+  // beneath it, the arena keeps its last frame once it has settled (unless a resize wiped it).
+  const covered = !$("gameover").hidden;
+  if (!covered) app.coveredAt = -1;
+  else if (app.coveredAt < 0) app.coveredAt = now;
+  const still = covered && now - app.coveredAt > SETTLE_MS && !renderer.blank;
+  if (app.arena && s && !still) renderer.draw(app.arena, drawOpts(s), now);
   tickClocks();
 }
 

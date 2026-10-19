@@ -25,8 +25,10 @@ export class Attract {
   }
 
   resize(): void {
-    // The canvas is CSS-scaled with object-fit: cover, so size it for the larger fit (within reason).
-    this.renderer.resize(Math.min(1600, Math.max(window.innerWidth, (window.innerHeight * 16) / 9)));
+    // The window's size, showing the middle of a race that covers it (at most 1600 CSS pixels
+    // wide, scaled up past that): a canvas sized for the larger fit and cropped by CSS would draw
+    // four times the pixels on a phone held upright.
+    this.renderer.resizeCover(window.innerWidth, window.innerHeight, 1600);
   }
 
   frame(now: number): void {

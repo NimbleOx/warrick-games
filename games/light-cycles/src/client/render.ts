@@ -68,6 +68,14 @@ export class Renderer {
   private rings: Ring[] = [];
   private shake = 0;
   private flash = 0;
+  /**
+   * Where the arena's 16:9 view sits on the canvas, in canvas pixels: the whole canvas, or (for
+   * the home screen's demo, see `resizeCover`) a bigger view centred on a canvas the size of the
+   * window, cropped like CSS `object-fit: cover`.
+   */
+  private view = { w: 0, h: 0, x: 0, y: 0 };
+  /** Nothing has been drawn since the canvas was last resized, which clears it. */
+  blank = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -78,11 +86,37 @@ export class Renderer {
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(200, Math.round(cssWidth * this.dpr));
     const h = Math.round((w * 9) / 16);
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
+    this.setSize(w, h);
+    this.view = { w, h, x: 0, y: 0 };
     this.ui = this.dpr * Math.min(1.25, Math.max(0.85, cssWidth / 900));
+  }
+
+  /**
+   * Size the canvas to a box of CSS pixels (the window), showing the middle of a 16:9 view that
+   * covers it, at most `maxCss` CSS pixels wide (scaled up past that, as CSS would). It looks
+   * like a canvas sized for the larger fit and cropped by CSS `object-fit: cover`, without
+   * drawing the parts that crop would hide.
+   */
+  resizeCover(cssWidth: number, cssHeight: number, maxCss: number): void {
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    const coverW = Math.max(cssWidth, (cssHeight * 16) / 9);
+    const viewCss = Math.min(maxCss, coverW);
+    const vw = Math.max(200, Math.round(viewCss * this.dpr));
+    const vh = Math.round((vw * 9) / 16);
+    // Canvas pixels per CSS pixel: the view's, spread over the larger fit.
+    const density = vw / coverW;
+    const w = Math.max(1, Math.round(cssWidth * density));
+    const h = Math.max(1, Math.round(cssHeight * density));
+    this.setSize(w, h);
+    this.view = { w: vw, h: vh, x: Math.round((w - vw) / 2), y: Math.round((h - vh) / 2) };
+    this.ui = this.dpr * Math.min(1.25, Math.max(0.85, viewCss / 900));
+  }
+
+  private setSize(w: number, h: number): void {
+    if (this.canvas.width === w && this.canvas.height === h) return;
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.blank = true;
   }
 
   /** A new arena is about to be shown: forget the old one's effects. Cycles already down stay gone. */
@@ -130,9 +164,11 @@ export class Renderer {
     const ctx = this.ctx;
     const theme = THEMES[opts.theme % THEMES.length];
     const { w, h } = arena.cfg;
-    const k = this.canvas.width / w;
-    const key = `${this.canvas.width}x${this.canvas.height}:${w}x${h}:${opts.theme}`;
+    const view = this.view;
+    const k = view.w / w;
+    const key = `${this.canvas.width}x${this.canvas.height}:${view.w}x${view.h}+${view.x}+${view.y}:${w}x${h}:${opts.theme}`;
     if (key !== this.floorKey) this.renderFloor(theme, w, h, key);
+    this.blank = false;
 
     let ox = 0;
     let oy = 0;
@@ -148,7 +184,7 @@ export class Renderer {
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
     ctx.drawImage(this.floor, ox, oy);
-    ctx.setTransform(k, 0, 0, k, ox, oy);
+    ctx.setTransform(k, 0, 0, k, view.x + ox, view.y + oy);
 
     if (arena.shrink > 0) this.drawClosingWall(arena, now);
 
@@ -201,32 +237,35 @@ export class Renderer {
     c.width = this.canvas.width;
     c.height = this.canvas.height;
     const g = c.getContext("2d")!;
-    const k = c.width / w;
+    // The view, wherever it sits on the canvas (see `view`).
+    const { w: vw, h: vh, x: vx, y: vy } = this.view;
+    g.translate(vx, vy);
+    const k = vw / w;
 
-    const bg = g.createRadialGradient(c.width / 2, c.height / 2, 0, c.width / 2, c.height / 2, c.width * 0.62);
+    const bg = g.createRadialGradient(vw / 2, vh / 2, 0, vw / 2, vh / 2, vw * 0.62);
     bg.addColorStop(0, theme.floor);
     bg.addColorStop(1, theme.edge);
     g.fillStyle = bg;
-    g.fillRect(0, 0, c.width, c.height);
+    g.fillRect(0, 0, vw, vh);
 
     // Fine lines every cell (when they're big enough to see), brighter ones every 8.
     const line = Math.max(1, Math.round(this.dpr * 0.6));
     if (k >= 6) {
       g.fillStyle = rgba(theme.grid, 0.07);
-      for (let x = 1; x < w; x++) g.fillRect(Math.round(x * k), 0, line, c.height);
-      for (let y = 1; y < h; y++) g.fillRect(0, Math.round(y * k), c.width, line);
+      for (let x = 1; x < w; x++) g.fillRect(Math.round(x * k), 0, line, vh);
+      for (let y = 1; y < h; y++) g.fillRect(0, Math.round(y * k), vw, line);
     }
     g.fillStyle = rgba(theme.grid, 0.2);
-    for (let x = 8; x < w; x += 8) g.fillRect(Math.round(x * k), 0, line, c.height);
-    for (let y = 8; y < h; y += 8) g.fillRect(0, Math.round(y * k), c.width, line);
+    for (let x = 8; x < w; x += 8) g.fillRect(Math.round(x * k), 0, line, vh);
+    for (let y = 8; y < h; y += 8) g.fillRect(0, Math.round(y * k), vw, line);
 
     // Glowing arena wall.
     g.strokeStyle = rgba(theme.grid, 0.25);
     g.lineWidth = 6 * this.dpr;
-    g.strokeRect(0, 0, c.width, c.height);
+    g.strokeRect(0, 0, vw, vh);
     g.strokeStyle = rgba(theme.grid, 0.9);
     g.lineWidth = 2 * this.dpr;
-    g.strokeRect(this.dpr, this.dpr, c.width - 2 * this.dpr, c.height - 2 * this.dpr);
+    g.strokeRect(this.dpr, this.dpr, vw - 2 * this.dpr, vh - 2 * this.dpr);
     this.floorKey = key;
   }
 
@@ -362,9 +401,10 @@ export class Renderer {
     ctx.font = `600 ${12 * u}px "IBM Plex Mono", monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    const px = Math.min(this.canvas.width - 60 * u, Math.max(60 * u, x * k));
-    const above = y * k > 40 * u && dir !== 0;
-    const py = above ? y * k - 14 * u : y * k + 28 * u;
+    const { x: vx, y: vy } = this.view;
+    const px = Math.min(this.canvas.width - 60 * u, Math.max(60 * u, vx + x * k));
+    const above = vy + y * k > 40 * u && dir !== 0;
+    const py = vy + (above ? y * k - 14 * u : y * k + 28 * u);
     ctx.lineWidth = 3 * u;
     ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";
     ctx.strokeText(text, px, py);

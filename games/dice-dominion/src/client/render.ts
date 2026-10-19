@@ -27,6 +27,13 @@ const SEA_EDGE = "#1c3157";
 const BORDER = "#070b16";
 const FLASH_MS = 380;
 
+/** A dice stack drawn once into a canvas of its own, and the device pixel its (x, y) falls on. */
+interface Sprite {
+  ctx: CanvasRenderingContext2D;
+  x: number;
+  y: number;
+}
+
 /**
  * Draws a game's hex map: each territory filled with its owner's colour, borders where
  * territories meet, and its dice stacked on the cell farthest from its edge. The geometry is
@@ -50,6 +57,11 @@ export class MapView {
   private anchors: { x: number; y: number }[] = [];
   /** Territories by their dice stack's height on screen, so lower stacks draw over higher ones. */
   private stackOrder: number[] = [];
+  /**
+   * Each stack drawn once, by colour and count, and copied onto the map from then on: a full
+   * map has a few thousand faces, and CPU turns redraw it every frame. Emptied when the scale changes.
+   */
+  private stacks = new Map<string, Sprite>();
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -57,6 +69,8 @@ export class MapView {
     private cover = false,
   ) {
     this.ctx = canvas.getContext("2d")!;
+    // The counts beside small stacks are text: draw them again in the web font once it arrives.
+    document.fonts?.addEventListener("loadingdone", () => this.stacks.clear());
   }
 
   setMap(map: HexMap): void {
@@ -122,6 +136,7 @@ export class MapView {
     this.scale = fit(this.cssW / W, this.cssH / H);
     this.ox = (this.cssW - this.extent.width * this.scale) / 2;
     this.oy = (this.cssH - this.extent.height * this.scale) / 2;
+    this.stacks.clear();
   }
 
   /** The territory under a point on the page, or -1. */
@@ -207,15 +222,45 @@ export class MapView {
       ctx.stroke(this.edges[o.attack.to]);
     }
 
-    // Dice stacks, back to front.
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // Dice stacks, back to front, on whole device pixels so the copies stay sharp.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const t of this.stackOrder) {
+      const sprite = this.stack(board.dice[t], o.colors[board.owner[t]] ?? "#777777");
+      if (!sprite) continue;
       const p = this.toScreen(this.anchors[t]);
-      drawStack(ctx, p.x, p.y, board.dice[t], o.colors[board.owner[t]] ?? "#777777", s);
+      ctx.drawImage(sprite.ctx.canvas, Math.round(p.x * this.dpr) - sprite.x, Math.round(p.y * this.dpr) - sprite.y);
     }
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     if (o.attack) this.drawArrow(o.attack.from, o.attack.to, o.attack.won);
     for (const [t, chance] of o.targets) this.drawOdds(t, chance, t === o.hover);
+  }
+
+  /** A stack of `n` dice at the current scale, from the cache or drawn now. */
+  private stack(n: number, color: string): Sprite | null {
+    if (n <= 0) return null;
+    const key = `${color} ${n}`;
+    let sprite = this.stacks.get(key);
+    // A 2D canvas can lose its pixels (Chrome drops them from background tabs to save memory).
+    if (sprite && !sprite.ctx.isContextLost?.()) return sprite;
+    const r = this.scale;
+    const dpr = this.dpr;
+    const d = dieSize(r);
+    const label = r < 9 ? labelSize(d) : 0;
+    // Room for 8 dice, their outlines and the count beside them, rounded out to device pixels.
+    const x = Math.ceil((d + 2) * dpr);
+    const y = Math.ceil((2.5 * d + 2) * dpr);
+    const canvas = document.createElement("canvas");
+    canvas.width = x + Math.ceil((d + 2 + label) * dpr);
+    canvas.height = y + Math.ceil((d + 2 + label) * dpr);
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawStack(ctx, x / dpr, y / dpr, n, color, r);
+    // Colours only change in the lobby, but don't let changing them grow the cache for ever.
+    if (this.stacks.size > 200) this.stacks.clear();
+    sprite = { ctx, x, y };
+    this.stacks.set(key, sprite);
+    return sprite;
   }
 
   private toScreen(p: { x: number; y: number }): { x: number; y: number } {
@@ -282,7 +327,7 @@ export class MapView {
  */
 export function drawStack(ctx: CanvasRenderingContext2D, x: number, y: number, n: number, color: string, r: number): void {
   if (n <= 0) return;
-  const d = Math.max(6, Math.min(26, r * 1.3));
+  const d = dieSize(r);
   const step = d * 0.5;
   const top = mix(color, "#ffffff", 0.55);
   const left = color;
@@ -299,7 +344,7 @@ export function drawStack(ctx: CanvasRenderingContext2D, x: number, y: number, n
   }
   // On small maps the cubes are hard to count, so say how many.
   if (r < 9) {
-    const size = Math.max(9, Math.round(d * 0.95));
+    const size = labelSize(d);
     ctx.font = `700 ${size}px "IBM Plex Mono", ui-monospace, monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -312,6 +357,11 @@ export function drawStack(ctx: CanvasRenderingContext2D, x: number, y: number, n
     ctx.fillText(String(n), tx, ty);
   }
 }
+
+/** A die's width in pixels, for a hex radius of `r` pixels. */
+const dieSize = (r: number): number => Math.max(6, Math.min(26, r * 1.3));
+/** The font size of the count beside a stack of `d`-pixel dice. */
+const labelSize = (d: number): number => Math.max(9, Math.round(d * 0.95));
 
 /** One die: an isometric cube whose top face is centred on (x, y). */
 function cube(

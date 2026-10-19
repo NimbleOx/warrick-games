@@ -8,6 +8,8 @@ import { MapView, type Board, type Overlay } from "./render";
 
 const SEATS = 5;
 const STEP_MS = 420;
+/** The gap between frames of a fading flash: every 2nd frame at 60 Hz, every 4th at 120 Hz. */
+const FADE_MS = 30;
 
 /** A self-playing game between CPUs behind the home screen. */
 export class Attract {
@@ -19,6 +21,9 @@ export class Attract {
   private turn = 0;
   private nextAt = 0;
   private resetAt = 0;
+  /** Something changed since the last draw. */
+  private dirty = true;
+  private drawnAt = 0;
   private overlay: Overlay = {
     colors: [0, 2, 4, 6, 1].map((i) => DEFAULT_COLORS[i]),
     selected: -1,
@@ -31,16 +36,34 @@ export class Attract {
 
   constructor(canvas: HTMLCanvasElement) {
     this.view = new MapView(canvas, true);
+    canvas.addEventListener("contextrestored", () => (this.dirty = true));
     this.reset();
   }
 
   resize(): void {
     this.view.resize(window.innerWidth, window.innerHeight);
+    this.dirty = true;
   }
 
+  /**
+   * Called every animation frame, but the board only changes a couple of times a second, and
+   * the home card blurs whatever is under it: so draw only when something changed. Nearly every
+   * step lights something up, so fades draw at about 30 frames a second, not the display's rate.
+   */
   frame(now: number): void {
     if (this.resetAt && now > this.resetAt) this.reset();
     else if (!this.resetAt && now > this.nextAt) this.step(now);
+    let fading = false;
+    for (const [t, at] of this.overlay.flash) {
+      if (now - at < 400) fading = true;
+      else {
+        this.overlay.flash.delete(t);
+        this.dirty = true; // one more frame without it
+      }
+    }
+    if (!this.dirty && !(fading && now - this.drawnAt >= FADE_MS)) return;
+    this.dirty = false;
+    this.drawnAt = now;
     this.view.draw(this.board, this.overlay, now);
   }
 
@@ -64,6 +87,7 @@ export class Attract {
       this.turn++;
       return;
     }
+    this.dirty = true;
     const move = cpuAttack("normal", { adj: this.map.adj, owner, dice }, seat, this.rng);
     if (!move) {
       const r = reinforce(this.rng, owner, dice, seat, largestGroup(this.map.adj, owner, seat), this.reserve[seat]);

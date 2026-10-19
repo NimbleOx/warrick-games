@@ -5,7 +5,7 @@ export interface ControlHooks {
   pick(sx: number, sy: number): number;
   mine(b: number): boolean;
   send(from: number[], to: number): void;
-  /** The selection, the hover or the aim changed. */
+  /** The selection or the hover changed (not just the aim: the frame loop reads that itself). */
   changed(): void;
 }
 
@@ -96,21 +96,27 @@ export class Controls {
     const [x, y] = this.local(e);
     const base = this.h.pick(x, y);
     const d = this.down;
+    // Moves come faster than frames: tell the hook only when the hover or the selection changes.
+    let changed = base !== this.hover;
     if (d && this.h.active()) {
       if (!this.dragging && Math.hypot(x - d.x, y - d.y) > DRAG_PX && d.base >= 0 && this.h.mine(d.base)) {
         this.dragging = true;
         // Dragging from a base outside the selection starts a new one, unless adding.
-        if (!this.selected.includes(d.base)) this.selected = d.add ? [...this.selected, d.base] : [d.base];
+        if (!this.selected.includes(d.base)) {
+          this.selected = d.add ? [...this.selected, d.base] : [d.base];
+          changed = true;
+        }
       }
       if (this.dragging) {
         this.aim = { x, y };
-        if (base >= 0 && this.h.mine(base) && !this.selected.includes(base)) this.selected.push(base);
+        if (base >= 0 && this.h.mine(base) && !this.selected.includes(base)) {
+          this.selected.push(base);
+          changed = true;
+        }
       }
     }
-    if (base !== this.hover || this.dragging) {
-      this.hover = base;
-      this.h.changed();
-    }
+    this.hover = base;
+    if (changed) this.h.changed();
   }
 
   private onUp(e: PointerEvent): void {

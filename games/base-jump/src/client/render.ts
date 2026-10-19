@@ -3,6 +3,8 @@ import { Battle, clash, type Group } from "../shared/battle";
 import { CAP, HELI, RADIUS, TANK, TURN_TICKS, type SendPct } from "../shared/constants";
 import { distance, travelTicks, type GameMap } from "../shared/map";
 
+type Route = NonNullable<ReturnType<Battle["route"]>>;
+
 /** How a slot looks on the map. */
 export interface Look {
   color: string;
@@ -74,6 +76,13 @@ export class Renderer {
   private ox = 0;
   private oy = 0;
   private flashes: { b: number; color: string; at: number }[] = [];
+  /**
+   * Tank routes from selected bases to the target, by base: each is a pass over every base, so
+   * they're kept until the battle ticks or the target changes.
+   */
+  private routes = { battle: null as Battle | null, n: -1, me: -1, to: -1, from: new Map<number, Route | null>() };
+  /** Nothing drawn since the canvas was last sized (which clears it). */
+  blank = true;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -88,6 +97,7 @@ export class Renderer {
     this.canvas.style.width = `${this.cssW}px`;
     this.canvas.style.height = `${this.cssH}px`;
     this.layerKey = "";
+    this.blank = true;
   }
 
   /** A ring that grows out of a base that just changed hands. */
@@ -113,6 +123,7 @@ export class Renderer {
   draw(scene: Scene, now: number): void {
     const { ctx } = this;
     const { battle } = scene;
+    this.blank = false;
     this.fit(battle.map);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.drawImage(this.layer, 0, 0, this.cssW, this.cssH);
@@ -121,6 +132,18 @@ export class Renderer {
     for (const g of battle.groups) this.drawGroup(scene, g, now);
     battle.bases.forEach((_, b) => this.drawBase(scene, b));
     this.drawFlashes(battle.map, now);
+  }
+
+  /** `battle.route`, from the cache while the battle, its tick, the player and the target stay the same. */
+  private route(battle: Battle, me: number, from: number, to: number): Route | null {
+    const c = this.routes;
+    if (c.battle !== battle || c.n !== battle.n || c.me !== me || c.to !== to) {
+      Object.assign(c, { battle, n: battle.n, me, to });
+      c.from.clear();
+    }
+    let r = c.from.get(from);
+    if (r === undefined) c.from.set(from, (r = battle.route(me, from, to)));
+    return r;
   }
 
   // ---------------------------------------------------------------- layout
@@ -283,7 +306,7 @@ export class Renderer {
     for (const s of selected) {
       if (s === target) continue;
       const base = battle.bases[s];
-      const route = base.t > 0 ? battle.route(scene.me, s, target) : null;
+      const route = base.t > 0 ? this.route(battle, scene.me, s, target) : null;
       if (route) tanks += Battle.portion(base.t, scene.pct);
       helis += Battle.portion(base.h, scene.pct);
       if (route) first = Math.min(first, route.ticks[route.ticks.length - 1]);
@@ -417,13 +440,24 @@ export class Renderer {
 
     ctx.save();
     if (selected || scene.hover === b) {
+      shape(ctx, air, x, y, r + 7);
+      if (selected) {
+        // A glow in the owner's colour: the ring stroked wide and faint underneath. (A shadowBlur
+        // costs a blur pass per base, every frame: 2 ms a frame with 30 selected.)
+        ctx.strokeStyle = color;
+        ctx.lineJoin = "round";
+        ctx.globalAlpha = 0.18;
+        ctx.lineWidth = 14;
+        ctx.stroke();
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = 8;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.lineJoin = "miter";
+      }
       ctx.strokeStyle = selected ? "#ffffff" : "rgba(255, 255, 255, 0.55)";
       ctx.lineWidth = selected ? 3 : 2;
-      ctx.shadowColor = selected ? color : "transparent";
-      ctx.shadowBlur = selected ? 14 : 0;
-      shape(ctx, air, x, y, r + 7);
       ctx.stroke();
-      ctx.shadowBlur = 0;
     }
 
     // Production: an arc that fills up to the next unit, or a full ring when the base is at its cap.

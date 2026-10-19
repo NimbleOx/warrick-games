@@ -50,6 +50,8 @@ const app = {
   mySlot: -1,
   /** When the last frame arrived (performance.now), for gliding units between frames. */
   frameAt: 0,
+  /** When the results first covered the map (0: they don't). */
+  coveredAt: 0,
   resyncing: false,
   sounded: "",
   stageWidth: 0,
@@ -336,6 +338,9 @@ function onState(s: GameState, prev: GameState | null): void {
 
 // ------------------------------------------------------------------ frame loop
 
+/** How long the map goes on drawing under the results, for its flashes to play out (ms). */
+const SETTLE_MS = 1000;
+
 function frame(now: number): void {
   requestAnimationFrame(frame);
   if (shell.screen === "home") {
@@ -346,6 +351,12 @@ function frame(now: number): void {
   const v = view();
   if (shell.screen !== "game" || !b || !v) return;
   const turn = turnOf();
+  // Under the results, whose blurred backdrop the browser would redo for every frame drawn
+  // beneath it, the map keeps its last frame once its flashes have played out (unless a resize
+  // wiped it).
+  const covered = !$("results").hidden;
+  app.coveredAt = covered ? app.coveredAt || now : 0;
+  const still = covered && now - app.coveredAt >= SETTLE_MS && !renderer.blank;
   const scene: Scene = {
     battle: v.battle,
     looks: app.looks,
@@ -359,7 +370,7 @@ function frame(now: number): void {
     plan: v.groups,
     turnTick: turn ? turn.tick : -1,
   };
-  renderer.draw(scene, now);
+  if (!still) renderer.draw(scene, now);
   renderClock();
   renderBanner(now);
   feed.age(now);
@@ -474,10 +485,14 @@ function upgradeBlock(b: Battle, sel: number[]): string | null {
   return null;
 }
 
-/** The send size, the upgrade button, the turn's buttons and the line that says what the selection can do. */
+/**
+ * The send size, the upgrade button, the turn's buttons and the line that says what the selection
+ * can do. It runs on every frame from the room and every change of hover or selection, so each
+ * write is skipped when nothing changes: an unchanged write still makes the browser look again.
+ */
 function renderOrders(): void {
   for (const btn of $$<HTMLButtonElement>("[data-pct]"))
-    btn.setAttribute("aria-pressed", String(Number(btn.dataset.pct) === app.pct));
+    setAttr(btn, "aria-pressed", String(Number(btn.dataset.pct) === app.pct));
   const b = view()?.battle ?? null;
   const up = $<HTMLButtonElement>("upgrade");
   const all = $<HTMLButtonElement>("select-all");
@@ -487,61 +502,76 @@ function renderOrders(): void {
   const turn = turnOf();
   const live = inCommand();
   const plan = myPlan();
-  all.disabled = !live;
-  undo.hidden = done.hidden = !turn;
-  $("turn-keys").hidden = !turn;
+  flag(all, "disabled", !live);
+  flag(undo, "hidden", !turn);
+  flag(done, "hidden", !turn);
+  flag($("turn-keys"), "hidden", !turn);
   $("orders").classList.toggle("idle", !live);
   $("orders").classList.toggle("turns", !!turn);
-  undo.disabled = !live;
-  undo.setAttribute("aria-disabled", String(!plan.length));
-  undo.textContent = plan.length ? `Undo · ${plan.length}` : "Undo";
-  done.disabled = !live;
+  flag(undo, "disabled", !live);
+  setAttr(undo, "aria-disabled", String(!plan.length));
+  setText(undo, plan.length ? `Undo · ${plan.length}` : "Undo");
+  flag(done, "disabled", !live);
   const finished = iAmDone();
-  done.setAttribute("aria-pressed", String(finished));
-  done.textContent = finished ? "✓ Done" : "Done";
-  done.title = finished
-    ? "Waiting for the others. Click to keep planning (Enter)"
-    : "Finished planning: the turn plays once everyone is (Enter)";
+  setAttr(done, "aria-pressed", String(finished));
+  setText(done, finished ? "✓ Done" : "Done");
+  setAttr(
+    done,
+    "title",
+    finished
+      ? "Waiting for the others. Click to keep planning (Enter)"
+      : "Finished planning: the turn plays once everyone is (Enter)",
+  );
 
   if (!b || !live) {
-    up.disabled = true;
-    up.removeAttribute("aria-disabled");
-    up.textContent = "Upgrade";
-    up.title = "Upgrade the selected base (U)";
-    tip.textContent = idleTip(b);
+    flag(up, "disabled", true);
+    flag(up, "aria-disabled", false);
+    setText(up, "Upgrade");
+    setAttr(up, "title", "Upgrade the selected base (U)");
+    setText(tip, idleTip(b));
     return;
   }
-  up.disabled = false;
+  flag(up, "disabled", false);
   const sel = controls.selected.filter(mine);
   const why = upgradeBlock(b, sel);
-  up.setAttribute("aria-disabled", String(!!why));
-  up.title = why ?? "";
+  setAttr(up, "aria-disabled", String(!!why));
+  let title = why ?? "";
   if (sel.length === 1) {
     const base = b.bases[sel[0]];
     if (base.level >= MAX_LEVEL) {
-      up.textContent = "Level 3 (max)";
+      setText(up, "Level 3 (max)");
     } else {
       const cost = UPGRADE_COST[base.level + 1];
       const have = base.t + base.h;
-      up.textContent = have < cost ? `Upgrade · ${have}/${cost}` : `Upgrade · ${cost}`;
-      if (!why) up.title = `Spend ${cost} units: level ${base.level + 1} builds faster and holds more (U)`;
+      setText(up, have < cost ? `Upgrade · ${have}/${cost}` : `Upgrade · ${cost}`);
+      if (!why) title = `Spend ${cost} units: level ${base.level + 1} builds faster and holds more (U)`;
     }
   } else {
-    up.textContent = "Upgrade";
+    setText(up, "Upgrade");
   }
+  setAttr(up, "title", title);
   if (!sel.length) {
-    if (!turn) tip.textContent = "Drag from your base to a target";
-    else if (finished) tip.textContent = waitingFor();
-    else if (plan.length) tip.textContent = `${plural(plan.length, "order")} planned · press Done when you're ready`;
-    else tip.textContent = "Drag from your base to a target to plan a move";
+    if (!turn) setText(tip, "Drag from your base to a target");
+    else if (finished) setText(tip, waitingFor());
+    else if (plan.length) setText(tip, `${plural(plan.length, "order")} planned · press Done when you're ready`);
+    else setText(tip, "Drag from your base to a target to plan a move");
   } else {
     const tanks = sel.reduce((n, i) => n + b.bases[i].t, 0);
     const helis = sel.reduce((n, i) => n + b.bases[i].h, 0);
     const units =
       [tanks ? plural(tanks, "tank") : "", helis ? plural(helis, "helicopter") : ""].filter(Boolean).join(", ") ||
       (turn ? "no units left to send" : "no units yet");
-    tip.textContent = `${plural(sel.length, "base")} · ${units} · now pick a target`;
+    setText(tip, `${plural(sel.length, "base")} · ${units} · now pick a target`);
   }
+}
+
+function setAttr(el: Element, name: string, value: string): void {
+  if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+}
+
+/** Puts an attribute that's there or not (`hidden`, `disabled`) there or not. */
+function flag(el: Element, name: string, on: boolean): void {
+  if (el.hasAttribute(name) !== on) el.toggleAttribute(name, on);
 }
 
 /** The tip while you can't give orders: why not. */

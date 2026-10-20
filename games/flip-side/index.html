@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Flip Side</title>
+    <meta name="description" content="Pinball against your friends. Everyone plays the same table at once, and big shots send trouble to your rivals. No accounts — create a game and share the code." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Warrick Games" />
+    <meta property="og:title" content="Flip Side" />
+    <meta property="og:description" content="Pinball against your friends. Everyone plays the same table at once, and big shots send trouble to your rivals." />
+    <meta property="og:url" content="https://warrick.games/flip-side/" />
+    <meta property="og:image" content="https://warrick.games/flip-side/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Flip Side: Pinball against your friends. Big shots send trouble to your rivals." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#07051a" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">FLIP SIDE <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <aside class="hud-col">
+          <div class="dmd" id="dmd">
+            <div class="dmd-who" id="hud-who"></div>
+            <div class="dmd-score" id="hud-score">0</div>
+            <div class="dmd-row"><span id="hud-ball"></span><span id="hud-clock"></span></div>
+            <div class="dmd-row"><span id="hud-mult"></span><span id="hud-save"></span></div>
+          </div>
+          <div class="panel power-panel" id="power-panel">
+            <div class="power-head"><span class="label">Trouble</span><span class="power-to" id="power-to"></span></div>
+            <div class="power" id="power"></div>
+            <p class="hint">Big shots charge it. When it's full, trouble goes to a rival.</p>
+          </div>
+          <ul class="status" id="status"></ul>
+          <ol class="feed" id="feed"></ol>
+          <p class="keys-hint" id="keys-hint">
+            <kbd>←</kbd>/<kbd>Z</kbd>/<kbd>Shift</kbd> left flipper · <kbd>→</kbd>/<kbd>/</kbd>/<kbd>Shift</kbd> right flipper ·
+            hold <kbd>↓</kbd>/<kbd>Space</kbd> to pull the plunger, let go to launch · <kbd>↑</kbd> nudge (three quick ones tilt)
+          </p>
+        </aside>
+
+        <div class="stage-col">
+          <div class="stage" id="stage">
+            <canvas id="table-canvas"></canvas>
+            <div class="stage-hud" id="stage-hud">
+              <span id="mini-score"></span><span id="mini-ball"></span><span class="mini-power" id="mini-power"></span>
+            </div>
+            <div class="stage-alert" id="stage-alert" hidden></div>
+            <div class="banner" id="banner" hidden></div>
+          </div>
+          <div class="pad" id="pad" hidden>
+            <button class="btn pad-btn" data-ctl="nudge" aria-label="Nudge">NUDGE</button>
+            <button class="btn pad-btn pad-launch" data-ctl="plunge" aria-label="Pull the plunger">HOLD TO LAUNCH</button>
+          </div>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel rivals-panel">
+            <div class="panel-head"><h2 id="rivals-title">Rivals</h2></div>
+            <div id="rivals" class="rivals"></div>
+          </div>
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Chat</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Talk trash…" aria-label="Chat message" />
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- After each match -->
+      <div class="modal-back" id="results" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="results-title">
+          <h2 id="results-title" class="results-title"></h2>
+          <p class="winner-line" id="results-line"></p>
+          <table class="standings">
+            <thead>
+              <tr><th></th><th>Player</th><th>Score</th><th title="Trouble sent">Sent</th><th>Jackpots</th><th>Wins</th></tr>
+            </thead>
+            <tbody id="results-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <button class="btn" id="results-lobby" data-action="lobby">Back to lobby</button>
+            <button class="btn btn-primary" id="results-again" data-action="start">Play again</button>
+          </div>
+          <p class="hint center" id="results-wait"></p>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,640 @@
+@import "@warrick/kit/style.css";
+
+/* Flip Side's colours: neon pink and cyan on a midnight playfield. */
+:root {
+  --bg: #07051a;
+  --panel: #110c2e;
+  --panel-2: #191240;
+  --line: #2c2163;
+  --line-2: #45358f;
+  --text: #f1ecff;
+  --muted: #a198cc;
+  --accent: #ff3fa4;
+  --accent-2: #2fd6ff;
+  --accent-edge: #ff9fd0;
+  --accent-ink: #2a0418;
+  --accent-hi: #ff6fbb;
+  --accent-hi-edge: #ffd0e8;
+  --logo: #ff6fbb;
+  --logo-shade: #2a8fd6;
+  --logo-deep: #1b0f4a;
+  --logo-glow: rgb(255 63 164 / 0.45);
+  --code-shade: #6a1b8f;
+  --field: #0b0824;
+  --btn-hover: #221858;
+  --placeholder: #6a5fa0;
+  --card: rgb(9 6 28 / 0.86);
+  --tag: #241a55;
+  --tag-host: #5a1a3f;
+  --tag-you: #123a3a;
+  --scrim: rgb(5 3 18 / 0.75);
+  --lit: #ffe14d;
+  --good: #7dff5c;
+  --bad: #ff5a6e;
+}
+
+.toast {
+  background: #3a0d24;
+}
+
+.toast.info {
+  border-color: var(--accent-2);
+}
+
+/* ------------------------------------------------------------ game */
+
+.screen-game {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-topbar {
+  padding: 6px 16px;
+}
+
+.game-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) auto minmax(230px, 310px);
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 16px 14px;
+  align-items: start;
+}
+
+.stage-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The table is portrait: as tall as the window allows, and as wide as that makes it. */
+.stage {
+  position: relative;
+  height: max(440px, calc(100dvh - 84px));
+  aspect-ratio: 540 / 1000;
+  max-width: 100%;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #07051a;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  container-type: inline-size;
+  box-shadow:
+    0 0 0 1px rgb(255 63 164 / 0.15),
+    0 0 40px rgb(255 63 164 / 0.12);
+}
+
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.stage.shake {
+  animation: shake 0.18s ease-out;
+}
+
+@keyframes shake {
+  0% {
+    transform: translate(0, 0);
+  }
+  30% {
+    transform: translate(-4px, -3px);
+  }
+  60% {
+    transform: translate(3px, 1px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+/* The score over the table, on a phone (the side column has it otherwise). */
+.stage-hud {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  right: 8px;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  pointer-events: none;
+  color: var(--muted);
+}
+
+.stage-hud #mini-score {
+  font-family: var(--pixel);
+  font-size: 13px;
+  color: var(--lit);
+  text-shadow: 0 0 8px rgb(255 225 77 / 0.5);
+}
+
+.mini-power {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.mini-power i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgb(255 63 164 / 0.2);
+}
+
+.mini-power i.on {
+  background: var(--accent);
+}
+
+/* The most urgent warning, over the table on a phone. */
+.stage-alert {
+  position: absolute;
+  top: 28px;
+  left: 8px;
+  right: 8px;
+  display: none;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  background: rgb(60 8 24 / 0.85);
+  border-left: 3px solid var(--bad);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ the score display */
+
+.hud-col {
+  display: grid;
+  gap: 10px;
+}
+
+.dmd {
+  background: #120606;
+  border: 2px solid #3a1a0d;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--pixel);
+  color: #ff9d2f;
+  text-shadow: 0 0 6px rgb(255 140 40 / 0.55);
+  background-image: radial-gradient(rgb(255 140 40 / 0.07) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+.dmd-who {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-shadow: none;
+  min-height: 0;
+}
+
+.dmd-who:empty {
+  display: none;
+}
+
+.dmd-score {
+  font-size: clamp(18px, 2vw, 24px);
+  text-align: right;
+  margin: 6px 0 8px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dmd-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.8;
+}
+
+.dmd-row #hud-clock.low {
+  color: #ff5a6e;
+}
+
+/* ------------------------------------------------------------ the trouble meter */
+
+.power-panel {
+  padding: 10px 12px;
+}
+
+.power-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.power-to {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.power {
+  display: flex;
+  gap: 4px;
+  margin: 8px 0 6px;
+}
+
+.power i {
+  flex: 1;
+  height: 12px;
+  border-radius: 3px;
+  background: rgb(255 63 164 / 0.12);
+  border: 1px solid rgb(255 63 164 / 0.35);
+}
+
+.power i.on {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(255 63 164 / 0.7);
+}
+
+.power-panel .hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------ what's lit, what's coming */
+
+.status {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status li {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border-left: 3px solid var(--line-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.status li.good {
+  border-left-color: var(--good);
+}
+
+.status li.bad {
+  border-left-color: var(--bad);
+  background: rgb(255 90 110 / 0.1);
+}
+
+.status .bar {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  background: rgb(255 90 110 / 0.2);
+  border-radius: 2px;
+}
+
+.status .bar i {
+  display: block;
+  height: 100%;
+  background: var(--bad);
+  border-radius: 2px;
+}
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.feed li {
+  transition: opacity 0.8s;
+}
+
+.feed li.old {
+  opacity: 0;
+}
+
+.feed .good {
+  color: var(--good);
+}
+
+.feed .bad {
+  color: var(--bad);
+}
+
+.keys-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------ banner */
+
+.banner {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  padding: 12px 18px;
+  background: var(--card);
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  text-align: center;
+  line-height: 1.5;
+  pointer-events: none;
+  animation: pop 0.25s ease-out;
+  max-width: 88%;
+  font-size: 13px;
+}
+
+.banner.good {
+  border-color: var(--good);
+}
+
+.banner.bad {
+  border-color: var(--bad);
+}
+
+.banner .big {
+  font-family: var(--pixel);
+  font-size: clamp(12px, 5.5cqw, 20px);
+  color: var(--lit);
+  display: block;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.banner.bad .big {
+  color: var(--bad);
+}
+
+.banner .count {
+  display: block;
+  font-family: var(--pixel);
+  font-size: clamp(26px, 14cqw, 60px);
+  line-height: 1.15;
+  color: var(--lit);
+  text-shadow: 3px 3px 0 var(--code-shade);
+}
+
+@keyframes pop {
+  from {
+    transform: translate(-50%, -50%) scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------ touch buttons */
+
+.pad {
+  display: flex;
+  gap: 8px;
+}
+
+.pad-btn {
+  flex: 1;
+  min-height: 52px;
+  font-family: var(--pixel);
+  font-size: 11px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pad-btn.down {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.pad-launch {
+  flex: 2;
+}
+
+.pad-launch.ready {
+  border-color: var(--lit);
+  color: var(--lit);
+}
+
+.pad-launch.ready.down {
+  color: var(--accent-ink);
+}
+
+/* ------------------------------------------------------------ rivals */
+
+.side-col {
+  display: grid;
+  gap: 14px;
+}
+
+.rivals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.rival {
+  display: grid;
+  gap: 3px;
+  padding: 5px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  border: 2px solid transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  min-width: 0;
+}
+
+.rival:hover {
+  border-color: var(--line-2);
+}
+
+.rival.watched {
+  border-color: var(--accent-2);
+}
+
+.rival canvas {
+  width: 100%;
+  aspect-ratio: 540 / 1000;
+  display: block;
+  border-radius: 4px;
+}
+
+.rival-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.rival-name .pname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rival-score {
+  font-family: var(--pixel);
+  font-size: 10px;
+  color: var(--lit);
+}
+
+.rival-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.side-col .log {
+  height: 180px;
+}
+
+/* ------------------------------------------------------------ results */
+
+.results-modal {
+  width: min(620px, 100%);
+}
+
+.results-modal .standings td.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.standings tr.you td:nth-child(2) {
+  font-weight: 700;
+}
+
+.modal-foot {
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.results-modal #results-wait:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (pointer: coarse) {
+  .keys-hint {
+    display: none;
+  }
+}
+
+@media (pointer: fine) {
+  .pad {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .game-layout {
+    grid-template-columns: auto minmax(220px, 300px);
+  }
+
+  .hud-col {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .stage-col {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .side-col {
+    grid-column: 2;
+  }
+}
+
+/* A phone: the table first, as wide as the screen; the score over it; the rest below. */
+@media (max-width: 760px) {
+  .game-layout {
+    grid-template-columns: 1fr;
+    padding: 6px;
+    gap: 10px;
+  }
+
+  .hud-col,
+  .stage-col,
+  .side-col {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .stage-col {
+    order: -1;
+    align-items: center;
+  }
+
+  .stage {
+    height: min(calc(100dvh - 120px), calc((100vw - 16px) * 1000 / 540));
+    min-height: 0;
+  }
+
+  .stage-hud {
+    display: flex;
+  }
+
+  .stage-alert:not([hidden]) {
+    display: block;
+  }
+
+  .dmd,
+  .power-panel {
+    display: none;
+  }
+
+  .pad {
+    width: 100%;
+  }
+
+  .rivals {
+    grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+  }
+
+  #game-code-small {
+    display: none;
+  }
+
+  .game-topbar .btn {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .topbar {
+    padding: 8px 10px;
+  }
+}

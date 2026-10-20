@@ -96,6 +96,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "games/dust-up", "--", "--port", "5188", "--strictPort"],
       "port": 5188
+    },
+    {
+      "name": "shove-off",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "games/shove-off", "--", "--port", "5189", "--strictPort"],
+      "port": 5189
     }
   ]
 }

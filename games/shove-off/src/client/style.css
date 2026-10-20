@@ -1,0 +1,372 @@
+@import "@warrick/kit/style.css";
+
+/* Shove Off's colours: indigo, like the slate of its board. */
+:root {
+  --accent: #8c95ff;
+  --accent-edge: #cad1fe;
+  --accent-ink: #14162b;
+  --accent-hi: #a3abff;
+  --accent-hi-edge: #e2e6ff;
+  --logo: #cad1fe;
+  --logo-shade: #585db7;
+  --logo-deep: #2b2f53;
+  --code-shade: #585db7;
+}
+
+/* Marble colours run from pearl to onyx, so chips and swatches get an edge to show on the panels. */
+.chip,
+.swatch {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28);
+}
+
+/* A marble, in the colour --c. */
+.ball {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in srgb, var(--c) 45%, white) 0,
+    var(--c) 42%,
+    color-mix(in srgb, var(--c) 50%, black) 100%
+  );
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+}
+
+.slot {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1b2139;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.6);
+}
+
+/* ------------------------------------------------------------ game */
+
+.screen-game {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-topbar {
+  padding: 6px 16px;
+}
+
+.game-layout {
+  flex: 1;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  padding: 12px 16px 16px;
+  align-items: start;
+}
+
+.board-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.side-col {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.side-col .log {
+  height: 340px;
+}
+
+.watchers {
+  margin: 8px 0 0;
+}
+
+/* ------------------------------------------------------------ scoreboard */
+
+.scoreboard {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+}
+
+.pcard {
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  display: grid;
+  gap: 5px;
+}
+
+.pcard.turn {
+  border-color: var(--accent-2);
+}
+
+.pcard.won {
+  border-color: var(--ok);
+}
+
+.pcard.offline .pname {
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}
+
+.pc-head,
+.pc-off {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pc-head .pname {
+  min-width: 0;
+}
+
+.pc-off {
+  gap: 4px;
+}
+
+.pc-off .small {
+  margin-left: 4px;
+}
+
+.status {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.status.clock {
+  font-family: var(--pixel);
+  font-size: 11px;
+}
+
+.status.clock.low {
+  color: var(--danger);
+}
+
+.hud-move {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.hud-move b {
+  font-family: var(--pixel);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--accent-2);
+}
+
+/* The right-hand card reads from the right. */
+#card-1 .pc-head,
+#card-1 .pc-off {
+  flex-direction: row-reverse;
+}
+
+#card-1 .pc-off .small {
+  margin: 0 4px 0 0;
+}
+
+/* ------------------------------------------------------------ board */
+
+.stage {
+  position: relative;
+  line-height: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.stage canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.stage canvas.live {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.stage canvas.live.pointing {
+  cursor: pointer;
+}
+
+.banner {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  padding: 14px 22px;
+  background: rgb(8 10 20 / 0.88);
+  border: 2px solid var(--accent-2);
+  border-radius: 6px;
+  text-align: center;
+  line-height: 1.5;
+  pointer-events: none;
+  animation: pop 0.25s ease-out;
+  max-width: 90%;
+}
+
+.banner .big {
+  font-family: var(--pixel);
+  font-size: clamp(13px, 2.4vw, 20px);
+  color: var(--accent-2);
+  display: block;
+  line-height: 1.4;
+  margin: 0 0 4px;
+}
+
+@keyframes pop {
+  from {
+    transform: translate(-50%, -50%) scale(0.85);
+    opacity: 0;
+  }
+}
+
+.hint-line {
+  width: 100%;
+  margin: 0;
+  min-height: 1.45em;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.hint-line.bad {
+  color: var(--danger);
+}
+
+.hint-line.good {
+  color: var(--ok);
+}
+
+.tools {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tools .btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.keys-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  margin: 0 1px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------ results */
+
+.modal-foot .spacer {
+  flex: 1;
+}
+
+.standings td:nth-child(n + 2) {
+  font-variant-numeric: tabular-nums;
+}
+
+.pcell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 980px) {
+  .game-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side-col .log {
+    height: 200px;
+  }
+}
+
+@media (max-width: 760px) {
+  .game-layout {
+    padding: 8px 10px 16px;
+    gap: 10px;
+  }
+
+  .scoreboard {
+    gap: 6px;
+  }
+
+  .pcard {
+    padding: 5px 7px;
+  }
+
+  /* The tags squeeze the name out on a phone: who's who shows in the colours. */
+  .pc-head .tag {
+    display: none;
+  }
+
+  .ball,
+  .slot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .pc-off {
+    gap: 2px;
+  }
+
+  .hud-move .label,
+  .hud-move .muted {
+    display: none;
+  }
+
+  .keys-hint {
+    display: none;
+  }
+
+  /* The kit sets this too, but .game-topbar above would win. */
+  .topbar {
+    padding: 8px 10px;
+  }
+
+  .modal-foot {
+    flex-wrap: wrap;
+  }
+}

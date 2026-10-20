@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Shove Off</title>
+    <meta name="description" content="Push six of their marbles off the board. An Abalone-style game for two, or you against the CPU. No accounts — create a game and share the code." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Warrick Games" />
+    <meta property="og:title" content="Shove Off" />
+    <meta property="og:description" content="Push six of their marbles off the board. An Abalone-style game for two, or you against the CPU. No accounts — create a game and share the code." />
+    <meta property="og:url" content="https://warrick.games/shove-off/" />
+    <meta property="og:image" content="https://warrick.games/shove-off/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Shove Off: push your opponent's marbles off a hexagonal board, after Abalone." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/client/style.css" />
+  </head>
+  <body>
+    <!-- Game -->
+    <section id="screen-game" class="screen screen-game" hidden>
+      <header class="topbar game-topbar">
+        <div class="brand">SHOVE OFF <span class="muted" id="game-code-small"></span></div>
+        <div class="topbar-right">
+          <span class="conn" id="game-conn"></span>
+          <button id="mute" class="btn btn-ghost btn-icon" title="Sound on/off" aria-label="Toggle sound"></button>
+          <button class="btn btn-ghost" data-action="leave">Leave</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <div class="board-col">
+          <div class="scoreboard">
+            <div class="pcard" id="card-0"></div>
+            <div class="hud-move" id="hud-move"></div>
+            <div class="pcard" id="card-1"></div>
+          </div>
+          <div class="stage" id="stage">
+            <canvas id="board" aria-label="The board"></canvas>
+            <div class="banner" id="banner" hidden></div>
+          </div>
+          <p class="hint-line" id="hint" role="status"></p>
+          <div class="tools">
+            <p class="keys-hint">
+              Click marbles to pick 1–3 in a line, then an arrow, or drag them ·
+              <kbd>W</kbd><kbd>E</kbd><kbd>A</kbd><kbd>D</kbd><kbd>Z</kbd><kbd>X</kbd> move ·
+              <kbd>Esc</kbd> clears
+            </p>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost" id="tool-clear" title="Clear your pick (Esc)">Clear</button>
+            <button class="btn btn-ghost" id="tool-resign" title="Give up this game">Resign</button>
+          </div>
+        </div>
+
+        <aside class="side-col">
+          <div class="panel chat-panel">
+            <div class="panel-head"><h2>Table talk</h2></div>
+            <ol class="log" data-log></ol>
+            <form class="chat-form" data-chat>
+              <input maxlength="200" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" placeholder="Say something…" aria-label="Chat message" />
+            </form>
+            <p class="muted small watchers" id="watchers" hidden></p>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Results -->
+      <div class="modal-back" id="gameover" hidden>
+        <div class="modal results-modal" role="dialog" aria-labelledby="gameover-title">
+          <h2 id="gameover-title" class="results-title">Game over</h2>
+          <p class="winner-line" id="gameover-winner"></p>
+          <table class="standings">
+            <thead>
+              <tr><th>Player</th><th>Pushed off</th><th>Marbles left</th></tr>
+            </thead>
+            <tbody id="gameover-rows"></tbody>
+          </table>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" id="gameover-board">See the board</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost" data-action="leave">Leave</button>
+            <button id="gameover-lobby" class="btn" data-action="lobby">Back to lobby</button>
+            <button id="gameover-again" class="btn btn-primary">Play again</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

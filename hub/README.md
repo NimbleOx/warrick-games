@@ -29,9 +29,9 @@ Each game has a 32×32 SVG in `public/icons/<name>.svg`. They're one set, so a n
 | lime | `#131c06` | `#293911` | `#608718` | `#91c639` | `#d7f0ba` | Corner Shop, Base Jump |
 | green | `#081e0e` | `#163c20` | `#1d8843` | `#43c96d` | `#bcedc5` | Turf War |
 | teal | `#011e1a` | `#033c36` | `#04877c` | `#0cc8b9` | `#a8f2e8` | Dice Dominion |
-| cyan | `#001d21` | `#013a42` | `#038797` | `#04c7df` | `#adf2ff` | Light Cycles |
+| cyan | `#001d21` | `#013a42` | `#038797` | `#04c7df` | `#adf2ff` | Light Cycles, Flip Side |
 | blue | `#0a192b` | `#1a3453` | `#2366b4` | `#53a0ff` | `#b3d4fe` | Liar's Dice |
-| indigo | `#14162b` | `#2b2f53` | `#585db7` | `#8c95ff` | `#cad1fe` | Ricochet Alley |
+| indigo | `#14162b` | `#2b2f53` | `#585db7` | `#8c95ff` | `#cad1fe` | Ricochet Alley, Shove Off |
 | violet | `#1c1328` | `#392a4e` | `#7c54ae` | `#ba86fe` | `#e0cdfe` | Stack Attack |
 | magenta | `#241020` | `#472540` | `#a14d92` | `#ec7bd6` | `#feccf2` | Dust Up |
 | rose | `#280f15` | `#4e232c` | `#a83f59` | `#f96b8d` | `#ffc1cb` | Pill Panic |

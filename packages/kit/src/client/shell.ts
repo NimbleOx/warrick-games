@@ -99,6 +99,8 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
   private clock = new ClockSync();
   /** Came in by the solo link: the next game this browser creates starts as soon as its lobby arrives. */
   private soloNext = false;
+  /** What the home card's name field was last filled with, to tell whether the player has typed over it. */
+  private shownName = "";
 
   constructor(private o: ShellOptions<S, M>) {
     setStorePrefix(o.prefix);
@@ -231,7 +233,7 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     document.title = this.o.title;
     $("home-error").textContent = "";
     const nameInput = $<HTMLInputElement>("home-name");
-    nameInput.value = this.savedName() ?? "";
+    this.showSavedName(true);
     this.soloNext = solo;
     $("home-create").textContent = solo ? (this.o.soloLabel ?? "Play solo") : "Create game";
     $("home-join-invite").hidden = !inviteCode;
@@ -248,9 +250,18 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     return this.o.shareName === false ? store("name") : sharedName();
   }
 
+  /** Fill the home card's name field with the saved name, unless the player has typed over it (`force` does anyway). */
+  private showSavedName(force = false): void {
+    const input = $<HTMLInputElement>("home-name");
+    if (!force && input.value !== this.shownName) return;
+    input.value = this.shownName = this.savedName() ?? "";
+  }
+
+  /** Save the name (from the home card's field), and show it there as saved. */
   private saveName(name: string): void {
     if (this.o.shareName === false) store("name", name);
     else saveSharedName(name);
+    $<HTMLInputElement>("home-name").value = this.shownName = name;
   }
 
   private readName(): string | null {
@@ -585,6 +596,12 @@ export class Shell<S extends BaseState, C extends AnyMsg = AnyMsg, M extends Any
     for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, unlockAudio, { passive: true });
 
     // Home
+    // A name saved in another tab (any game's: they share it), or a page Back brought out of the
+    // cache: show the name as it's saved now, or Create here would save the old one over it.
+    window.addEventListener("storage", () => this.showSavedName());
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) this.showSavedName();
+    });
     $("home-name").addEventListener("change", (e) => {
       const name = (e.target as HTMLInputElement).value.trim().slice(0, 16);
       if (name) this.saveName(name);
